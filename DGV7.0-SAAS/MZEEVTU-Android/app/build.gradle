@@ -1,0 +1,115 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+}
+
+android {
+    namespace 'com.dgv6.app'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.dgv6.app"
+        minSdk 24
+        targetSdk 33
+        versionCode 1
+        versionName "1.0.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            // Keystore is committed at keystore/mzeevtu-release.jks.
+            // Since the file is tracked in VCS, credentials are stored here directly.
+            storeFile rootProject.file("keystore/mzeevtu-release.jks")
+            storePassword "OMOTERE@234.com"
+            keyAlias "philmore-mzeevtu"
+            keyPassword "OMOTERE@234.com"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            // Debug builds are always signed with the default debug keystore
+            signingConfig signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    buildFeatures {
+        viewBinding true
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.9.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+
+    // Navigation
+    implementation 'androidx.navigation:navigation-fragment-ktx:2.5.3'
+    implementation 'androidx.navigation:navigation-ui-ktx:2.5.3'
+
+    // ViewPager2 (for tabbed Fund Wallet)
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
+
+    // Retrofit & Networking
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.10.0'
+
+    // Architecture Components
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.6.1'
+    implementation 'androidx.activity:activity-ktx:1.7.2'
+    implementation 'androidx.fragment:fragment-ktx:1.6.1'
+
+    // Security (EncryptedSharedPreferences)
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // WorkManager (bulk background jobs)
+    implementation 'androidx.work:work-runtime-ktx:2.8.1'
+
+    // Image loading
+    implementation 'com.github.bumptech.glide:glide:4.15.1'
+
+    // Lottie animations
+    implementation 'com.airbnb.android:lottie:6.0.0'
+
+    // Shimmer loading
+    implementation 'com.facebook.shimmer:shimmer:0.5.0'
+
+    // Charts
+    implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
+
+    // Biometric
+    implementation 'androidx.biometric:biometric:1.1.0'
+
+    // Gson
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Firebase Cloud Messaging (push notifications for app-update broadcasts)
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-messaging-ktx'
+
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}

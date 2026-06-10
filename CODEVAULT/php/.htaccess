@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Serve existing files and folders directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Rewrite everything else to index.php with the _route query parameter
+RewriteRule ^(.*)$ index.php?_route=$1 [L,QSA]

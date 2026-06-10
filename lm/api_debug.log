@@ -1,0 +1,107 @@
+[2026-06-02 09:55:45] --- New API Request ---
+[2026-06-02 09:55:45] ERROR: Missing key or domain in POST request. Data: []
+[2026-06-02 09:55:45] Responding with: {"status":0,"message":"Missing key or domain parameter."}
+[2026-06-02 10:09:51] --- New API Request ---
+[2026-06-02 10:09:51] Received key: MAN-E2355EF99EAE, domain: dgv7.pmhserver.name.ng
+[2026-06-02 10:09:51] SUCCESS: Found matching active license for domain 'dgv7.pmhserver.name.ng'.
+[2026-06-02 10:09:51] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 10:12:07] --- New API Request ---
+[2026-06-02 10:12:07] ERROR: Missing key or domain in POST request. Data: []
+[2026-06-02 10:12:07] Responding with: {"status":0,"message":"Missing key or domain parameter."}
+[2026-06-02 13:33:48] --- New API Request ---
+[2026-06-02 13:33:48] ERROR: Missing key or domain in POST request. Data: []
+[2026-06-02 13:33:48] Responding with: {"status":0,"message":"Missing key or domain parameter."}
+[2026-06-02 14:09:37] --- New API Request ---
+[2026-06-02 14:09:37] Received key: VALID-C7D77272757E853B, domain: dgv7saas.pmhserver.name.ng
+[2026-06-02 14:09:37] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-02 14:09:37] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 15:21:57] --- New API Request ---
+[2026-06-02 15:21:57] ERROR: Missing key or domain in POST request. Data: []
+[2026-06-02 15:21:57] Responding with: {"status":0,"message":"Missing key or domain parameter."}
+[2026-06-02 15:21:59] --- New API Request ---
+[2026-06-02 15:21:59] Received key: test_key, domain: test_domain
+[2026-06-02 15:21:59] FAILURE: License key 'test_key' does not exist.
+[2026-06-02 15:21:59] Responding with: {"status":0,"message":"Invalid license key or domain."}
+[2026-06-02 15:34:57] --- New API Request ---
+[2026-06-02 15:34:57] Received key: MAN-E2355EF99EAE, domain: dgv7.pmhserver.name.ng
+[2026-06-02 15:34:57] SUCCESS: Found matching active license for domain 'dgv7.pmhserver.name.ng'.
+[2026-06-02 15:34:57] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 16:12:09] --- New API Request ---
+[2026-06-02 16:12:09] Received key: VALID-C7D77272757E853B, domain: dgv7saas.pmhserver.name.ng
+[2026-06-02 16:12:09] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-02 16:12:09] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 16:12:15] --- New API Request ---
+[2026-06-02 16:12:15] Received key: VALID-C7D77272757E853B, domain: dgv7saas.pmhserver.name.ng
+[2026-06-02 16:12:15] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-02 16:12:15] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 16:12:16] --- New API Request ---
+[2026-06-02 16:12:16] Received key: VALID-C7D77272757E853B, domain: dgv7saas.pmhserver.name.ng
+[2026-06-02 16:12:16] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-02 16:12:16] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 16:56:35] --- New API Request ---
+[2026-06-02 16:56:35] Received key: MAN-E2355EF99EAE, domain: dgv7.pmhserver.name.ng
+[2026-06-02 16:56:35] SUCCESS: Found matching active license for domain 'dgv7.pmhserver.name.ng'.
+[2026-06-02 16:56:35] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 16:57:10] --- New API Request ---
+[2026-06-02 16:57:10] Received key: MAN-E2355EF99EAE, domain: dgv7.pmhserver.name.ng
+[2026-06-02 16:57:10] SUCCESS: Found matching active license for domain 'dgv7.pmhserver.name.ng'.
+[2026-06-02 16:57:10] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 17:38:50] --- New API Request ---
+[2026-06-02 17:38:50] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-02 17:38:50] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-02 17:38:50] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-02 17:50:26] --- New API Request ---
+[2026-06-02 17:50:26] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-02 17:50:26] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-02 17:50:26] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-03 00:09:51] --- New API Request ---
+[2026-06-03 00:09:51] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-03 00:09:51] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-03 00:09:51] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-03 06:27:41] --- New API Request ---
+[2026-06-03 06:27:41] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-03 06:27:41] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-03 06:27:41] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-03 12:40:46] --- New API Request ---
+[2026-06-03 12:40:47] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-03 12:40:47] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-03 12:40:47] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-03 19:07:21] --- New API Request ---
+[2026-06-03 19:07:21] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-03 19:07:21] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-03 19:07:21] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-03 19:07:22] --- New API Request ---
+[2026-06-03 19:07:22] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-03 19:07:22] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-03 19:07:22] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-03 21:02:18] --- New API Request ---
+[2026-06-03 21:02:18] ERROR: Missing key or domain in POST request. Data: []
+[2026-06-03 21:02:18] Responding with: {"status":0,"message":"Missing key or domain parameter."}
+[2026-06-04 01:07:23] --- New API Request ---
+[2026-06-04 01:07:23] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-04 01:07:23] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-04 01:07:23] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-04 07:11:17] --- New API Request ---
+[2026-06-04 07:11:17] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-04 07:11:17] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-04 07:11:17] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-04 13:40:21] --- New API Request ---
+[2026-06-04 13:40:21] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-04 13:40:21] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-04 13:40:21] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-04 16:59:32] --- New API Request ---
+[2026-06-04 16:59:33] Received key: MAN-E2355EF99EAE, domain: dgv7.pmhserver.name.ng
+[2026-06-04 16:59:33] SUCCESS: Found matching active license for domain 'dgv7.pmhserver.name.ng'.
+[2026-06-04 16:59:33] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-04 19:40:24] --- New API Request ---
+[2026-06-04 19:40:24] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-04 19:40:24] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-04 19:40:24] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-05 01:40:31] --- New API Request ---
+[2026-06-05 01:40:31] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-05 01:40:31] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-05 01:40:31] Responding with: {"status":1,"message":"License is valid."}
+[2026-06-05 07:42:29] --- New API Request ---
+[2026-06-05 07:42:31] Received key: MAN-3092514D6FF5, domain: dgv7saas.pmhserver.name.ng
+[2026-06-05 07:42:31] SUCCESS: Found matching active license for domain 'dgv7saas.pmhserver.name.ng'.
+[2026-06-05 07:42:31] Responding with: {"status":1,"message":"License is valid."}

@@ -1,0 +1,233 @@
+[23-May-2026 05:05:08 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:05:08 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:05:08 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:07:06 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:07:06 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:07:06 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:07:33 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:07:33 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:07:33 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:07:40 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:07:40 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:07:40 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:07:46 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:07:46 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:07:46 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:07:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:07:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:07:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:07:58 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:07:58 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:07:58 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:08:05 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:08:05 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:08:05 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:08:21 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:08:21 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:08:21 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 05:08:27 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 05:08:27 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 05:08:27 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 08:22:48 Africa/Lagos] PHP Warning:  Undefined array key "redirectAdminTo" in /home/v8data/public_html/func/bc-admin-config.php on line 52
+[23-May-2026 08:22:50 Africa/Lagos] PHP Warning:  Undefined array key "redirectAdminTo" in /home/v8data/public_html/func/bc-admin-config.php on line 52
+[23-May-2026 08:23:45 Africa/Lagos] PHP Warning:  Undefined array key "searchq" in /home/v8data/public_html/func/admin-short-payment-order.php on line 7
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:23 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 498
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 502
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 507
+[23-May-2026 08:24:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/PaymentGateway.php on line 511
+[23-May-2026 10:12:47 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 10:12:47 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 10:12:47 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 10:13:05 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 10:13:05 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 10:13:05 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 10:13:41 Africa/Lagos] PHP Warning:  Undefined variable $get_vendor_det in /home/v8data/public_html/func/bc-func.php on line 800
+[23-May-2026 10:13:41 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/func/bc-func.php on line 800
+[23-May-2026 10:13:41 Africa/Lagos] PHP Warning:  Undefined variable $get_vendor_det in /home/v8data/public_html/func/bc-func.php on line 800
+[23-May-2026 10:13:41 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/func/bc-func.php on line 800
+[23-May-2026 10:13:42 Africa/Lagos] PHP Warning:  Undefined variable $get_vendor_det in /home/v8data/public_html/func/bc-func.php on line 808
+[23-May-2026 10:13:42 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/func/bc-func.php on line 808
+[23-May-2026 10:23:16 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 10:23:16 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 10:23:16 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 10:23:16 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 10:23:16 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 10:23:16 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 11:45:54 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 11:45:54 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 11:45:54 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 11:46:11 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 11:46:11 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 11:46:11 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 11:48:38 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 11:48:38 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 11:48:38 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 11:48:38 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 11:48:38 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 11:48:38 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 11:51:42 Africa/Lagos] PHP Fatal error:  Uncaught TypeError: mysqli_num_rows(): Argument #1 ($result) must be of type mysqli_result, false given in /home/v8data/public_html/func/bc-tables.php:1207
+Stack trace:
+#0 /home/v8data/public_html/func/bc-tables.php(1207): mysqli_num_rows()
+#1 /home/v8data/public_html/func/bc-admin-config.php(21): include_once('/home/v8data/pu...')
+#2 /home/v8data/public_html/bc-admin/Transactions.php(2): include('/home/v8data/pu...')
+#3 {main}
+  thrown in /home/v8data/public_html/func/bc-tables.php on line 1207
+[23-May-2026 11:51:42 Africa/Lagos] PHP Warning:  mysqli_connect(): (HY000/2002): No such file or directory in /home/v8data/public_html/func/bc-connect.php on line 16
+[23-May-2026 11:57:31 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 11:57:31 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 11:57:31 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 11:57:31 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 11:57:31 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 11:57:31 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 13:44:39 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 13:44:39 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 13:44:39 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 13:44:52 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 13:44:52 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 13:44:52 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 14:06:53 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 14:06:53 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 14:06:53 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 14:06:53 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 14:06:53 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 14:06:53 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 14:07:07 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 14:07:07 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 14:07:07 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 14:07:24 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 14:07:24 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 14:07:24 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 14:07:24 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 14:07:24 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 14:07:24 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 14:12:20 Africa/Lagos] PHP Warning:  Undefined array key "searchq" in /home/v8data/public_html/func/admin-short-payment-order.php on line 7
+[23-May-2026 14:44:16 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/AccountSettings.php on line 1091
+[23-May-2026 14:44:16 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/AccountSettings.php on line 1091
+[23-May-2026 14:44:16 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/AccountSettings.php on line 1091
+[23-May-2026 14:44:16 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/AccountSettings.php on line 1091
+[23-May-2026 14:44:16 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/AccountSettings.php on line 1091
+[23-May-2026 14:45:35 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 14:45:35 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 14:45:35 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 14:45:35 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 14:45:35 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 14:45:35 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 14:45:41 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 14:45:41 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 14:45:41 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 14:45:41 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 14:45:41 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 14:45:41 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 15:09:10 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 15:09:10 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 15:09:10 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 15:09:22 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 15:09:22 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 15:09:22 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 15:10:02 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 15:10:02 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 15:10:02 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 15:10:02 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 15:10:02 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 15:10:02 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 15:32:26 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 15:32:26 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 15:32:26 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 15:32:26 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 15:32:26 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 15:32:26 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 16:03:29 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 16:03:29 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 16:03:29 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 16:03:43 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 16:03:43 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 16:03:43 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 16:03:49 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 168
+[23-May-2026 16:03:49 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 169
+[23-May-2026 16:03:49 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 170
+[23-May-2026 16:03:49 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 171
+[23-May-2026 16:03:49 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 172
+[23-May-2026 16:03:49 Africa/Lagos] PHP Warning:  Undefined array key "category" in /home/v8data/public_html/bc-admin/Transactions.php on line 173
+[23-May-2026 17:33:45 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 17:33:45 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 17:33:45 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 17:33:56 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[23-May-2026 17:33:56 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 17:33:56 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[23-May-2026 20:21:50 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 20:21:50 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 20:21:50 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[23-May-2026 20:38:39 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 488
+[23-May-2026 20:38:39 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 489
+[23-May-2026 20:38:39 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/CorporateData.php on line 490
+[24-May-2026 08:37:29 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 08:37:29 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 08:37:29 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 08:37:41 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 08:37:41 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 08:37:41 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 08:38:54 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 08:38:54 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 08:38:54 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 16:47:01 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 16:47:01 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 16:47:01 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 16:47:16 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 16:47:16 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 16:47:16 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 20:16:22 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 20:16:22 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 20:16:22 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 20:16:49 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[24-May-2026 20:16:49 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[24-May-2026 20:16:49 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[25-May-2026 12:43:50 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[25-May-2026 12:43:50 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[25-May-2026 12:43:50 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[25-May-2026 12:44:04 Africa/Lagos] PHP Warning:  Undefined array key "status" in /home/v8data/public_html/func/bc-func.php on line 3109
+[25-May-2026 12:44:04 Africa/Lagos] PHP Warning:  Undefined variable $payvessel_reserve_account_response in /home/v8data/public_html/bc-admin/Dashboard.php on line 225
+[25-May-2026 12:44:04 Africa/Lagos] PHP Warning:  Trying to access array offset on null in /home/v8data/public_html/bc-admin/Dashboard.php on line 225

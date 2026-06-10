@@ -1,0 +1,421 @@
+<?php
+header('Content-Type: application/json');
+session_start();
+include("../func/bc-admin-config.php");
+
+if (!isset($_SESSION["admin_session"])) {
+    echo json_encode(["success" => false, "message" => "Unauthorized"]);
+    exit();
+}
+
+$gateway = $_GET['gateway'] ?? '';
+$network = $_GET['network'] ?? '';
+$type = $_GET['type'] ?? ''; // dd, sme, shared, cg
+
+if (!$gateway || !$network) {
+    echo json_encode(["success" => false, "message" => "Missing parameters"]);
+    exit();
+}
+
+$plans = [];
+
+function extractDays($name) {
+    if (preg_match('/(\d+)\s*(?:Day|Day\(s\)|Days)/i', $name, $matches)) {
+        return (int)$matches[1];
+    }
+    if (preg_match('/(\d+)\s*(?:Month|Months)/i', $name, $matches)) {
+        return (int)$matches[1] * 30;
+    }
+    if (preg_match('/Weekly/i', $name)) {
+        return 7;
+    }
+    if (preg_match('/Monthly/i', $name)) {
+        return 30;
+    }
+    return 30; // Default
+}
+
+try {
+    if ($gateway === 'vtpass') {
+        if ($type === 'airtime') {
+            $plans[] = [
+                'name' => strtoupper($network) . " Airtime",
+                'code' => 'airtime',
+                'price' => 100,
+                'days' => 0
+            ];
+        } elseif ($type === 'cable') {
+            $url = "https://vtpass.com/api/service-variations?serviceID=" . $network;
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            $response = curl_exec($ch);
+            curl_close($ch);
+
+            $data = json_decode($response, true);
+
+            if (isset($data['content']['variations'])) {
+                foreach ($data['content']['variations'] as $v) {
+                    $plans[] = [
+                        'name' => $v['name'],
+                        'code' => $v['variation_code'],
+                        'price' => $v['variation_amount'],
+                        'days' => 30 // Cable usually 30 days
+                    ];
+                }
+            } else {
+                throw new Error("Invalid response from VTPASS");
+            }
+        } else {
+            $serviceID = ($network === '9mobile') ? 'etisalat-data' : $network . '-data';
+            $url = "https://vtpass.com/api/service-variations?serviceID=" . $serviceID;
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            $response = curl_exec($ch);
+            curl_close($ch);
+
+            $data = json_decode($response, true);
+
+            if (isset($data['content']['variations'])) {
+                foreach ($data['content']['variations'] as $v) {
+                    $name = $v['name'];
+                    $include = true;
+                    if ($type === 'sme') {
+                        if (stripos($name, 'SME') === false) $include = false;
+                    } elseif ($type === 'dd') {
+                        if (stripos($name, 'SME') !== false) $include = false;
+                        if (stripos($name, 'Gifting') !== false) $include = false;
+                        if (stripos($name, 'Corporate') !== false) $include = false;
+                    } elseif ($type === 'cg') {
+                        if (stripos($name, 'Corporate') === false && stripos($name, 'Gifting') === false) $include = false;
+                    }
+
+                    if ($include) {
+                        $plans[] = [
+                            'name' => $v['name'],
+                            'code' => $v['variation_code'],
+                            'price' => $v['variation_amount'],
+                            'days' => extractDays($v['name'])
+                        ];
+                    }
+                }
+            } else {
+                throw new Error("Invalid response from VTPASS");
+            }
+        }
+    } elseif ($gateway === 'clubkonnect') {
+        $network_map = ['mtn' => 'MTN', 'airtel' => 'Airtel', 'glo' => 'Glo', '9mobile' => 'm_9mobile'];
+        $target_network = $network_map[$network] ?? '';
+
+        if ($type === 'airtime') {
+            $plans[] = [
+                'name' => strtoupper($network) . " Airtime",
+                'code' => 'airtime',
+                'price' => 100,
+                'days' => 0
+            ];
+        } elseif ($type === 'cable') {
+            // ClubKonnect uses static plan codes for Cable TV (no pricing API endpoint)
+            // Plans returned with price=0; admin sets prices manually
+            $ck_cable_plans = [
+                'dstv' => [
+                    ['name' => 'DSTV Padi', 'code' => 'padi', 'days' => 30],
+                    ['name' => 'DSTV Yanga', 'code' => 'yanga', 'days' => 30],
+                    ['name' => 'DSTV Confam', 'code' => 'confam', 'days' => 30],
+                    ['name' => 'DSTV Compact', 'code' => 'compact', 'days' => 30],
+                    ['name' => 'DSTV Premium', 'code' => 'premium', 'days' => 30],
+                    ['name' => 'DSTV Padi Extra View', 'code' => 'padi_extraview', 'days' => 30],
+                    ['name' => 'DSTV Yanga Extra View', 'code' => 'yanga_extraview', 'days' => 30],
+                    ['name' => 'DSTV Confam Extra View', 'code' => 'confam_extraview', 'days' => 30],
+                    ['name' => 'DSTV Compact Extra View', 'code' => 'compact_extra_view', 'days' => 30],
+                    ['name' => 'DSTV Compact Plus', 'code' => 'compact_plus', 'days' => 30],
+                    ['name' => 'DSTV Compact Plus Extra View', 'code' => 'compact_plus_extra_view', 'days' => 30],
+                    ['name' => 'DSTV Compact Plus French Plus Extra View', 'code' => 'compact_plus_frenchplus_extra_view', 'days' => 30],
+                    ['name' => 'DSTV Premium Extra View', 'code' => 'premium_extra_view', 'days' => 30],
+                    ['name' => 'DSTV Premium French Extra View', 'code' => 'premium_french_extra_view', 'days' => 30],
+                ],
+                'gotv' => [
+                    ['name' => 'GOTV Smallie', 'code' => 'smallie', 'days' => 30],
+                    ['name' => 'GOTV Jinja', 'code' => 'jinja', 'days' => 30],
+                    ['name' => 'GOTV Jolli', 'code' => 'jolli', 'days' => 30],
+                    ['name' => 'GOTV Max', 'code' => 'max', 'days' => 30],
+                    ['name' => 'GOTV Super', 'code' => 'super', 'days' => 30],
+                ],
+                'startimes' => [
+                    ['name' => 'Startimes Nova Weekly', 'code' => 'nova_weekly', 'days' => 7],
+                    ['name' => 'Startimes Basic Weekly', 'code' => 'basic_weekly', 'days' => 7],
+                    ['name' => 'Startimes Smart Weekly', 'code' => 'smart_weekly', 'days' => 7],
+                    ['name' => 'Startimes Classic Weekly', 'code' => 'classic_weekly', 'days' => 7],
+                    ['name' => 'Startimes Super Weekly', 'code' => 'super_weekly', 'days' => 7],
+                    ['name' => 'Startimes Nova', 'code' => 'nova', 'days' => 30],
+                    ['name' => 'Startimes Basic', 'code' => 'basic', 'days' => 30],
+                    ['name' => 'Startimes Smart', 'code' => 'smart', 'days' => 30],
+                    ['name' => 'Startimes Classic', 'code' => 'classic', 'days' => 30],
+                    ['name' => 'Startimes Super', 'code' => 'super', 'days' => 30],
+                    ['name' => 'Startimes Chinese Dish', 'code' => 'chinese_dish', 'days' => 30],
+                    ['name' => 'Startimes Nova Antenna', 'code' => 'nova_antenna', 'days' => 30],
+                ],
+                'showmax' => [], // SHOWMAX not supported by ClubKonnect
+            ];
+
+            $provider_plans = $ck_cable_plans[$network] ?? null;
+            if ($provider_plans === null) {
+                throw new Exception("Provider '$network' not supported for ClubKonnect Cable TV.");
+            }
+            if (empty($provider_plans)) {
+                throw new Exception("SHOWMAX is not available via ClubKonnect. Please use VTPASS for SHOWMAX plans.");
+            }
+            foreach ($provider_plans as $p) {
+                $plans[] = [
+                    'name' => $p['name'],
+                    'code' => $p['code'],
+                    'price' => 0, // ClubKonnect has no public pricing API; admin must set prices
+                    'days' => $p['days']
+                ];
+            }
+        } else {
+            $ck_user_id = 'CK101252094'; // Default UserID provided by developer for fetching
+            $vid = $_SESSION['admin_id'] ?? $get_logged_admin_details['id'];
+            $ck_api_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND (api_base_url LIKE '%clubkonnect.com%' OR api_base_url LIKE '%nellobytesystems.com%') LIMIT 1");
+            if($ck_api_row = mysqli_fetch_assoc($ck_api_q)){
+                $parts = explode(":", trim($ck_api_row['api_key']));
+                if(count($parts) >= 2 && !empty(trim($parts[0]))) $ck_user_id = trim($parts[0]);
+            }
+
+            $url = "https://www.nellobytesystems.com/APIDatabundlePlansV2.asp?UserID=" . $ck_user_id;
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            curl_setopt($ch, CURLOPT_TIMEOUT, 45);
+            $response = curl_exec($ch);
+            curl_close($ch);
+
+            $data = json_decode(trim($response), true);
+
+            if ($data && isset($data['MOBILE_NETWORK'])) {
+                $mn = $data['MOBILE_NETWORK'];
+                $network_data = $mn[$target_network] ?? $mn[strtoupper($network)] ?? $mn[ucfirst($network)] ?? null;
+
+                // Fallback for 9mobile if m_9mobile fails
+                if (!$network_data && $network === '9mobile') {
+                    $network_data = $mn['9mobile'] ?? $mn['ETISALAT'] ?? null;
+                }
+
+                if ($network_data && is_array($network_data)) {
+                    // The structure is an array of objects, each containing a PRODUCT array
+                    foreach ($network_data as $provider_group) {
+                        if (isset($provider_group['PRODUCT']) && is_array($provider_group['PRODUCT'])) {
+                            foreach ($provider_group['PRODUCT'] as $p) {
+                                $name = $p['PRODUCT_NAME'] ?? '';
+                                $code = $p['PRODUCT_ID'] ?? ''; // Using PRODUCT_ID as code for buy API
+                                $price = $p['PRODUCT_AMOUNT'] ?? 0;
+
+                                if (!$name || !$code) continue;
+
+                                $include = true;
+                                if ($type === 'sme') {
+                                    if (stripos($name, 'SME') === false) $include = false;
+                                } elseif ($type === 'dd') {
+                                    // Direct Data should include regular plans, Awoof, Gifting (not corporate), but not SME/CG
+                                    if (stripos($name, 'SME') !== false) $include = false;
+                                    if (stripos($name, 'CG') !== false) $include = false;
+                                    if (stripos($name, 'Corporate') !== false) $include = false;
+
+                                    // Always include these if found
+                                    if (stripos($name, 'Awoof') !== false || stripos($name, 'Direct') !== false) $include = true;
+                                } elseif ($type === 'cg') {
+                                    if (stripos($name, 'CG') === false && stripos($name, 'Corporate') === false) $include = false;
+                                }
+
+                                if ($include) {
+                                    $plans[] = [
+                                        'name' => $name,
+                                        'code' => $code,
+                                        'price' => $price,
+                                        'days' => extractDays($name)
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    throw new Error("Network " . ($target_network ?: $network) . " data not found in provider response.");
+                }
+            } else {
+                throw new Error("Invalid response format from ClubKonnect V2 API");
+            }
+        }
+    } elseif ($gateway === 'naijaresultpins' && $type === 'exam') {
+        // Live fetch of available exam card types from NaijaResultPins API
+        // GET https://www.naijaresultpins.com/api/v1 returns card types list
+        $vid = $get_logged_admin_details['id'];
+        $api_q = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='$vid' AND api_base_url LIKE '%naijaresultpins%' AND api_type='exam' LIMIT 1");
+        $api_row = mysqli_fetch_assoc($api_q);
+
+        if (!$api_row || empty($api_row['api_key'])) {
+            throw new Error("NaijaResultPins API key not configured. Please set it up in Exam API settings.");
+        }
+
+        $api_key = $api_row['api_key'];
+        // Normalize the base URL - strip protocol/www to build a consistent URL
+        $base_url = $api_row['api_base_url'];
+        $base_url = preg_replace('#^https?://#', '', $base_url);
+        $base_url = ltrim($base_url, '/');
+        // If the stored URL doesn't include www, add it (NaijaResultPins requires www subdomain)
+        if (!preg_match('#^www\.#i', $base_url)) {
+            $base_url = 'www.' . $base_url;
+        }
+        $ch = curl_init("https://" . $base_url . "/api/v1");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPGET        => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $api_key", "Content-Type: application/json"],
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $data = json_decode($response, true);
+
+        // NaijaResultPins returns an array of card type objects with fields: id, name, price, status
+        // Map to our product structure: exam type + sub-type based on name keywords
+        $nrp_name_map = [
+            // id => [product_name, quantity/sub-type, display_name]
+        ];
+
+        if (is_array($data)) {
+            foreach ($data as $card_type) {
+                $id    = $card_type['id'] ?? '';
+                $name  = $card_type['name'] ?? '';
+                $price = $card_type['price'] ?? 0;
+                $status = $card_type['status'] ?? 1;
+
+                if (empty($id) || empty($name) || $status == 0) continue;
+
+                // Derive exam type and sub-type from name
+                $name_lower = strtolower($name);
+                $exam_type = '';
+                $sub_type = 'result_checker';
+
+                if (strpos($name_lower, 'waec') !== false) {
+                    $exam_type = 'waec';
+                } elseif (strpos($name_lower, 'neco') !== false) {
+                    $exam_type = 'neco';
+                } elseif (strpos($name_lower, 'nabteb') !== false) {
+                    $exam_type = 'nabteb';
+                } elseif (strpos($name_lower, 'jamb') !== false) {
+                    $exam_type = 'jamb';
+                    if (strpos($name_lower, 'direct entry') !== false || strpos($name_lower, 'de') !== false) {
+                        $sub_type = 'direct_entry';
+                    } elseif (strpos($name_lower, 'with mock') !== false) {
+                        $sub_type = 'utme_with_mock';
+                    } elseif (strpos($name_lower, 'without mock') !== false || strpos($name_lower, 'utme') !== false) {
+                        $sub_type = 'utme_without_mock';
+                    }
+                }
+
+                if (empty($exam_type)) continue;
+
+                $plans[] = [
+                    'name'  => $name . " (card_type_id: $id)",
+                    'code'  => $sub_type,
+                    'price' => $price,
+                    'days'  => 0,
+                    'exam_type' => $exam_type,
+                ];
+            }
+        }
+
+        if (empty($plans)) {
+            // Fallback: return hardcoded known types as guidance
+            $plans = [
+                ['name' => 'WAEC Scratch Card (card_type_id: 1)', 'code' => 'result_checker', 'price' => 0, 'days' => 0, 'exam_type' => 'waec'],
+                ['name' => 'NECO TOKEN (card_type_id: 2)',         'code' => 'result_checker', 'price' => 0, 'days' => 0, 'exam_type' => 'neco'],
+                ['name' => 'NABTEB Scratch Card (card_type_id: 3)','code' => 'result_checker', 'price' => 0, 'days' => 0, 'exam_type' => 'nabteb'],
+                ['name' => 'JAMB UTME Without Mock (card_type_id: 8)', 'code' => 'utme_without_mock', 'price' => 0, 'days' => 0, 'exam_type' => 'jamb'],
+                ['name' => 'JAMB UTME With Mock (card_type_id: 9)',    'code' => 'utme_with_mock',    'price' => 0, 'days' => 0, 'exam_type' => 'jamb'],
+                ['name' => 'JAMB Direct Entry (card_type_id: 10)',     'code' => 'direct_entry',      'price' => 0, 'days' => 0, 'exam_type' => 'jamb'],
+            ];
+        }
+    } else {
+        // Check if it's a local vendor
+        $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
+        $check_local = mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$gateway_esc'");
+        if (mysqli_num_rows($check_local) > 0) {
+            $vendor_a_id = mysqli_fetch_assoc($check_local)['id'];
+
+            // Map type to api_type
+            $type_map = [
+                'dd' => 'dd-data',
+                'sme' => 'sme-data',
+                'shared' => 'shared-data',
+                'cg' => 'cg-data',
+                'airtime' => 'airtime',
+                'cable' => 'cable',
+                'electric' => 'electric',
+                'exam' => 'exam',
+                'betting' => 'betting'
+            ];
+            $api_type = $type_map[$type] ?? $type;
+
+            // Determine which value column to use
+            // val_2 is for price (Data/Cable), val_1 is for discount/commission (Airtime/Electric)
+            $val_col = in_array($api_type, ['airtime', 'electric', 'betting']) ? 'val_1' : 'val_2';
+
+            // Query plans from Vendor A
+            $prod_q = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='$vendor_a_id' AND product_name='$network' LIMIT 1");
+            if (mysqli_num_rows($prod_q) > 0) {
+                $vendor_a_product_id = mysqli_fetch_assoc($prod_q)['id'];
+
+                // Fetch all matching API IDs for this vendor and type
+                $api_ids_q = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='$vendor_a_id' AND api_type='$api_type'");
+                $api_ids = [];
+                while ($arow = mysqli_fetch_assoc($api_ids_q)) $api_ids[] = $arow['id'];
+
+                if (!empty($api_ids)) {
+                    $api_list = implode(',', $api_ids);
+                    $plans_q = mysqli_query($connection_server, "SELECT val_1, $val_col, val_3, val_4 FROM sas_api_parameter_values WHERE vendor_id='$vendor_a_id' AND product_id='$vendor_a_product_id' AND api_id IN ($api_list) AND status=1 GROUP BY val_1");
+                    while ($p = mysqli_fetch_assoc($plans_q)) {
+                        $plans[] = [
+                            'name' => !empty($p['val_4']) ? $p['val_4'] : strtoupper($network) . " " . str_replace(["_", "-"], " ", strtoupper($p['val_1'])),
+                            'code' => $p['val_1'],
+                            'price' => $p[$val_col],
+                            'days' => $p['val_3']
+                        ];
+                    }
+                } else {
+                    throw new Error("No API configured for $api_type on $gateway");
+                }
+            } else {
+                throw new Error("Product $network not found on $gateway");
+            }
+        } else {
+            throw new Error("Unsupported gateway: " . $gateway);
+        }
+    }
+
+    // Sort plans by validity days (ascending)
+    usort($plans, function($a, $b) {
+        return $a['days'] <=> $b['days'];
+    });
+
+    echo json_encode(["success" => true, "plans" => $plans]);
+
+} catch (Exception $e) {
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+} catch (Error $e) {
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+}
+?>

@@ -1,0 +1,8 @@
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+
+# Dynamic SEO Robots and Sitemap per vendor domain
+RewriteRule ^robots\.txt$ seo-robots.php [L,NC]
+RewriteRule ^sitemap\.xml$ seo-sitemap.php [L,NC]
+</IfModule>
