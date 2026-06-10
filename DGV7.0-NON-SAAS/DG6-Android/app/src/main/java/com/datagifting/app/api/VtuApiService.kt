@@ -201,6 +201,12 @@ interface VtuApiService {
 
     @POST("web/api/ai-budgeting.php")
     suspend fun getBudgetStats(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
+
+    @POST("api/app-backend/betting.php")
+    suspend fun purchaseBetting(
+        @Header("Authorization") token: String,
+        @Body body: Map<String, Any>
+    ): retrofit2.Response<Map<String, Any>>
 }
 
 

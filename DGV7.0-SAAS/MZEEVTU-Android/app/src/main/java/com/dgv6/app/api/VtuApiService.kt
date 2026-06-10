@@ -181,4 +181,18 @@ interface VtuApiService {
 
     @POST("web/api/kyc.php")
     suspend fun kycUpload(@Body body: okhttp3.MultipartBody): Response<Map<String, Any>>
+
+    @POST("api/app-backend/ai-handler")
+    suspend fun parseAiIntent(
+        @Header("Authorization") token: String,
+        @Body body: Map<String, Any>
+    ): Response<Map<String, Any>>
+
+
+    @POST("api/app-backend/ai-vision")
+    suspend fun parseAiVision(
+        @Header("Authorization") token: String,
+        @Body body: Map<String, Any>
+    ): retrofit2.Response<Map<String, Any>>
+
 }

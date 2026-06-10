@@ -35,8 +35,22 @@ class PreferenceManager(context: Context) {
             putString(Constants.KEY_ACCOUNT_LEVEL, accountLevel.toString())
             putBoolean(Constants.KEY_PIN_SET, pinSet)
             putBoolean(Constants.KEY_IS_LOGGED_IN, true)
-        }.apply()
-    }
+        
+    fun saveAiVoiceStatus(status: Int) = prefs.edit().putInt("ai_voice_status", status).apply()
+    fun getAiVoiceStatus(): Int = prefs.getInt("ai_voice_status", 0)
+
+    fun saveTrustScore(score: Int) = prefs.edit().putInt("ai_trust_score", score).apply()
+    fun getTrustScore(): Int = prefs.getInt("ai_trust_score", 50)
+
+}.apply()
+    
+    fun saveAiVoiceStatus(status: Int) = prefs.edit().putInt("ai_voice_status", status).apply()
+    fun getAiVoiceStatus(): Int = prefs.getInt("ai_voice_status", 0)
+
+    fun saveTrustScore(score: Int) = prefs.edit().putInt("ai_trust_score", score).apply()
+    fun getTrustScore(): Int = prefs.getInt("ai_trust_score", 50)
+
+}
 
     fun clear() = prefs.edit().clear().apply()
 
@@ -45,4 +59,11 @@ class PreferenceManager(context: Context) {
 
     fun getEnabledServices(): Set<String> =
         prefs.getStringSet(Constants.KEY_ENABLED_SERVICES, emptySet()) ?: emptySet()
+
+    fun saveAiVoiceStatus(status: Int) = prefs.edit().putInt("ai_voice_status", status).apply()
+    fun getAiVoiceStatus(): Int = prefs.getInt("ai_voice_status", 0)
+
+    fun saveTrustScore(score: Int) = prefs.edit().putInt("ai_trust_score", score).apply()
+    fun getTrustScore(): Int = prefs.getInt("ai_trust_score", 50)
+
 }
