@@ -182,10 +182,6 @@ interface VtuApiService {
     @POST("web/api/kyc.php")
     suspend fun kycUpload(@Body body: okhttp3.MultipartBody): Response<Map<String, Any>>
 
-    // ── Betting ──────────────────────────────────────────────────────────
-    @POST("web/api/betting.php")
-    suspend fun purchaseBetting(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
-
     // ── AI Assistant ──────────────────────────────────────────────────────
     @POST("api/app-backend/ai-intent-parser.php")
     suspend fun parseAiIntent(@Header("Authorization") token: String, @Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>

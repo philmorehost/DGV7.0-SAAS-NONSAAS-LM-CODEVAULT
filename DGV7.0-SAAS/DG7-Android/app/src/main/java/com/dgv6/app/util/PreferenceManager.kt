@@ -45,4 +45,7 @@ class PreferenceManager(context: Context) {
 
     fun getEnabledServices(): Set<String> =
         prefs.getStringSet(Constants.KEY_ENABLED_SERVICES, emptySet()) ?: emptySet()
+
+    fun getAiVoiceStatus(): Int = prefs.getInt("ai_voice_status", 0)
+    fun getTrustScore(): Int = prefs.getInt("trust_score", 50)
 }
