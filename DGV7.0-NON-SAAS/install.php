@@ -13,6 +13,13 @@ if (file_exists(__DIR__ . '/installed.lock')) {
     exit();
 }
 
+// PHP 8.1+ made mysqli throw mysqli_sql_exception on connection failure instead of
+// returning false — the @ operator only suppresses warnings, not exceptions, so every
+// failed test_db/install attempt below was crashing with an uncaught fatal error (HTML
+// output) instead of the JSON response the installer's JS expects. Restore the classic
+// "return false on failure" behavior for this script.
+mysqli_report(MYSQLI_REPORT_OFF);
+
 $step = isset($_GET['step']) ? (int)$_GET['step'] : 1;
 
 // ─── AJAX: Test DB Connection ─────────────────────────────────────────────────
