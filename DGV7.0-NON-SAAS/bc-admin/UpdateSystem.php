@@ -21,14 +21,21 @@ $checksum = "";
 $update_available = false;
 $error_msg = "";
 
+$force_version = trim($_GET['force_version'] ?? '');
+
+$post_fields = [
+    'license_key' => $license_key,
+    'domain' => $license_domain
+];
+if (!empty($force_version)) {
+    $post_fields['force_version'] = $force_version;
+}
+
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $api_url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-    'license_key' => $license_key,
-    'domain' => $license_domain
- Suffers]));
+curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_fields));
 curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 $response = curl_exec($ch);
@@ -42,7 +49,10 @@ if ($http_code === 200 && !empty($response)) {
         $changelog = $res_data['changelog'] ?? '<li>Bug fixes and performance improvements.</li>';
         $checksum = $res_data['checksum'] ?? '';
         
-        if (version_compare($latest_version, $current_version, '>')) {
+        $clean_latest = ltrim(strtolower($latest_version), 'v');
+        $clean_current = ltrim(strtolower($current_version), 'v');
+        
+        if (version_compare($clean_latest, $clean_current, '>') || !empty($force_version)) {
             $update_available = true;
         }
     } else {
@@ -191,12 +201,12 @@ if ($http_code === 200 && !empty($response)) {
                         <div class="d-flex justify-content-center align-items-center mb-5">
                             <div class="text-center">
                                 <span class="d-block small text-muted mb-1">Current Version</span>
-                                <div class="version-badge version-old">v<?= htmlspecialchars($current_version) ?></div>
+                                <div class="version-badge version-old">v<?= htmlspecialchars(ltrim(strtolower($current_version), 'v')) ?></div>
                             </div>
                             <i class="bi bi-arrow-right fs-4 text-muted mx-4"></i>
                             <div class="text-center">
                                 <span class="d-block small text-muted mb-1">Latest Version</span>
-                                <div class="version-badge version-new">v<?= htmlspecialchars($latest_version) ?></div>
+                                <div class="version-badge version-new">v<?= htmlspecialchars(ltrim(strtolower($latest_version), 'v')) ?></div>
                             </div>
                         </div>
 
@@ -245,6 +255,12 @@ if ($http_code === 200 && !empty($response)) {
                             </div>
                             <h4 class="fw-bold mb-2">System is Up to Date</h4>
                             <p class="text-muted mb-4">Your platform is running the latest version <strong>v<?= htmlspecialchars($current_version) ?></strong>. No updates are currently available.</p>
+                            
+                            <form method="GET" class="d-flex justify-content-center align-items-center gap-2 mx-auto mb-4" style="max-width: 350px;">
+                                <input type="text" name="force_version" class="form-control rounded-pill px-3" placeholder="Force Version (e.g. 7.01)" required style="border-radius: 50rem; text-align: center;">
+                                <button type="submit" class="btn btn-warning rounded-pill px-4 text-nowrap" style="border-radius: 50rem; color: #1e293b; font-weight: 600;">Force Check</button>
+                            </form>
+                            
                             <a href="Dashboard.php" class="btn btn-primary rounded-pill px-4 py-2">Go to Dashboard</a>
                         </div>
 
@@ -304,6 +320,9 @@ document.addEventListener('DOMContentLoaded', function() {
             setStepStatus(1, 'active');
             let formData = new FormData();
             formData.append('expected_hash', expectedHash);
+            <?php if (!empty($force_version)): ?>
+            formData.append('force_version', "<?= htmlspecialchars($force_version) ?>");
+            <?php endif; ?>
 
             let downloadResponse = await fetch('ajax_download_update.php', { method: 'POST', body: formData });
             let downloadData = await downloadResponse.json();
