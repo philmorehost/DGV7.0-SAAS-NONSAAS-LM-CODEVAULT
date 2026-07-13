@@ -16,7 +16,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
 
-/** Talks to web/guest-api/*.php — the stateless, unauthenticated Guest Mode backend. */
+/** Talks to the PHP endpoints under web/guest-api/ — the stateless, unauthenticated Guest Mode backend. */
 interface GuestApiService {
 
     @GET("web/guest-api/catalog.php")
