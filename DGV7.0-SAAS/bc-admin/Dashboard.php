@@ -342,6 +342,24 @@
         .metric-value { font-size: 1rem; }
     }
 
+    .subscription-icon {
+        width: 52px; height: 52px; border-radius: 1rem;
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .business-growth-icon {
+        width: 52px; height: 52px; border-radius: 1rem;
+        background: linear-gradient(135deg, #ef4444, #b91c1c);
+        color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .growth-tile { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .growth-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -8px rgba(0,0,0,0.15) !important; }
+    @keyframes pulse-new {
+        0%   { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5); }
+        70%  { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+    }
+
     .quick-link-tile {
         position: relative;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -536,41 +554,82 @@
         <div class="row">
           <!-- Subscription Card -->
           <div class="col-12 col-lg-4">
-            <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 h-100">
-              <div class="card-header bg-white py-3 border-0">
-                  <h5 class="card-title mb-0 text-center"><i class="bi bi-gem me-2 text-primary"></i>Subscription</h5>
-              </div>
-              <div class="card-body p-4">
-                <?php
-                  $expiry_date = $get_logged_admin_details['expiry_date'];
-                  $status_badge = 'bg-secondary';
-                  $status_text = 'No Subscription';
-                  $expiry_text = 'N/A';
+            <?php
+              $expiry_date = $get_logged_admin_details['expiry_date'];
+              $status_badge = 'bg-secondary';
+              $status_text = 'No Subscription';
+              $expiry_text = 'N/A';
+              $days_remaining = null;
+              $progress_pct = 0;
+              $progress_color = 'bg-success';
+              $plan_name = null;
+              $purchase_date = null;
 
-                  if ($expiry_date) {
-                      $today = new DateTime();
-                      $expiry = new DateTime($expiry_date);
-                      if ($expiry < $today) {
-                          $status_badge = 'bg-danger';
-                          $status_text = 'Expired';
-                      } else {
-                          $status_badge = 'bg-primary';
-                          $status_text = 'Active';
+              // Most recently purchased plan — gives the card a real plan name instead of just a bare date.
+              $vid_sub = (int)$get_logged_admin_details['id'];
+              $plan_q = mysqli_query($connection_server, "SELECT bp.name, vs.purchase_date FROM sas_vendor_subscriptions vs INNER JOIN sas_billing_packages bp ON bp.id = vs.package_id WHERE vs.vendor_id='$vid_sub' ORDER BY vs.purchase_date DESC LIMIT 1");
+              $plan_row = $plan_q ? mysqli_fetch_assoc($plan_q) : null;
+              if ($plan_row) {
+                  $plan_name = $plan_row['name'];
+                  $purchase_date = $plan_row['purchase_date'];
+              }
+
+              if ($expiry_date) {
+                  $today = new DateTime();
+                  $expiry = new DateTime($expiry_date);
+                  $days_remaining = (int)$today->diff($expiry)->format('%r%a');
+
+                  if ($expiry < $today) {
+                      $status_badge = 'bg-danger';
+                      $status_text = 'Expired';
+                      $progress_pct = 100;
+                      $progress_color = 'bg-danger';
+                  } else {
+                      $status_badge = 'bg-primary';
+                      $status_text = 'Active';
+                      if ($days_remaining <= 7) { $progress_color = 'bg-danger'; }
+                      elseif ($days_remaining <= 30) { $progress_color = 'bg-warning'; }
+                      else { $progress_color = 'bg-success'; }
+
+                      if (!empty($purchase_date)) {
+                          $total_days = max(1, (new DateTime($purchase_date))->diff($expiry)->days);
+                          $elapsed_days = max(0, $total_days - $days_remaining);
+                          $progress_pct = min(100, round(($elapsed_days / $total_days) * 100));
                       }
-                      $expiry_text = date('F j, Y', strtotime($expiry_date));
                   }
-                ?>
-                <div class="d-flex justify-content-around align-items-center mb-4 text-center">
-                    <div>
-                        <div class="small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.7rem;">Status</div>
-                        <span class="badge <?php echo $status_badge; ?> rounded-pill px-3 py-2"><?php echo $status_text; ?></span>
+                  $expiry_text = date('F j, Y', strtotime($expiry_date));
+              }
+            ?>
+            <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 h-100">
+              <div class="card-body p-4 d-flex flex-column">
+
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="subscription-icon">
+                        <i class="bi bi-gem fs-4"></i>
                     </div>
                     <div>
-                        <div class="small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.7rem;">Expires On</div>
-                        <div class="fw-bold text-dark"><?php echo $expiry_text; ?></div>
+                        <h5 class="mb-0 fw-bold text-dark"><?php echo $plan_name ? htmlspecialchars($plan_name) . ' Plan' : 'Subscription'; ?></h5>
+                        <span class="badge <?php echo $status_badge; ?> rounded-pill px-2 py-1" style="font-size: 0.65rem;"><?php echo $status_text; ?></span>
                     </div>
                 </div>
-                <a href="RenewSubscription.php" class="btn btn-primary btn-lg w-100 rounded-3 fw-bold shadow-sm">
+
+                <?php if ($days_remaining !== null): ?>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Expires <?php echo htmlspecialchars($expiry_text); ?></span>
+                        <span class="fw-bold <?php echo $days_remaining <= 7 ? 'text-danger' : 'text-dark'; ?>">
+                            <?php echo $days_remaining >= 0 ? $days_remaining . ' days left' : abs($days_remaining) . ' days overdue'; ?>
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar <?php echo $progress_color; ?>" style="width: <?php echo $progress_pct; ?>%;"></div>
+                    </div>
+                </div>
+                <?php else: ?>
+                <p class="small text-muted mb-3">You don't have an active plan yet. Choose one to unlock full platform features.</p>
+                <?php endif; ?>
+
+                <a href="RenewSubscription.php" class="btn btn-primary rounded-pill fw-bold py-2 mt-auto">
                   <i class="bi bi-arrow-repeat me-2"></i><?php echo ($status_text === 'Active' || $status_text === 'Expired') ? 'Renew / Upgrade Plan' : 'Choose a Plan'; ?>
                 </a>
               </div>
@@ -581,20 +640,41 @@
           <?php if(isServiceEnabled('ai_suite')): ?>
           <div class="col-12 col-lg-4">
             <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 h-100" style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);">
-              <div class="card-header bg-transparent py-3 border-0 text-center">
-                  <h5 class="card-title mb-0 fw-bold" style="color: #0f172a;"><i class="bi bi-rocket-takeoff-fill me-2 text-danger"></i>Business Growth</h5>
-              </div>
-              <div class="card-body p-4 d-flex flex-column justify-content-center gap-3">
-                
-                <a href="AISettings.php" class="text-decoration-none p-3 rounded-4 bg-white shadow-sm d-flex align-items-center transition-all" style="border: 1px solid rgba(0,0,0,0.05); transition: transform 0.2s;">
-                    <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-circle me-3">
-                        <i class="bi bi-cpu-fill fs-4"></i>
+              <div class="card-body p-4 d-flex flex-column">
+
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="business-growth-icon">
+                        <i class="bi bi-rocket-takeoff-fill fs-4"></i>
                     </div>
                     <div>
-                        <h6 class="mb-0 fw-bold text-dark d-flex align-items-center">AI Business Suite <span class="badge bg-danger rounded-pill ms-2" style="font-size: 0.6rem; animation: pulse-new 2s infinite;">NEW</span></h6>
-                        <span class="small text-muted" style="font-size: 0.75rem;">Automate support & sales</span>
+                        <h5 class="mb-0 fw-bold" style="color:#0f172a;">Business Growth</h5>
+                        <span class="small text-muted">AI tools to grow faster</span>
                     </div>
-                </a>
+                </div>
+
+                <div class="d-flex flex-column gap-2 flex-grow-1">
+                  <a href="AISettings.php" class="text-decoration-none p-3 rounded-4 bg-white shadow-sm d-flex align-items-center growth-tile" style="border: 1px solid rgba(0,0,0,0.05);">
+                      <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-circle me-3">
+                          <i class="bi bi-cpu-fill fs-4"></i>
+                      </div>
+                      <div class="flex-grow-1">
+                          <h6 class="mb-0 fw-bold text-dark d-flex align-items-center">AI Business Suite <span class="badge bg-danger rounded-pill ms-2" style="font-size: 0.6rem; animation: pulse-new 2s infinite;">NEW</span></h6>
+                          <span class="small text-muted" style="font-size: 0.75rem;">Automate support &amp; sales</span>
+                      </div>
+                      <i class="bi bi-chevron-right text-muted"></i>
+                  </a>
+
+                  <a href="AIMarketing.php" class="text-decoration-none p-3 rounded-4 bg-white shadow-sm d-flex align-items-center growth-tile" style="border: 1px solid rgba(0,0,0,0.05);">
+                      <div class="bg-danger bg-opacity-10 text-danger p-3 rounded-circle me-3">
+                          <i class="bi bi-megaphone-fill fs-4"></i>
+                      </div>
+                      <div class="flex-grow-1">
+                          <h6 class="mb-0 fw-bold text-dark">AI Marketing Studio</h6>
+                          <span class="small text-muted" style="font-size: 0.75rem;">Generate promo content instantly</span>
+                      </div>
+                      <i class="bi bi-chevron-right text-muted"></i>
+                  </a>
+                </div>
 
               </div>
             </div>
