@@ -100,6 +100,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'install') {
     $admin_email = trim($_POST['admin_email'] ?? '');
     $admin_phone = trim($_POST['admin_phone'] ?? '');
     $admin_pass  = trim($_POST['admin_pass']  ?? '');
+    $admin_pin   = trim($_POST['admin_pin']   ?? '');
 
     // Validate required fields
     $errors = [];
@@ -110,6 +111,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'install') {
     if (empty($admin_email)) $errors[] = 'Admin email is required';
     if (empty($admin_pass))  $errors[] = 'Admin password is required';
     if (strlen($admin_pass) < 8) $errors[] = 'Password must be at least 8 characters';
+    // A security PIN set at install time means the admin never hits the
+    // force_vendor_pin enforcement redirect (func/bc-admin-config.php) on first
+    // login — that redirect only exempts /bc-admin/AccountSettings.php itself,
+    // so an admin whose PIN is still empty depends on that one exemption holding
+    // up across every other page; setting it here up front removes the dependency.
+    if (!preg_match('/^\d{4}$/', $admin_pin)) $errors[] = 'Security PIN must be exactly 4 digits';
 
     if (!empty($errors)) {
         echo json_encode(['ok' => false, 'msg' => implode(', ', $errors)]);
@@ -180,23 +187,24 @@ if (isset($_POST['action']) && $_POST['action'] === 'install') {
     $pass_esc    = mysqli_real_escape_string($conn, $md5_pass);
     $hash_esc    = mysqli_real_escape_string($conn, $access_hash);
     $website_esc = mysqli_real_escape_string($conn, $website_url);
+    $pin_esc     = mysqli_real_escape_string($conn, password_hash($admin_pin, PASSWORD_DEFAULT));
 
     $check_vendor = mysqli_query($conn, "SELECT id FROM sas_vendors WHERE id=1");
     if ($check_vendor && mysqli_num_rows($check_vendor) == 0) {
         mysqli_query($conn, "INSERT INTO sas_vendors
             (id, firstname, lastname, email, phone_number, password, website_url,
              home_address, balance, status, is_blocked,
-             plisio_activated, payout_activated, ai_status, access_hash, reg_date)
+             plisio_activated, payout_activated, ai_status, access_hash, security_pin, reg_date)
             VALUES
             (1, '$first_esc', '$last_esc', '$email_esc', '$phone_esc', '$pass_esc', '$website_esc',
              '', 0, 1, 0,
-             1, 1, 1, '$hash_esc', '$reg_date')");
+             1, 1, 1, '$hash_esc', '$pin_esc', '$reg_date')");
     } else {
         mysqli_query($conn, "UPDATE sas_vendors SET
             firstname='$first_esc', lastname='$last_esc', email='$email_esc',
             phone_number='$phone_esc', password='$pass_esc', website_url='$website_esc',
             status=1, is_blocked=0, plisio_activated=1, payout_activated=1, ai_status=1,
-            expiry_date=NULL, access_hash='$hash_esc'
+            expiry_date=NULL, access_hash='$hash_esc', security_pin='$pin_esc'
             WHERE id=1");
     }
 
@@ -550,6 +558,19 @@ $all_req_met    = $req_php && $req_mysqli && $req_mbstring && $req_writable_func
                     </div>
                 </div>
 
+                <div class="section-label">Admin Security PIN</div>
+                <p class="text-muted small mb-3">Used to confirm sensitive admin actions (crediting users, editing blog posts, etc). Set it now so you're never forced into a setup loop on first login.</p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label>4-Digit PIN <span class="text-danger">*</span></label>
+                        <input type="password" id="admin_pin" class="form-control" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="****" style="letter-spacing:6px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label>Confirm PIN <span class="text-danger">*</span></label>
+                        <input type="password" id="admin_pin2" class="form-control" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="****" style="letter-spacing:6px;">
+                    </div>
+                </div>
+
                 <div id="step3-error" class="alert alert-danger rounded-3 mt-3" style="display:none;"></div>
 
                 <div class="d-flex gap-3 mt-4">
@@ -710,6 +731,8 @@ function validateStep3() {
     const email  = document.getElementById('admin_email').value.trim();
     const pass   = document.getElementById('admin_pass').value;
     const pass2  = document.getElementById('admin_pass2').value;
+    const pin    = document.getElementById('admin_pin').value;
+    const pin2   = document.getElementById('admin_pin2').value;
 
     errDiv.style.display = 'none';
     if (!first)              { showStep3Err('First name is required.');                   return; }
@@ -717,6 +740,8 @@ function validateStep3() {
     if (!email.includes('@')){ showStep3Err('Please enter a valid email address.');       return; }
     if (pass.length < 8)     { showStep3Err('Password must be at least 8 characters.');  return; }
     if (pass !== pass2)      { showStep3Err('Passwords do not match.');                   return; }
+    if (!/^\d{4}$/.test(pin)){ showStep3Err('Security PIN must be exactly 4 digits.');   return; }
+    if (pin !== pin2)        { showStep3Err('Security PIN and Confirm PIN do not match.'); return; }
 
     runInstall();
 }
@@ -764,6 +789,7 @@ async function runInstall() {
         admin_email: document.getElementById('admin_email').value,
         admin_phone: document.getElementById('admin_phone').value,
         admin_pass:  document.getElementById('admin_pass').value,
+        admin_pin:   document.getElementById('admin_pin').value,
     });
 
     try {
