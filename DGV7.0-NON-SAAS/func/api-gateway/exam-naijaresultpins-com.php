@@ -1,11 +1,14 @@
 <?php
 // Two-level mapping: product_name (exam type) → quantity (sub-type) → NaijaResultPins card_type_id.
-// card_type_ids are obtained from GET https://www.naijaresultpins.com/api/v1
-// Known IDs from API sample: 1=WAEC Scratch Card, 2=NECO TOKEN, 3=NABTEB Scratch Card
-// JAMB IDs: verify from GET /api/v1 and update as needed.
+// card_type_ids confirmed live against GET https://www.naijaresultpins.com/api/v1:
+// 1=WAEC Scratch Card, 2=NECO TOKEN, 3=NABTEB Scratch Card, 4=WAEC Verification Pin,
+// 11=NECO e-Verification PIN. (NBAIS and EXAMINIFY card types also exist on the live account but
+// have no matching product in this app yet, so they're intentionally left unmapped.)
+// JAMB IDs (8/9/10) are not currently returned by the live product list for this account and are
+// unverified — left as-is rather than guessed at.
 $nrp_card_type_map = array(
-    "waec"   => array("result_checker" => "1"),
-    "neco"   => array("result_checker" => "2"),
+    "waec"   => array("result_checker" => "1", "verification_pin" => "4"),
+    "neco"   => array("result_checker" => "2", "verification_pin" => "11"),
     "nabteb" => array("result_checker" => "3"),
     "jamb"   => array(
         "utme_without_mock" => "8",

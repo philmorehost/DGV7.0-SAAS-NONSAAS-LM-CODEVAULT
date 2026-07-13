@@ -537,6 +537,12 @@
             fetchedPlans = data.plans;
             tbody.innerHTML = '';
 
+            const existingNote = resultsDiv.querySelector('.fetch-note-alert');
+            if(existingNote) existingNote.remove();
+            if(data.note) {
+                resultsDiv.insertAdjacentHTML('afterbegin', `<div class="alert alert-warning small mb-2 fetch-note-alert">${data.note}</div>`);
+            }
+
             fetchedPlans.forEach((plan, index) => {
                 const providerPrice = parseFloat(plan.price);
                 const costPrice = providerPrice * (1 + (pDisc / 100));

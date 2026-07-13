@@ -203,14 +203,16 @@
             $current_api_type = 'bulk-sms';
             $installed_gateways = [];
             $check_fetcher_query = mysqli_query($connection_server, "SELECT id, api_base_url FROM sas_apis WHERE vendor_id='".$get_logged_admin_details["id"]."' AND api_type='$current_api_type'");
+            // Only v6.datagifting.com.ng actually supports live plan/price fetching for Bulk SMS —
+            // every other configured API has no fetch endpoint, so it's deliberately excluded from
+            // this dropdown rather than listed and left to fail when selected. (The previous check
+            // here matched against sas_vendors.website_url, which only ever contains this single-tenant
+            // install's own vendor row and could never match an external reseller like this one.)
             while($api_row = mysqli_fetch_assoc($check_fetcher_query)){
                 $url = $api_row['api_base_url'];
-                $url_esc = mysqli_real_escape_string($connection_server, $url);
-                $is_local = (mysqli_num_rows(mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$url_esc'")) > 0);
-
-                if($is_local){
+                if(stripos($url, 'v6.datagifting.com.ng') !== false){
+                    $installed_gateways[$url] = 'V6.DATAGIFTING.COM.NG';
                     $is_fetcher_allowed = true;
-                    $installed_gateways[$url] = strtoupper($url);
                 }
             }
         ?>

@@ -4,6 +4,20 @@ include("../func/bc-admin-config.php");
 $vid = $get_logged_admin_details['id'];
 $esc_vid = (int)$vid;
 
+// Default marketplace listing: v6.datagifting.com.ng runs the DGV7.0-SAAS edition of this same
+// platform, so it's a ready-made reseller API for every VTU service via the "localserver.php"
+// gateway fallback (see func/api-gateway/{type}-localserver.php), which talks to another DGV7
+// instance's own web/api/*.php endpoints. Seeded per-vendor, per-type, insert-if-missing — inactive
+// and keyless by default until the vendor signs up on v6.datagifting.com.ng and adds their own key.
+$default_marketplace_url = "v6.datagifting.com.ng";
+$default_marketplace_types = array("airtime", "shared-data", "sme-data", "cg-data", "dd-data", "cable", "electric", "exam", "betting", "bulk-sms");
+foreach ($default_marketplace_types as $default_api_type) {
+    $check_default_api = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='$esc_vid' AND api_type='$default_api_type' AND api_base_url='$default_marketplace_url' LIMIT 1");
+    if (mysqli_num_rows($check_default_api) == 0) {
+        mysqli_query($connection_server, "INSERT INTO sas_apis (vendor_id, api_type, api_base_url, api_key, status) VALUES ('$esc_vid', '$default_api_type', '$default_marketplace_url', '', '0')");
+    }
+}
+
 // Handle Update API Gateway
 if (isset($_POST['update-api'])) {
     bc_validate_csrf();
@@ -167,7 +181,9 @@ $apis_q = mysqli_query($connection_server, "SELECT * FROM sas_apis $where_clause
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     <a href="MarketPlace.php" class="filter-btn <?php echo empty($type_filter) ? 'active' : ''; ?>">All Services</a>
                     <?php
-                    $types = ['airtime' => 'Airtime', 'sme-data' => 'SME Data', 'cg-data' => 'CG Data', 'dd-data' => 'Direct Data', 'shared-data' => 'Shared Data', 'cable' => 'Cable TV', 'electric' => 'Electricity', 'exam' => 'Exam Pins', 'betting' => 'Betting', 'sms' => 'SMS'];
+                    // Key must match the api_type value each service page actually filters sas_apis by
+                    // (e.g. BulkSMS.php uses 'bulk-sms', not 'sms') so a gateway added here shows up there.
+                    $types = ['airtime' => 'Airtime', 'sme-data' => 'SME Data', 'cg-data' => 'CG Data', 'dd-data' => 'Direct Data', 'shared-data' => 'Shared Data', 'cable' => 'Cable TV', 'electric' => 'Electricity', 'exam' => 'Exam Pins', 'betting' => 'Betting', 'bulk-sms' => 'Bulk SMS'];
                     foreach ($types as $key => $lbl):
                     ?>
                         <a href="MarketPlace.php?type=<?php echo $key; ?>&searchq=<?php echo urlencode($search_q); ?>" class="filter-btn <?php echo $type_filter === $key ? 'active' : ''; ?>"><?php echo $lbl; ?></a>
@@ -195,7 +211,7 @@ $apis_q = mysqli_query($connection_server, "SELECT * FROM sas_apis $where_clause
                     'electric' => 'bg-purple-subtle text-purple',
                     'exam' => 'bg-secondary-subtle text-secondary-emphasis',
                     'betting' => 'bg-success-subtle text-success',
-                    'sms' => 'bg-pink-subtle text-pink'
+                    'bulk-sms' => 'bg-pink-subtle text-pink'
                 ];
                 $badge_class = $badge_colors[$type] ?? 'bg-light text-dark';
             ?>

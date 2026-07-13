@@ -289,20 +289,21 @@ try {
 
         $data = json_decode($response, true);
 
-        // NaijaResultPins returns an array of card type objects with fields: id, name, price, status
-        // Map to our product structure: exam type + sub-type based on name keywords
-        $nrp_name_map = [
-            // id => [product_name, quantity/sub-type, display_name]
-        ];
+        // NaijaResultPins' real response fields (confirmed live) are card_type_id, card_name,
+        // unit_amount, availability — NOT id/name/price/status. The previous field names here never
+        // matched anything the API actually returns, so every row was silently skipped and this
+        // always fell through to the hardcoded fallback below regardless of what the live account offered.
+        $unsupported_products = [];
 
         if (is_array($data)) {
             foreach ($data as $card_type) {
-                $id    = $card_type['id'] ?? '';
-                $name  = $card_type['name'] ?? '';
-                $price = $card_type['price'] ?? 0;
-                $status = $card_type['status'] ?? 1;
+                $id     = $card_type['card_type_id'] ?? '';
+                $name   = $card_type['card_name'] ?? '';
+                $price  = $card_type['unit_amount'] ?? 0;
+                $availability = $card_type['availability'] ?? '';
 
-                if (empty($id) || empty($name) || $status == 0) continue;
+                if ($id === '' || $name === '') continue;
+                if (stripos($availability, 'out') !== false) continue; // e.g. "Out of Stock"
 
                 // Derive exam type and sub-type from name
                 $name_lower = strtolower($name);
@@ -323,10 +324,24 @@ try {
                         $sub_type = 'utme_with_mock';
                     } elseif (strpos($name_lower, 'without mock') !== false || strpos($name_lower, 'utme') !== false) {
                         $sub_type = 'utme_without_mock';
+                    } else {
+                        continue; // Unrecognized JAMB variant — don't guess a sub_type for it.
                     }
                 }
 
-                if (empty($exam_type)) continue;
+                if (empty($exam_type)) {
+                    // Board not modeled by this app yet (e.g. NBAIS, EXAMINIFY) — surfaced to the
+                    // admin below rather than silently dropped.
+                    $unsupported_products[] = "$name (card_type_id: $id)";
+                    continue;
+                }
+
+                // NaijaResultPins offers more than one card per board (e.g. WAEC Scratch Card vs
+                // WAEC Verification Pin) — distinguish them instead of collapsing both into
+                // "result_checker", which would silently overwrite one price with the other.
+                if ($exam_type !== 'jamb' && strpos($name_lower, 'verif') !== false) {
+                    $sub_type = 'verification_pin';
+                }
 
                 $plans[] = [
                     'name'  => $name . " (card_type_id: $id)",
@@ -336,6 +351,13 @@ try {
                     'exam_type' => $exam_type,
                 ];
             }
+        }
+
+        // Surfaced as a separate top-level field below (not injected into $plans) since $plans is
+        // sent verbatim to ajax-save-plans.php by "Apply All" — a fake entry here would get saved
+        // as a spurious empty-code pricing row.
+        if (!empty($unsupported_products)) {
+            $fetch_note = 'Not added — no matching product in this app yet: ' . implode(', ', $unsupported_products);
         }
 
         if (empty($plans)) {
@@ -350,11 +372,14 @@ try {
             ];
         }
     } else {
-        // For data/cable services, prefer the plan codes actually embedded in this vendor's
-        // own func/api-gateway/{type}-{provider}.php gateway file — that's the file real purchases
-        // check against, so it can never drift from what will actually work at checkout time
-        // (unlike a hand-maintained catalog or a live-fetch endpoint most providers don't expose).
-        $gateway_file_type_prefix = ['sme' => 'sme-data', 'cg' => 'cg-data', 'dd' => 'dd-data', 'shared' => 'shared-data', 'cable' => 'cable'];
+        // For data/cable/exam/bulk-sms services, prefer the plan codes actually embedded in this
+        // vendor's own func/api-gateway/{prefix}-{provider}.php gateway file — that's the file real
+        // purchases check against, so it can never drift from what will actually work at checkout
+        // time (unlike a hand-maintained catalog or a live-fetch endpoint most providers don't expose).
+        // 'bulk-sms' maps to the 'sms' file prefix because that's what web/func/sms.php itself
+        // resolves against (func/api-gateway/sms-*.php, not bulk-sms-*.php) — a pre-existing naming
+        // quirk in the app, not something introduced here.
+        $gateway_file_type_prefix = ['sme' => 'sme-data', 'cg' => 'cg-data', 'dd' => 'dd-data', 'shared' => 'shared-data', 'cable' => 'cable', 'exam' => 'exam', 'bulk-sms' => 'sms'];
         $used_gateway_file = false;
 
         if (isset($gateway_file_type_prefix[$type])) {
@@ -423,7 +448,11 @@ try {
         return $a['days'] <=> $b['days'];
     });
 
-    echo json_encode(["success" => true, "plans" => $plans]);
+    $fetch_response = ["success" => true, "plans" => $plans];
+    if (!empty($fetch_note)) {
+        $fetch_response["note"] = $fetch_note;
+    }
+    echo json_encode($fetch_response);
 
 } catch (Exception $e) {
     echo json_encode(["success" => false, "message" => $e->getMessage()]);

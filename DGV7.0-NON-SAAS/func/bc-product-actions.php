@@ -112,7 +112,11 @@ function install_product($connection_server, $get_logged_admin_details, $product
             $new_api_base_url = $new_api_detail["api_base_url"];
             // Resolving the real gateway file is a local file read (no network I/O), so it's safe
             // to do synchronously here to auto-populate genuinely correct codes on install/switch.
-            $gateway_file_for_new_api = bc_gateway_resolve_file($product_type, $new_api_base_url);
+            // 'bulk-sms' is the one product type whose gateway files use a different prefix
+            // ("sms-*.php", matching web/func/sms.php's own resolution) than its product_type string.
+            $gateway_file_prefix_overrides = array("bulk-sms" => "sms");
+            $gateway_file_prefix = isset($gateway_file_prefix_overrides[$product_type]) ? $gateway_file_prefix_overrides[$product_type] : $product_type;
+            $gateway_file_for_new_api = bc_gateway_resolve_file($gateway_file_prefix, $new_api_base_url);
 
             foreach ($product_names_array as $product_name) {
                 $product_name = trim($product_name);

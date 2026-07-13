@@ -178,18 +178,23 @@
             $current_api_type = 'exam';
             $installed_gateways = [];
             $check_fetcher_query = mysqli_query($connection_server, "SELECT id, api_base_url FROM sas_apis WHERE vendor_id='".$get_logged_admin_details["id"]."' AND api_type='$current_api_type'");
+            // Only these gateways actually support live plan/price fetching for Exam Pins — every
+            // other configured API has no fetch endpoint, so it's deliberately excluded from this
+            // dropdown rather than listed and left to fail when selected.
             while($api_row = mysqli_fetch_assoc($check_fetcher_query)){
                 $url = $api_row['api_base_url'];
-                $is_fetcher_allowed = true;
                 if(stripos($url, 'vtpass.com') !== false) {
                     $installed_gateways['vtpass'] = 'VTPASS';
+                    $is_fetcher_allowed = true;
                 } elseif(stripos($url, 'clubkonnect.com') !== false || stripos($url, 'nellobytesystems.com') !== false) {
                     $installed_gateways['clubkonnect'] = 'CLUBKONNECT';
+                    $is_fetcher_allowed = true;
                 } elseif(stripos($url, 'naijaresultpins') !== false) {
                     $installed_gateways['naijaresultpins'] = 'NAIJARESULTPINS';
-                } else {
-                    $domain = parse_url($url, PHP_URL_HOST) ?? $url;
-                    $installed_gateways[$url] = strtoupper($domain);
+                    $is_fetcher_allowed = true;
+                } elseif(stripos($url, 'v6.datagifting.com.ng') !== false) {
+                    $installed_gateways[$url] = 'V6.DATAGIFTING.COM.NG';
+                    $is_fetcher_allowed = true;
                 }
             }
         ?>
@@ -540,6 +545,12 @@
 
             fetchedPlans = data.plans;
             tbody.innerHTML = '';
+
+            const existingNote = resultsDiv.querySelector('.fetch-note-alert');
+            if(existingNote) existingNote.remove();
+            if(data.note) {
+                resultsDiv.insertAdjacentHTML('afterbegin', `<div class="alert alert-warning small mb-2 fetch-note-alert">${data.note}</div>`);
+            }
 
             fetchedPlans.forEach((plan, index) => {
                 const providerPrice = parseFloat(plan.price);
