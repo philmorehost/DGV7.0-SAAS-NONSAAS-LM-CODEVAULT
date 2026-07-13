@@ -241,6 +241,17 @@ if ($http_code === 200 && !empty($response)) {
                         <!-- Alert Box for Error / Success feedback -->
                         <div id="update-alert" class="alert d-none rounded-3 shadow-sm border-0 p-4 mb-4" role="alert"></div>
 
+                        <!-- Backup Toggle -->
+                        <div class="d-flex align-items-center justify-content-between p-3 mb-4 rounded-3 bg-light border">
+                            <div class="me-3">
+                                <div class="fw-bold"><i class="bi bi-archive me-2 text-primary"></i>Create backup before updating</div>
+                                <div class="small text-muted">Snapshots your files &amp; database so a failed update can be automatically rolled back. <span class="fw-bold text-danger">Strongly recommended.</span></div>
+                            </div>
+                            <div class="form-check form-switch flex-shrink-0">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleBackup" style="width: 3em; height: 1.5em;" checked>
+                            </div>
+                        </div>
+
                         <!-- Trigger Button -->
                         <button id="btn-start-update" class="btn btn-update w-100 py-3">
                             <i class="bi bi-cloud-arrow-down-fill me-2"></i> Install Update Automatically
@@ -287,14 +298,24 @@ document.addEventListener('DOMContentLoaded', function() {
         const changelog = document.getElementById('changelog-container');
         const progressContainer = document.getElementById('progress-container');
         const alertBox = document.getElementById('update-alert');
-        
+        const backupToggle = document.getElementById('toggleBackup');
+        const backupEnabled = !backupToggle || backupToggle.checked;
+
+        if (!backupEnabled) {
+            const proceed = confirm(
+                'You have disabled backups. If this update fails, there is NO automatic rollback ' +
+                'and you may need to restore your site manually. Continue without a backup?'
+            );
+            if (!proceed) return;
+        }
+
         const expectedHash = "<?= htmlspecialchars($checksum) ?>";
 
         // Transition UI: Hide changelog, show stepper
         changelog.classList.add('d-none');
         progressContainer.classList.remove('d-none');
         alertBox.classList.add('d-none');
-        
+
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Installing Update...';
 
@@ -302,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
         function setStepStatus(stepNum, status) {
             const item = document.getElementById(`step-${stepNum}`);
             const icon = document.getElementById(`icon-step-${stepNum}`);
-            
+
             if (status === 'active') {
                 item.className = 'step-item active';
                 icon.className = 'bi bi-arrow-repeat spin-icon';
@@ -312,6 +333,12 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (status === 'error') {
                 item.className = 'step-item error';
                 icon.className = 'bi bi-x-circle-fill';
+            } else if (status === 'skipped') {
+                item.className = 'step-item';
+                item.style.opacity = '0.6';
+                icon.className = 'bi bi-dash-circle';
+                const label = item.querySelector('span');
+                if (label) label.textContent = 'Backup skipped (disabled before starting)';
             }
         }
 
@@ -331,20 +358,25 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             setStepStatus(1, 'completed');
 
-            // STEP 2: CREATE SNAPSHOT BACKUP
-            setStepStatus(2, 'active');
-            let backupResponse = await fetch('ajax_backup.php', { method: 'POST' });
-            let backupData = await backupResponse.json();
-            if (backupData.status !== 'success') {
-                throw new Error(backupData.message || 'Backup failed. Update aborted for safety.');
+            // STEP 2: CREATE SNAPSHOT BACKUP (skippable — see the toggle above the Install button)
+            let backupData = { backup_zip: null, backup_sql: null };
+            if (backupEnabled) {
+                setStepStatus(2, 'active');
+                let backupResponse = await fetch('ajax_backup.php', { method: 'POST' });
+                backupData = await backupResponse.json();
+                if (backupData.status !== 'success') {
+                    throw new Error(backupData.message || 'Backup failed. Update aborted for safety.');
+                }
+                setStepStatus(2, 'completed');
+            } else {
+                setStepStatus(2, 'skipped');
             }
-            setStepStatus(2, 'completed');
 
             // STEP 3: EXTRACT AND EXECUTE MIGRATIONS
             setStepStatus(3, 'active');
             let executeFormData = new FormData();
-            executeFormData.append('backup_zip', backupData.backup_zip);
-            executeFormData.append('backup_sql', backupData.backup_sql);
+            if (backupData.backup_zip) executeFormData.append('backup_zip', backupData.backup_zip);
+            if (backupData.backup_sql) executeFormData.append('backup_sql', backupData.backup_sql);
 
             let executeResponse = await fetch('execute_update.php', { method: 'POST', body: executeFormData });
             let executeData = await executeResponse.json();
