@@ -191,7 +191,7 @@ class GuestViewModel : ViewModel() {
     fun pollOrderStatus(reference: String) {
         _receiptState.value = ReceiptState.Polling
         viewModelScope.launch {
-            repeat(20) { attempt ->
+            repeat(20) { _ ->
                 when (val r = repo.getOrderStatus(reference)) {
                     is ApiResult.Success -> {
                         val order = r.data

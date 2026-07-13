@@ -51,7 +51,6 @@ import com.payhub.guest.util.ReceiptRenderer
 
 @Composable
 fun ReceiptScreen(reference: String, viewModel: GuestViewModel, onDone: () -> Unit) {
-    val context = LocalContext.current
     val receiptState by viewModel.receiptState.collectAsState()
 
     LaunchedEffect(reference) { viewModel.pollOrderStatus(reference) }
