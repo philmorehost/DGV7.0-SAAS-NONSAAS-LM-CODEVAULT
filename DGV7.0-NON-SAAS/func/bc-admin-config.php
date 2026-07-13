@@ -64,6 +64,27 @@ if ($connection_server) {
                     mysqli_query($connection_server, "UPDATE sas_vendors SET access_hash='$new_hash' WHERE id='".$get_logged_admin_details['id']."'");
                     $get_logged_admin_details['access_hash'] = $new_hash;
                 }
+
+                // Self-heal default marketplace listing: v6.datagifting.com.ng runs the DGV7.0-SAAS
+                // edition of this same platform, so it's a ready-made reseller API for every VTU
+                // service via the "localserver.php" gateway fallback (func/api-gateway/{type}-localserver.php),
+                // which talks to another DGV7 instance's own web/api/*.php endpoints. Seeded here
+                // (not only on MarketPlace.php) so it self-heals on EVERY admin page load for both
+                // brand-new and pre-existing installations, regardless of which page an admin visits
+                // first or when this code was deployed relative to their last login. Session-gated
+                // like the migrations check above so the 10 SELECT/INSERT checks below only run once
+                // per session, not on every single request.
+                if (!isset($_SESSION['default_marketplace_seeded_v1'])) {
+                    $default_marketplace_url = "v6.datagifting.com.ng";
+                    $default_marketplace_types = array("airtime", "shared-data", "sme-data", "cg-data", "dd-data", "cable", "electric", "exam", "betting", "bulk-sms");
+                    foreach ($default_marketplace_types as $default_api_type) {
+                        $check_default_api = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='" . $get_logged_admin_details['id'] . "' AND api_type='$default_api_type' AND api_base_url='$default_marketplace_url' LIMIT 1");
+                        if ($check_default_api && mysqli_num_rows($check_default_api) == 0) {
+                            mysqli_query($connection_server, "INSERT INTO sas_apis (vendor_id, api_type, api_base_url, api_key, status) VALUES ('" . $get_logged_admin_details['id'] . "', '$default_api_type', '$default_marketplace_url', '', '0')");
+                        }
+                    }
+                    $_SESSION['default_marketplace_seeded_v1'] = true;
+                }
                 if ($get_logged_admin_details["status"] == 1 && $get_logged_admin_details["is_blocked"] == 0) {
                     if (in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/bc-admin/Login.php", "/bc-admin/PasswordRecovery.php", "/bc-admin/ajax-unblock-request.php", "/web/LockoutResolution.php"))) {
                         header("Location: /bc-admin/Dashboard.php");

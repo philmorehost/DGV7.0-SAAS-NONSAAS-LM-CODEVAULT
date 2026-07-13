@@ -4,20 +4,6 @@ include("../func/bc-admin-config.php");
 $vid = $get_logged_admin_details['id'];
 $esc_vid = (int)$vid;
 
-// Default marketplace listing: v6.datagifting.com.ng runs the DGV7.0-SAAS edition of this same
-// platform, so it's a ready-made reseller API for every VTU service via the "localserver.php"
-// gateway fallback (see func/api-gateway/{type}-localserver.php), which talks to another DGV7
-// instance's own web/api/*.php endpoints. Seeded per-vendor, per-type, insert-if-missing — inactive
-// and keyless by default until the vendor signs up on v6.datagifting.com.ng and adds their own key.
-$default_marketplace_url = "v6.datagifting.com.ng";
-$default_marketplace_types = array("airtime", "shared-data", "sme-data", "cg-data", "dd-data", "cable", "electric", "exam", "betting", "bulk-sms");
-foreach ($default_marketplace_types as $default_api_type) {
-    $check_default_api = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='$esc_vid' AND api_type='$default_api_type' AND api_base_url='$default_marketplace_url' LIMIT 1");
-    if (mysqli_num_rows($check_default_api) == 0) {
-        mysqli_query($connection_server, "INSERT INTO sas_apis (vendor_id, api_type, api_base_url, api_key, status) VALUES ('$esc_vid', '$default_api_type', '$default_marketplace_url', '', '0')");
-    }
-}
-
 // Handle Update API Gateway
 if (isset($_POST['update-api'])) {
     bc_validate_csrf();
