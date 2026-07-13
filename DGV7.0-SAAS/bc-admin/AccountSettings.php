@@ -1,6 +1,27 @@
 <?php session_start();
 include ("../func/bc-admin-config.php");
 
+// AJAX: quick PIN-only save for the forced-setup modal (func/bc-admin-header.php).
+// Deliberately touches ONLY security_pin — the full "update-security-settings"
+// handler further down also writes SMTP/2FA/SSO fields together in one UPDATE,
+// which would blank those out if fired from a PIN-only modal submission.
+if (isset($_POST['action']) && $_POST['action'] === 'quick_set_pin') {
+    header('Content-Type: application/json');
+    $new_pin = trim($_POST['admin_pin'] ?? '');
+    $con_pin = trim($_POST['admin_pin_con'] ?? '');
+    if (!preg_match('/^\d{4}$/', $new_pin)) {
+        echo json_encode(['ok' => false, 'msg' => 'PIN must be exactly 4 digits.']);
+        exit();
+    }
+    if ($new_pin !== $con_pin) {
+        echo json_encode(['ok' => false, 'msg' => 'PIN and Confirm PIN do not match.']);
+        exit();
+    }
+    $hashed_pin_esc = mysqli_real_escape_string($connection_server, password_hash($new_pin, PASSWORD_DEFAULT));
+    mysqli_query($connection_server, "UPDATE sas_vendors SET security_pin='$hashed_pin_esc' WHERE id='" . $get_logged_admin_details["id"] . "'");
+    echo json_encode(['ok' => true, 'msg' => 'Security PIN set successfully!']);
+    exit();
+}
 
 if (isset($_POST["change-logo"])) {
     $logo_name = $_FILES["logo"]["name"];
@@ -46,6 +67,7 @@ if (isset($_POST["change-logo"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["change-pwa-icon"])) {
@@ -68,6 +90,7 @@ if (isset($_POST["change-pwa-icon"])) {
     }
     $_SESSION["product_purchase_response"] = $json_response_array["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["change-pwa-splash"])) {
@@ -90,6 +113,7 @@ if (isset($_POST["change-pwa-splash"])) {
     }
     $_SESSION["product_purchase_response"] = $json_response_array["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 
@@ -131,6 +155,7 @@ if (isset($_POST["update-theme"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-profile"])) {
@@ -192,6 +217,7 @@ if (isset($_POST["update-profile"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-verification"])) {
@@ -372,6 +398,7 @@ if (isset($_POST["change-password"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-bank-details"])) {
@@ -462,6 +489,7 @@ if (isset($_POST["update-bank-details"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 
@@ -531,6 +559,7 @@ if (isset($_POST["refresh-purchase-id"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["whitelist-purchase-id"])) {
@@ -615,6 +644,7 @@ if (isset($_POST["whitelist-purchase-id"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-user-minimum-funding-details"])) {
@@ -665,6 +695,7 @@ if (isset($_POST["update-user-minimum-funding-details"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-payment-order-details"])) {
@@ -746,6 +777,7 @@ if (isset($_POST["update-payment-order-details"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-withdrawal-settings"])) {
@@ -859,6 +891,7 @@ if (isset($_POST["update-upgrade-details"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-referral-details"])) {
@@ -918,6 +951,7 @@ if (isset($_POST["update-referral-details"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 if (isset($_POST["update-site-details"])) {
@@ -1087,9 +1121,9 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
 <!DOCTYPE html>
 
 <head>
-    <title>Account Settings | <?php echo $get_all_super_admin_site_details["site_title"]; ?></title>
+    <title>Account Settings | <?php echo $get_all_super_admin_site_details["site_title"] ?? ''; ?></title>
     <meta charset="UTF-8" />
-    <meta name="description" content="<?php echo substr($get_all_super_admin_site_details["site_desc"], 0, 160); ?>" />
+    <meta name="description" content="<?php echo substr($get_all_super_admin_site_details["site_desc"] ?? '', 0, 160); ?>" />
     <meta http-equiv="Content-Type" content="text/html; " />
     <meta name="theme-color" content="black" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1316,12 +1350,8 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                             <label class="form-label small fw-bold text-muted">INSTAGRAM PROFILE URL</label>
                                             <input name="social-instagram" type="url" value="<?php echo htmlspecialchars($get_site_details['social_instagram'] ?? ''); ?>" class="form-control rounded-3" placeholder="https://instagram.com/MyBrand" />
                                         </div>
-                                        <div class="mb-3">
-                                            <label class="form-label small fw-bold text-muted">WHATSAPP CONTACT NUMBER</label>
-                                            <input name="social-whatsapp" type="text" value="<?php echo htmlspecialchars($get_site_details['social_whatsapp'] ?? ''); ?>" class="form-control rounded-3" placeholder="+2348000000000" />
-                                        </div>
                                     </div>
-                                    
+
                                     <!-- 3. Analytics & Pixels -->
                                     <div class="tab-pane fade" id="seo-analytics" role="tabpanel">
                                         <div class="mb-3">
@@ -1801,6 +1831,15 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                     <input type="text" value="<?php echo $web_http_host . "/automated-cron-requery.php"; ?>" class="form-control bg-light" readonly />
                                     <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
                                 </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Bulk Airtime/Data Queue Processor Cron Path</label>
+                                <div class="input-group">
+                                    <input type="text" value="wget -qO- <?php echo $web_http_host; ?>/cron/process_bulk_queue.php" class="form-control bg-light" readonly />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="small text-muted mt-1">Run this every 1 minute so bulk airtime/data batches keep processing in the background even if the customer closes their browser or their connection drops mid-submission.</div>
                             </div>
 
                             <div class="mb-3">

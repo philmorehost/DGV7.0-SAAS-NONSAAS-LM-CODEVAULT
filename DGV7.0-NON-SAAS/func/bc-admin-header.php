@@ -238,6 +238,7 @@ function hex2rgb($hex) {
       </li><!-- End SiteMap Nav -->
 
       <!-- AI Business Suite Nav Item -->
+      <?php if(isServiceEnabled('ai_suite')): ?>
       <?php if (isset($get_logged_admin_details) && !empty($get_logged_admin_details['ai_status'])): ?>
       <li class="nav-item">
         <a class="nav-link <?php echo in_array($current_page, ['AISettings.php','AIMarketing.php']) ? '' : 'collapsed'; ?>"
@@ -262,20 +263,28 @@ function hex2rgb($hex) {
       </li>
       <?php else: ?>
       <li class="nav-item">
-        <a class="nav-link collapsed" href="<?php echo $web_http_host; ?>/bc-admin/AISettings.php" title="Enable AI Features">
+        <a class="nav-link <?php echo in_array($current_page, ['AISettings.php','AIMarketing.php']) ? '' : 'collapsed'; ?>"
+           data-bs-target="#ai-suite-nav-off" data-bs-toggle="collapse" href="#">
           <i class="bi bi-cpu"></i>
           <span>AI Business Suite</span>
           <span class="badge bg-secondary ms-auto rounded-pill" style="font-size:.6rem;">OFF</span>
+          <i class="bi bi-chevron-down ms-1 small"></i>
         </a>
+        <ul id="ai-suite-nav-off" class="nav-content collapse <?php echo in_array($current_page, ['AISettings.php','AIMarketing.php']) ? 'show' : ''; ?>">
+          <li>
+            <a href="<?php echo $web_http_host; ?>/bc-admin/AISettings.php" class="<?php echo $current_page == 'AISettings.php' ? 'active' : ''; ?>">
+              <i class="bi bi-circle"></i><span>AI Settings & Tokens</span>
+            </a>
+          </li>
+          <li>
+            <a href="<?php echo $web_http_host; ?>/bc-admin/AIMarketing.php" class="<?php echo $current_page == 'AIMarketing.php' ? 'active' : ''; ?>">
+              <i class="bi bi-circle"></i><span>AI Marketing Studio</span>
+            </a>
+          </li>
+        </ul>
       </li>
       <?php endif; ?>
-
-      <li class="nav-item">
-        <a class="nav-link <?php echo ($current_page == 'WhatsAppManager.php') ? 'active_item' : 'collapsed'; ?>" href="<?php echo $web_http_host; ?>/bc-admin/WhatsAppManager.php">
-          <i class="bi bi-whatsapp"></i>
-          <span class="d-flex align-items-center">WhatsApp Manager <span class="badge-new ms-2">NEW</span></span>
-        </a>
-      </li>
+      <?php endif; ?>
 
       <li class="nav-heading">Business Management</li>
 
@@ -344,7 +353,7 @@ function hex2rgb($hex) {
         </li>
       
       <li class="nav-item">
-        <?php $sys_func_active = in_array($current_page, ['AccountSettings.php', 'UpdateSystem.php', 'StatusMessage.php', 'EmailTemplates.php', 'SendMail.php', 'IDBlockingSystem.php', 'SalesCalculator.php', 'SenderIDRequests.php', 'PaymentGateway.php', 'LoyaltySettings.php', 'CoinConversions.php', 'FloatServiceIcons.php', 'BruteForceSecurity.php', 'AppUpdateBroadcast.php']); ?>
+        <?php $sys_func_active = in_array($current_page, ['AccountSettings.php', 'UpdateSystem.php', 'StatusMessage.php', 'EmailTemplates.php', 'SendMail.php', 'IDBlockingSystem.php', 'TransactionLimits.php', 'SalesCalculator.php', 'SenderIDRequests.php', 'PaymentGateway.php', 'LoyaltySettings.php', 'CoinConversions.php', 'FloatServiceIcons.php', 'BruteForceSecurity.php', 'AppUpdateBroadcast.php']); ?>
         <a class="nav-link <?php echo $sys_func_active ? 'active_item' : 'collapsed'; ?>" data-bs-target="#system-func-nav" data-bs-toggle="collapse" href="#">
           <i class="bi bi-menu-button-wide"></i><span>System Function</span><i class="bi bi-chevron-down ms-auto"></i>
         </a>
@@ -384,6 +393,11 @@ function hex2rgb($hex) {
           <li>
             <a href="<?php echo $web_http_host; ?>/bc-admin/IDBlockingSystem.php" class="<?php echo ($current_page == 'IDBlockingSystem.php') ? 'active' : ''; ?>">
               <i class="bi bi-circle"></i><span>ID Blocking System</span>
+            </a>
+          </li>
+          <li>
+            <a href="<?php echo $web_http_host; ?>/bc-admin/TransactionLimits.php" class="<?php echo ($current_page == 'TransactionLimits.php') ? 'active' : ''; ?>">
+              <i class="bi bi-circle"></i><span>Transaction Limits</span>
             </a>
           </li>
           <li>
@@ -624,6 +638,86 @@ if ($_ai_vendor_enabled):
   window.__ai_tokens      = <?php echo $ai_token_bal; ?>;
 </script>
 <script src="../jsfile/ai-assistant.js" defer></script>
+<?php endif; ?>
+
+<?php if (!empty($GLOBALS['bc_admin_needs_pin'])): ?>
+<!-- Forced Security PIN setup — required to self-unblock via the anti-brute-force
+     lockout flow (web/LockoutResolution.php). Modal, not a redirect, so it works
+     on whatever page the admin is already on. -->
+<div class="modal fade" id="forcePinModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4 border-0 shadow-lg">
+      <div class="modal-body p-4">
+        <div class="text-center mb-3">
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger bg-opacity-10 text-danger mb-2" style="width:56px;height:56px;">
+            <i class="bi bi-shield-lock-fill fs-3"></i>
+          </div>
+          <h5 class="fw-bold mb-1">Set Your Security PIN</h5>
+          <p class="small text-muted mb-0">You'll need this 4-digit PIN to unblock your own account if our anti-brute-force system ever locks you out. It only takes a second.</p>
+        </div>
+        <div id="forcePinError" class="alert alert-danger py-2 small rounded-3" style="display:none;"></div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-muted">NEW 4-DIGIT PIN</label>
+          <input type="password" id="forcePinInput" class="form-control form-control-lg text-center fw-bold" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="****" style="letter-spacing:10px;">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-muted">CONFIRM PIN</label>
+          <input type="password" id="forcePinConfirm" class="form-control form-control-lg text-center fw-bold" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" placeholder="****" style="letter-spacing:10px;">
+        </div>
+        <button type="button" id="forcePinSubmit" class="btn btn-primary w-100 rounded-pill fw-bold py-2">Save PIN &amp; Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var modalEl = document.getElementById('forcePinModal');
+    if (!modalEl || typeof bootstrap === 'undefined') return;
+    var modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    var errBox = document.getElementById('forcePinError');
+    var submitBtn = document.getElementById('forcePinSubmit');
+
+    function showErr(msg) {
+        errBox.textContent = msg;
+        errBox.style.display = 'block';
+    }
+
+    submitBtn.addEventListener('click', function () {
+        var pin = document.getElementById('forcePinInput').value.trim();
+        var con = document.getElementById('forcePinConfirm').value.trim();
+        errBox.style.display = 'none';
+
+        if (!/^\d{4}$/.test(pin)) { showErr('PIN must be exactly 4 digits.'); return; }
+        if (pin !== con) { showErr('PIN and Confirm PIN do not match.'); return; }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
+
+        fetch('AccountSettings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'quick_set_pin', admin_pin: pin, admin_pin_con: con })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.ok) {
+                modal.hide();
+            } else {
+                showErr(data.msg || 'Could not save PIN. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Save PIN & Continue';
+            }
+        })
+        .catch(function () {
+            showErr('Network error — please try again.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save PIN & Continue';
+        });
+    });
+});
+</script>
 <?php endif; ?>
 
    <main id="main" class="main">

@@ -55,7 +55,7 @@ if ($connection_server) {
                 if (mysqli_num_rows($select_vendor_from_table) == 1) {
                     $_SESSION["admin_session"] = $vendors_auth_email;
                     $_SESSION["spadmin_vendor_auth"] = true;
-                    $getRedirectUrl = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["redirectAdminTo"])));
+                    $getRedirectUrl = isset($_GET["redirectAdminTo"]) ? mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["redirectAdminTo"]))) : "";
                     if (!empty($getRedirectUrl)) {
                         header("Location: /bc-admin/" . $getRedirectUrl);
                     } else {
@@ -112,16 +112,14 @@ if ($connection_server) {
                                 }
                             }
 
-                            // Global Security PIN Enforcement
-                            $global_pin_q = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='force_vendor_pin'");
-                            $global_force_pin = mysqli_fetch_assoc($global_pin_q)['option_value'] ?? '0';
-                            if ($global_force_pin == '1' && empty($get_logged_admin_details["security_pin"]) && !isset($_SESSION["spadmin_vendor_auth"])) {
-                                if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/bc-admin/AccountSettings.php", "/admin-logout.php", "/bc-admin/ajax-unblock-request.php", "/web/LockoutResolution.php"))) {
-                                    $_SESSION["product_purchase_response"] = "SECURITY ALERT: A Security PIN is now required for all vendors. Please set yours up immediately to continue.";
-                                    header("Location: /bc-admin/AccountSettings.php");
-                                    exit();
-                                }
-                            }
+                            // Security PIN is required to self-unblock via the anti-brute-force lockout
+                            // flow (web/LockoutResolution.php) — mandatory for every vendor admin
+                            // regardless of the force_vendor_pin toggle, since an admin with no PIN
+                            // set has no way to prove identity and unblock themselves if the
+                            // brute-force system locks them out. Flag-only (no redirect): a blocking
+                            // modal (func/bc-admin-header.php) prompts for it on whatever page the
+                            // admin is already on. Exempt super-admin-as-vendor impersonation sessions.
+                            $GLOBALS['bc_admin_needs_pin'] = empty($get_logged_admin_details["security_pin"]) && !isset($_SESSION["spadmin_vendor_auth"]);
 
                             $proceed_vendor_kyc_check = false;
 

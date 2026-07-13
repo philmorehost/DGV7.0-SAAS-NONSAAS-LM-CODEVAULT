@@ -71,15 +71,15 @@ if ($connection_server) {
                     } else {
                         // STANDALONE: Expiry check removed
 
-                        // Global Security PIN Enforcement
-                        $global_force_pin = getSuperAdminOption('force_vendor_pin', '0');
-                        if ($global_force_pin == '1' && empty($get_logged_admin_details["security_pin"])) {
-                            if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/bc-admin/AccountSettings.php", "/admin-logout.php", "/bc-admin/ajax-unblock-request.php", "/web/LockoutResolution.php"))) {
-                                $_SESSION["product_purchase_response"] = "SECURITY ALERT: A Security PIN is now required for all vendors. Please set yours up immediately to continue.";
-                                header("Location: /bc-admin/AccountSettings.php");
-                                exit();
-                            }
-                        }
+                        // Security PIN is required to self-unblock via the anti-brute-force lockout
+                        // flow (web/LockoutResolution.php) — mandatory for every admin regardless of
+                        // the force_vendor_pin toggle, since an admin with no PIN set has no way to
+                        // prove identity and unblock themselves if the brute-force system locks them
+                        // out. Flag-only (no redirect): a blocking modal (func/bc-admin-header.php)
+                        // prompts for it on whatever page the admin is already on, instead of bouncing
+                        // them to a separate page (the previous redirect-based approach could loop
+                        // under some server configurations).
+                        $GLOBALS['bc_admin_needs_pin'] = empty($get_logged_admin_details["security_pin"]);
 
                         // STANDALONE: Billing check removed — always proceed
                         $proceed_vendor_kyc_check = true;
