@@ -135,6 +135,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 	
 
@@ -216,17 +217,18 @@
 			$payvessel_create_reserve_account_array = array_merge($payvessel_create_reserve_account_array, $bvn_nin_payvessel_account_creation);
 			$get_payvessel_reserve_account = json_decode(makePayvesselRequest("post", $get_payvessel_access_token["token"], "api/external/request/customerReservedAccount/", $payvessel_create_reserve_account_array), true);
 			
-			if($get_payvessel_reserve_account["status"] == "success"){
+			if(isset($get_payvessel_reserve_account["status"]) && $get_payvessel_reserve_account["status"] == "success"){
 				$payvessel_reserve_account_response = json_decode($get_payvessel_reserve_account["json_result"], true);
 				
-				foreach($payvessel_reserve_account_response["banks"] as $payvessel_accounts_json){
-						
-					addVendorVirtualBank($payvessel_accounts_json["trackingReference"], $payvessel_accounts_json["bankCode"], $payvessel_accounts_json["bankName"], $payvessel_accounts_json["accountNumber"], $payvessel_accounts_json["accountName"], $get_logged_admin_details["id"], 'payvessel');
+				if (isset($payvessel_reserve_account_response["banks"])) {
+					foreach($payvessel_reserve_account_response["banks"] as $payvessel_accounts_json){
+						addVendorVirtualBank($payvessel_accounts_json["trackingReference"], $payvessel_accounts_json["bankCode"], $payvessel_accounts_json["bankName"], $payvessel_accounts_json["accountNumber"], $payvessel_accounts_json["accountName"], $get_logged_admin_details["id"], 'payvessel');
+					}
 				}
 				//$virtual_account_vaccount_err .= '<span class="color-4">Virtual Account Created Successfully</span>';
 			}
 			
-			if($payvessel_reserve_account_response["status"] == "failed"){
+			if(isset($get_payvessel_reserve_account["status"]) && $get_payvessel_reserve_account["status"] == "failed"){
 				//$virtual_account_vaccount_err .= '<span class="color-4">'.$get_payvessel_access_token["message"].'</span>';
 			}
 		}else{
@@ -280,9 +282,9 @@
 ?>
 <!DOCTYPE html>
 <head>
-    <title>Admin Dashboard | <?php echo $get_all_super_admin_site_details["site_title"]; ?></title>
+    <title>Admin Dashboard | <?php echo $get_all_super_admin_site_details["site_title"] ?? 'Vendor Dashboard'; ?></title>
     <meta charset="UTF-8" />
-    <meta name="description" content="<?php echo substr($get_all_super_admin_site_details["site_desc"], 0, 160); ?>" />
+    <meta name="description" content="<?php echo substr($get_all_super_admin_site_details["site_desc"] ?? '', 0, 160); ?>" />
     <meta http-equiv="Content-Type" content="text/html; " />
     <meta name="theme-color" content="black" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -339,6 +341,37 @@
         .balance-hero { padding: 1.25rem; }
         .metric-value { font-size: 1rem; }
     }
+
+    .quick-link-tile {
+        position: relative;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 0.35rem;
+        text-decoration: none;
+        background: #f8f9fc;
+        border: 1px solid #eef0f5;
+        border-radius: 1rem;
+        padding: 0.9rem 0.5rem;
+        height: 100%;
+        min-height: 84px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .quick-link-tile i { font-size: 1.4rem; }
+    .quick-link-tile span { font-size: 0.7rem; font-weight: 700; color: #334155; text-align: center; }
+    .quick-link-tile:hover { transform: translateY(-3px); box-shadow: 0 10px 20px -8px rgba(0,0,0,0.15); }
+    .quick-link-badge {
+        position: absolute; top: 6px; right: 10px;
+        background: #dc3545; color: #fff; font-size: 0.62rem; font-weight: 800;
+        border-radius: 999px; min-width: 18px; height: 18px;
+        display: flex; align-items: center; justify-content: center; padding: 0 4px;
+    }
+    .ql-primary i { color: #0d6efd; } .ql-primary:hover { background: #eaf2ff; border-color: #b6d4fe; }
+    .ql-success i { color: #198754; } .ql-success:hover { background: #e9f7ef; border-color: #a3d9b8; }
+    .ql-info    i { color: #0dcaf0; } .ql-info:hover    { background: #e6f9fd; border-color: #9eebfa; }
+    .ql-purple  i { color: #6f42c1; } .ql-purple:hover  { background: #f1eafb; border-color: #d2b8f0; }
+    .ql-warning i { color: #ffc107; } .ql-warning:hover { background: #fff9e6; border-color: #ffe69c; }
+    .ql-danger  i { color: #dc3545; } .ql-danger:hover  { background: #fdecee; border-color: #f3b8c0; }
+    .ql-teal    i { color: #20c997; } .ql-teal:hover    { background: #e7f9f3; border-color: #a8e6cf; }
+    .ql-orange  i { color: #fd7e14; } .ql-orange:hover  { background: #fff1e6; border-color: #ffcda3; }
   </style>
 
 </head>
@@ -545,6 +578,7 @@
           </div>
 
           <!-- Business Growth Card -->
+          <?php if(isServiceEnabled('ai_suite')): ?>
           <div class="col-12 col-lg-4">
             <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 h-100" style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);">
               <div class="card-header bg-transparent py-3 border-0 text-center">
@@ -562,50 +596,72 @@
                     </div>
                 </a>
 
-                <a href="WhatsAppManager.php" class="text-decoration-none p-3 rounded-4 bg-white shadow-sm d-flex align-items-center transition-all" style="border: 1px solid rgba(0,0,0,0.05); transition: transform 0.2s;">
-                    <div class="bg-success bg-opacity-10 text-success p-3 rounded-circle me-3">
-                        <i class="bi bi-whatsapp fs-4"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0 fw-bold text-dark d-flex align-items-center">WhatsApp Manager <span class="badge bg-danger rounded-pill ms-2" style="font-size: 0.6rem; animation: pulse-new 2s infinite;">NEW</span></h6>
-                        <span class="small text-muted" style="font-size: 0.75rem;">Broadcast to your users</span>
-                    </div>
-                </a>
-
               </div>
             </div>
           </div>
+          <?php endif; ?>
 
           <!-- Quick Links Card -->
           <div class="col-12 col-lg-4">
+            <?php
+                $ql_vid = (int)$get_logged_admin_details["id"];
+                $ql_pending_orders = 0;
+                $ql_pending_q = mysqli_query($connection_server, "SELECT COUNT(*) as c FROM sas_submitted_payments WHERE vendor_id='$ql_vid' && status='2'");
+                if ($ql_pending_q) $ql_pending_orders = (int)(mysqli_fetch_assoc($ql_pending_q)['c'] ?? 0);
+            ?>
             <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 h-100">
               <div class="card-header bg-white py-3 border-0">
                   <h5 class="card-title mb-0 text-center"><i class="bi bi-grid-fill me-2 text-primary"></i>Quick Links</h5>
               </div>
               <div class="card-body p-4">
-                <div class="row g-3">
+                <div class="row g-2">
                   <div class="col-6">
-                    <a href="PaymentOrders.php" class="d-flex flex-column align-items-center text-decoration-none p-2 rounded-3 bg-light border transition-all h-100 justify-content-center">
-                      <i class="bi bi-card-checklist fs-3 text-primary mb-1"></i>
-                      <span class="small fw-bold text-dark text-center" style="font-size: 0.7rem;">Orders</span>
+                    <a href="PaymentOrders.php" class="quick-link-tile ql-primary">
+                      <?php if ($ql_pending_orders > 0): ?><span class="quick-link-badge"><?php echo $ql_pending_orders > 99 ? '99+' : $ql_pending_orders; ?></span><?php endif; ?>
+                      <i class="bi bi-card-checklist"></i>
+                      <span>Orders</span>
                     </a>
                   </div>
                   <div class="col-6">
-                    <a href="ShareFund.php" class="d-flex flex-column align-items-center text-decoration-none p-2 rounded-3 bg-light border transition-all h-100 justify-content-center">
-                      <i class="bi bi-send fs-3 text-success mb-1"></i>
-                      <span class="small fw-bold text-dark text-center" style="font-size: 0.7rem;">Transfer</span>
+                    <a href="ShareFund.php" class="quick-link-tile ql-success">
+                      <i class="bi bi-send"></i>
+                      <span>Transfer</span>
                     </a>
                   </div>
                   <div class="col-6">
-                    <a href="CoinConversions.php" class="d-flex flex-column align-items-center text-decoration-none p-2 rounded-3 bg-light border transition-all h-100 justify-content-center">
-                      <i class="bi bi-coin fs-3 text-warning mb-1"></i>
-                      <span class="small fw-bold text-dark text-center" style="font-size: 0.7rem;">Coins</span>
+                    <a href="Transactions.php" class="quick-link-tile ql-info">
+                      <i class="bi bi-receipt"></i>
+                      <span>Transactions</span>
                     </a>
                   </div>
                   <div class="col-6">
-                    <a href="BruteForceSecurity.php" class="d-flex flex-column align-items-center text-decoration-none p-2 rounded-3 bg-light border transition-all h-100 justify-content-center">
-                      <i class="bi bi-shield-lock fs-3 text-danger mb-1"></i>
-                      <span class="small fw-bold text-dark text-center" style="font-size: 0.7rem;">Security</span>
+                    <a href="Users.php" class="quick-link-tile ql-purple">
+                      <i class="bi bi-people"></i>
+                      <span>Users</span>
+                    </a>
+                  </div>
+                  <div class="col-6">
+                    <a href="CoinConversions.php" class="quick-link-tile ql-warning">
+                      <i class="bi bi-coin"></i>
+                      <span>Coins</span>
+                    </a>
+                  </div>
+                  <div class="col-6">
+                    <a href="BruteForceSecurity.php" class="quick-link-tile ql-danger">
+                      <i class="bi bi-shield-lock"></i>
+                      <span>Security</span>
+                    </a>
+                  </div>
+                  <div class="col-6">
+                    <a href="PaymentGateway.php" class="quick-link-tile ql-teal">
+                      <i class="bi bi-credit-card"></i>
+                      <span>Gateways</span>
+                    </a>
+                  </div>
+                  <div class="col-6">
+                    <a href="ServiceControl.php" class="quick-link-tile ql-orange">
+                      <i class="bi bi-toggles"></i>
+                      <span>Services</span>
                     </a>
                   </div>
                 </div>
@@ -772,7 +828,7 @@
                 'Biometric Security: Secure transactions with Fingerprint and Face Unlock technology.',
                 'Dynamic Branding: Automatic sync with your dashboard logo and color scheme.'
             ],
-            'functions' => 'Functionally, the APK acts as a direct wrapper for your VTU services but enhanced with native capabilities. It manages secure session tokens, handles complex payment redirects internally, and provides high-fidelity receipt generation for sharing via WhatsApp and other social channels.'
+            'functions' => 'Functionally, the APK acts as a direct wrapper for your VTU services but enhanced with native capabilities. It manages secure session tokens, handles complex payment redirects internally, and provides high-fidelity receipt generation for sharing across social channels.'
         ],
         'ios' => [
             'title' => 'iOS App Development',
