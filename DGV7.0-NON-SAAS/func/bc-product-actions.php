@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . "/bc-gateway-plan-parser.php";
+
 function handle_product_actions($connection_server, $get_logged_admin_details) {
     if (isset($_POST["enable-product"]) || isset($_POST["disable-product"]) || isset($_POST["delete-product"])) {
         $product_name = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["product-name"]))));
@@ -106,6 +108,11 @@ function install_product($connection_server, $get_logged_admin_details, $product
     } else {
         $select_api_lists = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && id='$api_id'");
         if (mysqli_num_rows($select_api_lists) == 1) {
+            $new_api_detail = mysqli_fetch_array($select_api_lists);
+            $new_api_base_url = $new_api_detail["api_base_url"];
+            // Resolving the real gateway file is a local file read (no network I/O), so it's safe
+            // to do synchronously here to auto-populate genuinely correct codes on install/switch.
+            $gateway_file_for_new_api = bc_gateway_resolve_file($product_type, $new_api_base_url);
 
             foreach ($product_names_array as $product_name) {
                 $product_name = trim($product_name);
@@ -114,26 +121,58 @@ function install_product($connection_server, $get_logged_admin_details, $product
                 }
 
                 $select_status_lists = mysqli_query($connection_server, "SELECT * FROM $status_table_name WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && product_name='$product_name'");
+                $old_api_id = null;
                 if (mysqli_num_rows($select_status_lists) == 0) {
                     mysqli_query($connection_server, "INSERT INTO $status_table_name (vendor_id, api_id, product_name, status) VALUES ('" . $get_logged_admin_details["id"] . "', '$api_id', '$product_name', '$item_status')");
                 } else {
+                    $existing_status_row = mysqli_fetch_array($select_status_lists);
+                    $old_api_id = $existing_status_row["api_id"];
                     mysqli_query($connection_server, "UPDATE $status_table_name SET api_id='$api_id', status='$item_status' WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && product_name='$product_name'");
                 }
+                $is_provider_switch = ($old_api_id !== null && (string)$old_api_id !== (string)$api_id);
+
+                // Prefer the real plan codes embedded in the newly assigned provider's own gateway
+                // file over the hand-maintained $product_varieties fallback, since the gateway file
+                // is what purchases actually check against and can't drift the way a catalog can.
+                $parsed_codes_for_new_provider = $gateway_file_for_new_api
+                    ? bc_gateway_parse_plan_codes($gateway_file_for_new_api, $product_name)
+                    : false;
 
                 if (!empty($extra_tables)) {
                     foreach ($extra_tables as $tables) {
                         if (is_array($tables)) {
                             foreach ($tables as $account_level_table_name) {
                                 $select_product_details = mysqli_query($connection_server, "SELECT * FROM sas_products WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && product_name='$product_name'");
+                                if (mysqli_num_rows($select_product_details) == 0) {
+                                    // Self-heal: a product row may not exist yet if ProductSetUp.php was never visited
+                                    // for this product before the admin tried to install/price it here.
+                                    mysqli_query($connection_server, "INSERT INTO sas_products (vendor_id, product_name, status) VALUES ('" . $get_logged_admin_details["id"] . "', '$product_name', '1')");
+                                    $select_product_details = mysqli_query($connection_server, "SELECT * FROM sas_products WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && product_name='$product_name'");
+                                }
                                 if (mysqli_num_rows($select_product_details) == 1) {
                                     $get_product_details = mysqli_fetch_array($select_product_details);
                                     $product_id = $get_product_details["id"];
-                                    $product_variety_list = isset($product_varieties[$product_name]) ? $product_varieties[$product_name] : array("1");
+
+                                    // On a genuine provider switch, disable (don't delete) pricing rows tied to the
+                                    // old provider so stale prices don't linger as if they still applied.
+                                    if ($is_provider_switch) {
+                                        mysqli_query($connection_server, "UPDATE $account_level_table_name SET status=0 WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && api_id='$old_api_id' && product_id='$product_id'");
+                                    }
+
+                                    if ($parsed_codes_for_new_provider !== false && !empty($parsed_codes_for_new_provider)) {
+                                        $product_variety_list = array_keys($parsed_codes_for_new_provider);
+                                    } else {
+                                        $product_variety_list = isset($product_varieties[$product_name]) ? $product_varieties[$product_name] : array("0");
+                                    }
                                     foreach ($product_variety_list as $product_val_1) {
                                         $product_val_1 = trim($product_val_1);
                                         $product_pricing_table = mysqli_query($connection_server, "SELECT * FROM $account_level_table_name WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && api_id='$api_id' && product_id='$product_id' && val_1='$product_val_1'");
                                         if (mysqli_num_rows($product_pricing_table) == 0) {
-                                            mysqli_query($connection_server, "INSERT INTO $account_level_table_name (vendor_id, api_id, product_id, val_1, val_2, val_3) VALUES ('" . $get_logged_admin_details["id"] . "', '$api_id', '$product_id', '$product_val_1', '0', '0')");
+                                            mysqli_query($connection_server, "INSERT INTO $account_level_table_name (vendor_id, api_id, product_id, val_1, val_2, val_3, status) VALUES ('" . $get_logged_admin_details["id"] . "', '$api_id', '$product_id', '$product_val_1', '0', '0', '1')");
+                                        } else {
+                                            // Row already exists for this exact api_id (e.g. re-enabling after a prior
+                                            // switch back) — make sure it's active again rather than left disabled.
+                                            mysqli_query($connection_server, "UPDATE $account_level_table_name SET status=1 WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && api_id='$api_id' && product_id='$product_id' && val_1='$product_val_1'");
                                         }
                                     }
                                 }

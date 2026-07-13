@@ -350,59 +350,88 @@ try {
             ];
         }
     } else {
-        // Check if it's a local vendor
-        $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
-        $check_local = mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$gateway_esc'");
-        if (mysqli_num_rows($check_local) > 0) {
-            $vendor_a_id = mysqli_fetch_assoc($check_local)['id'];
+        // For data/cable services, prefer the plan codes actually embedded in this vendor's
+        // own func/api-gateway/{type}-{provider}.php gateway file — that's the file real purchases
+        // check against, so it can never drift from what will actually work at checkout time
+        // (unlike a hand-maintained catalog). Checked before the reseller/"local vendor" fallback
+        // below, since that path is for a different case (reselling through another SAAS vendor
+        // on this platform, not a genuine third-party API provider like hdkdata/benzoni/etc.).
+        $gateway_file_type_prefix = ['sme' => 'sme-data', 'cg' => 'cg-data', 'dd' => 'dd-data', 'shared' => 'shared-data', 'cable' => 'cable'];
+        $used_gateway_file = false;
 
-            // Map type to api_type
-            $type_map = [
-                'dd' => 'dd-data',
-                'sme' => 'sme-data',
-                'shared' => 'shared-data',
-                'cg' => 'cg-data',
-                'airtime' => 'airtime',
-                'cable' => 'cable',
-                'electric' => 'electric',
-                'exam' => 'exam',
-                'betting' => 'betting'
-            ];
-            $api_type = $type_map[$type] ?? $type;
+        if (isset($gateway_file_type_prefix[$type])) {
+            require_once __DIR__ . "/../func/bc-gateway-plan-parser.php";
+            $gateway_file_path = bc_gateway_resolve_file($gateway_file_type_prefix[$type], $gateway);
+            $embedded_codes = $gateway_file_path ? bc_gateway_parse_plan_codes($gateway_file_path, $network) : false;
 
-            // Determine which value column to use
-            // val_2 is for price (Data/Cable), val_1 is for discount/commission (Airtime/Electric)
-            $val_col = in_array($api_type, ['airtime', 'electric', 'betting']) ? 'val_1' : 'val_2';
+            if ($embedded_codes !== false && !empty($embedded_codes)) {
+                foreach ($embedded_codes as $plan_code => $internal_id) {
+                    $plans[] = [
+                        'name' => strtoupper(str_replace(['_', '-'], ' ', $plan_code)),
+                        'code' => $plan_code,
+                        'price' => 0, // No public pricing source for these — admin sets prices manually
+                        'days' => extractDays($plan_code)
+                    ];
+                }
+                $used_gateway_file = true;
+            }
+        }
 
-            // Query plans from Vendor A
-            $prod_q = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='$vendor_a_id' AND product_name='$network' LIMIT 1");
-            if (mysqli_num_rows($prod_q) > 0) {
-                $vendor_a_product_id = mysqli_fetch_assoc($prod_q)['id'];
+        if (!$used_gateway_file) {
+            // Check if it's a local vendor
+            $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
+            $check_local = mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$gateway_esc'");
+            if (mysqli_num_rows($check_local) > 0) {
+                $vendor_a_id = mysqli_fetch_assoc($check_local)['id'];
 
-                // Fetch all matching API IDs for this vendor and type
-                $api_ids_q = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='$vendor_a_id' AND api_type='$api_type'");
-                $api_ids = [];
-                while ($arow = mysqli_fetch_assoc($api_ids_q)) $api_ids[] = $arow['id'];
+                // Map type to api_type
+                $type_map = [
+                    'dd' => 'dd-data',
+                    'sme' => 'sme-data',
+                    'shared' => 'shared-data',
+                    'cg' => 'cg-data',
+                    'airtime' => 'airtime',
+                    'cable' => 'cable',
+                    'electric' => 'electric',
+                    'exam' => 'exam',
+                    'betting' => 'betting'
+                ];
+                $api_type = $type_map[$type] ?? $type;
 
-                if (!empty($api_ids)) {
-                    $api_list = implode(',', $api_ids);
-                    $plans_q = mysqli_query($connection_server, "SELECT val_1, $val_col, val_3, val_4 FROM sas_api_parameter_values WHERE vendor_id='$vendor_a_id' AND product_id='$vendor_a_product_id' AND api_id IN ($api_list) AND status=1 GROUP BY val_1");
-                    while ($p = mysqli_fetch_assoc($plans_q)) {
-                        $plans[] = [
-                            'name' => !empty($p['val_4']) ? $p['val_4'] : strtoupper($network) . " " . str_replace(["_", "-"], " ", strtoupper($p['val_1'])),
-                            'code' => $p['val_1'],
-                            'price' => $p[$val_col],
-                            'days' => $p['val_3']
-                        ];
+                // Determine which value column to use
+                // val_2 is for price (Data/Cable), val_1 is for discount/commission (Airtime/Electric)
+                $val_col = in_array($api_type, ['airtime', 'electric', 'betting']) ? 'val_1' : 'val_2';
+
+                // Query plans from Vendor A
+                $prod_q = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='$vendor_a_id' AND product_name='$network' LIMIT 1");
+                if (mysqli_num_rows($prod_q) > 0) {
+                    $vendor_a_product_id = mysqli_fetch_assoc($prod_q)['id'];
+
+                    // Fetch all matching API IDs for this vendor and type
+                    $api_ids_q = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='$vendor_a_id' AND api_type='$api_type'");
+                    $api_ids = [];
+                    while ($arow = mysqli_fetch_assoc($api_ids_q)) $api_ids[] = $arow['id'];
+
+                    if (!empty($api_ids)) {
+                        $api_list = implode(',', $api_ids);
+                        $plans_q = mysqli_query($connection_server, "SELECT val_1, $val_col, val_3, val_4 FROM sas_api_parameter_values WHERE vendor_id='$vendor_a_id' AND product_id='$vendor_a_product_id' AND api_id IN ($api_list) AND status=1 GROUP BY val_1");
+                        while ($p = mysqli_fetch_assoc($plans_q)) {
+                            $plans[] = [
+                                'name' => !empty($p['val_4']) ? $p['val_4'] : strtoupper($network) . " " . str_replace(["_", "-"], " ", strtoupper($p['val_1'])),
+                                'code' => $p['val_1'],
+                                'price' => $p[$val_col],
+                                'days' => $p['val_3']
+                            ];
+                        }
+                    } else {
+                        throw new Error("No API configured for $api_type on $gateway");
                     }
                 } else {
-                    throw new Error("No API configured for $api_type on $gateway");
+                    throw new Error("Product $network not found on $gateway");
                 }
             } else {
-                throw new Error("Product $network not found on $gateway");
+                throw new Error("Unsupported gateway: " . $gateway);
             }
-        } else {
-            throw new Error("Unsupported gateway: " . $gateway);
         }
     }
 

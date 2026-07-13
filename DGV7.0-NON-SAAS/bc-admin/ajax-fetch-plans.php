@@ -350,42 +350,71 @@ try {
             ];
         }
     } else {
-        // DGV7 API Fetch Protocol
-        $vid = $get_logged_admin_details['id'] ?? 1;
-        $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
-        $api_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND api_base_url='$gateway_esc' LIMIT 1");
-        $api_key = '';
-        if($api_row = mysqli_fetch_assoc($api_q)){
-            $api_key = $api_row['api_key'];
-        }
+        // For data/cable services, prefer the plan codes actually embedded in this vendor's
+        // own func/api-gateway/{type}-{provider}.php gateway file — that's the file real purchases
+        // check against, so it can never drift from what will actually work at checkout time
+        // (unlike a hand-maintained catalog or a live-fetch endpoint most providers don't expose).
+        $gateway_file_type_prefix = ['sme' => 'sme-data', 'cg' => 'cg-data', 'dd' => 'dd-data', 'shared' => 'shared-data', 'cable' => 'cable'];
+        $used_gateway_file = false;
 
-        $fetch_base = strtolower(rtrim($gateway, '/'));
-        if (!preg_match('/^https?:\/\//i', $fetch_base)) {
-            $fetch_base = "https://" . $fetch_base;
-        }
-        $fetch_url = $fetch_base . "/api/app-backend/fetch-dgv7-plans.php?network=" . urlencode($network) . "&type=" . urlencode($type);
-        
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $fetch_url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $api_key", "Content-Type: application/json"]);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (isset($gateway_file_type_prefix[$type])) {
+            require_once __DIR__ . "/../func/bc-gateway-plan-parser.php";
+            $gateway_file_path = bc_gateway_resolve_file($gateway_file_type_prefix[$type], $gateway);
+            $embedded_codes = $gateway_file_path ? bc_gateway_parse_plan_codes($gateway_file_path, $network) : false;
 
-        if ($http_code === 200 && $response) {
-            $data = json_decode($response, true);
-            if ($data && isset($data['success']) && $data['success'] === true && isset($data['plans'])) {
-                $plans = $data['plans'];
-            } else {
-                throw new Error("Invalid format returned from DGV7 provider: " . ($data['message'] ?? 'Unknown error'));
+            if ($embedded_codes !== false && !empty($embedded_codes)) {
+                foreach ($embedded_codes as $plan_code => $internal_id) {
+                    $plans[] = [
+                        'name' => strtoupper(str_replace(['_', '-'], ' ', $plan_code)),
+                        'code' => $plan_code,
+                        'price' => 0, // No public pricing source for these — admin sets prices manually
+                        'days' => extractDays($plan_code)
+                    ];
+                }
+                $used_gateway_file = true;
             }
-        } else {
-            throw new Error("Failed to connect to DGV7 API at $gateway (HTTP $http_code). Ensure it is a valid DGV7 URL.");
+        }
+
+        if (!$used_gateway_file) {
+            // Fallback: DGV7 API Fetch Protocol (for reseller/white-label DGV7 instances acting as
+            // upstream providers — irrelevant for third-party gateways with no embedded plan array,
+            // which is the expected/common case for the providers above and will legitimately fail here).
+            $vid = $get_logged_admin_details['id'] ?? 1;
+            $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
+            $api_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND api_base_url='$gateway_esc' LIMIT 1");
+            $api_key = '';
+            if($api_row = mysqli_fetch_assoc($api_q)){
+                $api_key = $api_row['api_key'];
+            }
+
+            $fetch_base = strtolower(rtrim($gateway, '/'));
+            if (!preg_match('/^https?:\/\//i', $fetch_base)) {
+                $fetch_base = "https://" . $fetch_base;
+            }
+            $fetch_url = $fetch_base . "/api/app-backend/fetch-dgv7-plans.php?network=" . urlencode($network) . "&type=" . urlencode($type);
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $fetch_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $api_key", "Content-Type: application/json"]);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($http_code === 200 && $response) {
+                $data = json_decode($response, true);
+                if ($data && isset($data['success']) && $data['success'] === true && isset($data['plans'])) {
+                    $plans = $data['plans'];
+                } else {
+                    throw new Error("Invalid format returned from DGV7 provider: " . ($data['message'] ?? 'Unknown error'));
+                }
+            } else {
+                throw new Error("Failed to connect to DGV7 API at $gateway (HTTP $http_code). Ensure it is a valid DGV7 URL.");
+            }
         }
     }
 

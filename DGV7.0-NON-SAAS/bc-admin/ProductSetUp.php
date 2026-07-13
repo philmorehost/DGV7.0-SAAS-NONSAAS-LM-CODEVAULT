@@ -10,10 +10,12 @@ $electric_array = array("ekedc", "eedc", "ikedc", "jedc", "kedco", "ibedc", "phe
 $betting_array = array("msport", "naijabet", "nairabet", "bet9ja-agent", "betland", "betlion", "supabet", "bet9ja", "bangbet", "betking", "1xbet", "betway", "merrybet", "mlotto", "western-lotto", "hallabet", "green-lotto");
 $products_array = array_merge($crypto_array, $telecoms_array, $cable_array, $card_array, $exam_array, $electric_array, $betting_array);
 
-// Auto-Installation: Ensure all products are initialized to 'Enabled' for new vendors
-$check_any_product = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='" . $get_logged_admin_details["id"] . "' LIMIT 1");
-if (mysqli_num_rows($check_any_product) == 0) {
-    foreach ($products_array as $product_name) {
+// Auto-Installation: Ensure every known product is initialized to 'Enabled' for this vendor.
+// Checked per-product (not just "vendor has zero rows") so products added after the vendor's
+// first visit here, or installed piecemeal from individual service pages, still get seeded.
+foreach ($products_array as $product_name) {
+    $check_product = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='" . $get_logged_admin_details["id"] . "' && product_name='$product_name' LIMIT 1");
+    if (mysqli_num_rows($check_product) == 0) {
         mysqli_query($connection_server, "INSERT INTO sas_products (vendor_id, product_name, status) VALUES ('" . $get_logged_admin_details["id"] . "', '$product_name', '1')");
     }
 }
@@ -38,6 +40,7 @@ if (isset($_POST["install-all-product"])) {
     $json_response_array = array("desc" => "All Product Installed Successfully");
     $_SESSION["product_purchase_response"] = $json_response_array["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 
@@ -77,6 +80,7 @@ if (isset($_POST["update-product"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 ?>
 <!DOCTYPE html>

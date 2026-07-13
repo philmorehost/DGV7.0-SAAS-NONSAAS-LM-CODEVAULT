@@ -24,11 +24,11 @@ $service_type = $data['type'] ?? '';
 // Services where val_1 is the discount/commission % (no code-based plans)
 $is_percent_service = in_array($service_type, ['airtime', 'electric', 'betting']);
 
-// Get product_id for this network
+// Get product_id for this network (self-heal: create the row if ProductSetUp.php was never visited for it yet)
 $prod_q = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='$vid' AND product_name='$network' LIMIT 1");
 if(mysqli_num_rows($prod_q) == 0){
-    echo json_encode(["success" => false, "message" => "Product not found for $network"]);
-    exit();
+    mysqli_query($connection_server, "INSERT INTO sas_products (vendor_id, product_name, status) VALUES ('$vid', '$network', '1')");
+    $prod_q = mysqli_query($connection_server, "SELECT id FROM sas_products WHERE vendor_id='$vid' AND product_name='$network' LIMIT 1");
 }
 $product_id = mysqli_fetch_assoc($prod_q)['id'];
 
@@ -54,7 +54,7 @@ foreach($plans as $plan){
             // For percent-based services (airtime, electric, betting), val_1 stores the discount %.
             // There is one row per product; update val_1 directly.
             $check = mysqli_query($connection_server, "SELECT id FROM $table WHERE vendor_id='$vid' AND api_id='$api_id' AND product_id='$product_id' LIMIT 1");
-            if(mysqli_num_rows($check) == 0){
+            if($check && mysqli_num_rows($check) == 0){
                 mysqli_query($connection_server, "INSERT INTO $table (vendor_id, api_id, product_id, val_1, val_4, status) VALUES ('$vid', '$api_id', '$product_id', '$price', '$name', 1)");
             } else {
                 mysqli_query($connection_server, "UPDATE $table SET val_1='$price', val_4='$name' WHERE vendor_id='$vid' AND api_id='$api_id' AND product_id='$product_id'");
