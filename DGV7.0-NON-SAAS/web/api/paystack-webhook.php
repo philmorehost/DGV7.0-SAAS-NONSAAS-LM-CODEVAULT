@@ -37,13 +37,18 @@
         $GLOBALS['vendor_id'] = $vendor_id;
 		$paystack_keys = mysqli_fetch_assoc(mysqli_query($connection_server,"SELECT * FROM sas_payment_gateways WHERE vendor_id='$vendor_id' && gateway_name='paystack'"));
 
-        // Verify Signature
+        // Security Fix: reject on signature mismatch (previously this only logged and continued
+        // regardless — the API re-verify below was the sole real protection). Prefer the dedicated
+        // webhook_secret; fall back to secret_key (which is what Paystack's HMAC is documented to
+        // sign with) for installs that haven't set a separate webhook secret yet.
         $client_sig = $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] ?? '';
-        $secret = $paystack_keys['secret_key'] ?? '';
-        if (!empty($secret) && !empty($client_sig)) {
+        $secret = !empty($paystack_keys['webhook_secret']) ? $paystack_keys['webhook_secret'] : ($paystack_keys['secret_key'] ?? '');
+        if (!empty($secret)) {
             $computed_sig = hash_hmac('sha512', $body, $secret);
-            if ($client_sig !== $computed_sig) {
-                 error_log("Paystack Signature Mismatch for vendor $vendor_id. Ref: $transaction_ref");
+            if (empty($client_sig) || !hash_equals($computed_sig, $client_sig)) {
+                error_log("SECURITY: Paystack webhook signature mismatch/missing for vendor $vendor_id. Ref: $transaction_ref");
+                http_response_code(401);
+                die("Invalid signature");
             }
         }
 
@@ -51,8 +56,12 @@
 		$paystack_verify_transaction = json_decode(confirmPaymentDeposited("GET","https://api.paystack.co/transaction/verify/".urlencode($transaction_ref),["Authorization: Bearer ".$paystack_keys["secret_key"]],""),true);
 
 		if(($paystack_verify_transaction["data"]["status"] ?? "") == "success") {
-            $customer_email = $event_data["customer"]["email"];
-            $amount_paid = (float)($event_data["amount"] / 100);
+            // Security Fix: read the amount/email from Paystack's own verify response, not the
+            // raw webhook body — a forged callback citing a real successful reference could
+            // otherwise carry a manipulated amount/email even though the reference itself checks out.
+            $verified_data = $paystack_verify_transaction["data"];
+            $customer_email = $verified_data["customer"]["email"] ?? ($event_data["customer"]["email"] ?? "");
+            $amount_paid = (float)(($verified_data["amount"] ?? $event_data["amount"] ?? 0) / 100);
 
             // Implement Charges correctly
             $charge_percent = (float)($paystack_keys['percentage'] ?? 0);

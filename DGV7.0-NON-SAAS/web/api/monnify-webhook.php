@@ -45,14 +45,18 @@
         $GLOBALS['vendor_id'] = $vendor_id;
 		$monnify_keys = mysqli_fetch_assoc(mysqli_query($connection_server,"SELECT * FROM sas_payment_gateways WHERE vendor_id='$vendor_id' && gateway_name='monnify'"));
 
-        // Verify Signature
+        // Security Fix: reject on signature mismatch (previously this only logged and continued
+        // regardless — the API re-verify below was the sole real protection). Prefer the dedicated
+        // webhook_secret; fall back to secret_key (which is what Monnify's HMAC is documented to
+        // sign with) for installs that haven't set a separate webhook secret yet.
         $client_sig = $_SERVER['HTTP_MONNIFY_SIGNATURE'] ?? '';
-        $secret = $monnify_keys['secret_key'] ?? '';
-        if (!empty($secret) && !empty($client_sig)) {
+        $secret = !empty($monnify_keys['webhook_secret']) ? $monnify_keys['webhook_secret'] : ($monnify_keys['secret_key'] ?? '');
+        if (!empty($secret)) {
             $computed_sig = hash_hmac('sha512', $body, $secret);
-            if ($client_sig !== $computed_sig) {
-                error_log("Monnify Signature Mismatch for vendor $vendor_id. Ref: $transaction_ref");
-                // In production, you might want to exit here if validation is mandatory
+            if (empty($client_sig) || !hash_equals($computed_sig, $client_sig)) {
+                error_log("SECURITY: Monnify webhook signature mismatch/missing for vendor $vendor_id. Ref: $transaction_ref");
+                http_response_code(401);
+                die("Invalid signature");
             }
         }
 
@@ -77,7 +81,11 @@
             $pay_status = $monnify_verify_transaction["responseBody"]["paymentStatus"] ?? $event_data["paymentStatus"] ?? "";
 
             if($pay_status == "PAID") {
-                $amount_paid = (float)($event_data["amountPaid"] ?? $event_data["totalPayable"] ?? 0);
+                // Security Fix: prefer the amount from Monnify's own verify response over the raw
+                // webhook body — a forged callback citing a real PAID reference could otherwise
+                // carry a manipulated amount even though the reference itself checks out.
+                $verified_body = $monnify_verify_transaction["responseBody"] ?? [];
+                $amount_paid = (float)($verified_body["amountPaid"] ?? $verified_body["totalPayable"] ?? $event_data["amountPaid"] ?? $event_data["totalPayable"] ?? 0);
 
                 // Implement Charges correctly
                 $charge_percent = (float)($monnify_keys['percentage'] ?? 0);

@@ -135,6 +135,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 	
 
@@ -336,6 +337,63 @@
         .balance-hero { padding: 1.25rem; }
         .metric-value { font-size: 1rem; }
     }
+
+    .ai-suite-card {
+        background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 55%, #6d28d9 100%);
+        border-radius: 1.25rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .ai-suite-card::after {
+        content: '';
+        position: absolute;
+        top: -30%;
+        right: -15%;
+        width: 260px;
+        height: 260px;
+        background: radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 70%);
+        pointer-events: none;
+    }
+    .ai-suite-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 1rem;
+        background: rgba(255,255,255,0.12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .ai-status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+    }
+    .ai-status-dot.is-on { background: #4ade80; animation: ai-pulse-dot 1.8s infinite; }
+    .ai-status-dot.is-off { background: #94a3b8; }
+    @keyframes ai-pulse-dot {
+        0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
+        70%  { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+    }
+    .ai-stat-chip {
+        background: rgba(255,255,255,0.1);
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 0.9rem;
+        padding: 0.65rem 0.85rem;
+    }
+    .ai-suite-cta {
+        background: rgba(255,255,255,0.95);
+        color: #4338ca;
+        font-weight: 700;
+        border: none;
+        transition: transform 0.15s ease, background 0.15s ease;
+    }
+    .ai-suite-cta:hover { background: #fff; color: #3730a3; transform: translateY(-1px); }
   </style>
 
 </head>
@@ -492,32 +550,58 @@
         
         <!-- Row -->
         <div class="row">
-          <!-- Business Growth Card -->
+          <!-- AI Business Suite Card -->
           <div class="col-12 col-lg-6">
-            <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 h-100" style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);">
-              <div class="card-header bg-transparent py-3 border-0 text-center">
-                  <h5 class="card-title mb-0 fw-bold" style="color: #0f172a;"><i class="bi bi-rocket-takeoff-fill me-2 text-danger"></i>Business Growth</h5>
-              </div>
-              <div class="card-body p-4 d-flex flex-column justify-content-center gap-3">
-                
-                <a href="AISettings.php" class="text-decoration-none p-3 rounded-4 bg-white shadow-sm d-flex align-items-center transition-all" style="border: 1px solid rgba(0,0,0,0.05); transition: transform 0.2s;">
-                    <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-circle me-3">
-                        <i class="bi bi-cpu-fill fs-4"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0 fw-bold text-dark d-flex align-items-center">AI Business Suite <span class="badge bg-danger rounded-pill ms-2" style="font-size: 0.6rem; animation: pulse-new 2s infinite;">NEW</span></h6>
-                        <span class="small text-muted" style="font-size: 0.75rem;">Automate support & sales</span>
-                    </div>
-                </a>
+            <?php
+                $ai_dash_status = (int)($get_logged_admin_details["ai_status"] ?? 0);
+                $ai_dash_tokens = (int)($get_logged_admin_details["ai_token_balance"] ?? 0);
+                $ai_dash_vid = (int)$get_logged_admin_details["id"];
+                $ai_dash_flags = 0;
+                $ai_dash_flags_q = mysqli_query($connection_server, "SELECT COUNT(*) as c FROM sas_ai_audit_log WHERE actor LIKE '$ai_dash_vid:%' AND event_type='SENTINEL_FLAGGED' AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)");
+                if ($ai_dash_flags_q) $ai_dash_flags = (int)(mysqli_fetch_assoc($ai_dash_flags_q)['c'] ?? 0);
+            ?>
+            <div class="card ai-suite-card shadow-sm border-0 mb-4 h-100">
+              <div class="card-body p-4 d-flex flex-column">
 
-                <a href="WhatsAppManager.php" class="text-decoration-none p-3 rounded-4 bg-white shadow-sm d-flex align-items-center transition-all" style="border: 1px solid rgba(0,0,0,0.05); transition: transform 0.2s;">
-                    <div class="bg-success bg-opacity-10 text-success p-3 rounded-circle me-3">
-                        <i class="bi bi-whatsapp fs-4"></i>
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="ai-suite-icon">
+                            <i class="bi bi-cpu-fill fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">AI Business Suite</h5>
+                            <span class="small" style="opacity: 0.75;">Automate support, sales & security</span>
+                        </div>
                     </div>
-                    <div>
-                        <h6 class="mb-0 fw-bold text-dark d-flex align-items-center">WhatsApp Manager <span class="badge bg-danger rounded-pill ms-2" style="font-size: 0.6rem; animation: pulse-new 2s infinite;">NEW</span></h6>
-                        <span class="small text-muted" style="font-size: 0.75rem;">Broadcast to your users</span>
+                    <span class="badge rounded-pill d-none d-sm-inline-flex align-items-center" style="background: rgba(255,255,255,0.12); font-size: 0.7rem;">
+                        <span class="ai-status-dot <?php echo $ai_dash_status ? 'is-on' : 'is-off'; ?>"></span>
+                        <?php echo $ai_dash_status ? 'Engine Active' : 'Engine Paused'; ?>
+                    </span>
+                </div>
+
+                <div class="row g-2 mb-4">
+                    <div class="col-4">
+                        <div class="ai-stat-chip text-center h-100">
+                            <div class="fw-bold fs-6"><?php echo number_format($ai_dash_tokens); ?></div>
+                            <div class="x-small" style="font-size: 0.68rem; opacity: 0.75;">Tokens Left</div>
+                        </div>
                     </div>
+                    <div class="col-4">
+                        <div class="ai-stat-chip text-center h-100">
+                            <div class="fw-bold fs-6"><i class="bi bi-headset"></i></div>
+                            <div class="x-small" style="font-size: 0.68rem; opacity: 0.75;">Auto Support</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="ai-stat-chip text-center h-100">
+                            <div class="fw-bold fs-6 <?php echo $ai_dash_flags > 0 ? 'text-warning' : ''; ?>"><?php echo $ai_dash_flags > 0 ? number_format($ai_dash_flags) : '<i class="bi bi-shield-check"></i>'; ?></div>
+                            <div class="x-small" style="font-size: 0.68rem; opacity: 0.75;"><?php echo $ai_dash_flags > 0 ? 'Flags (7d)' : 'Sentinel Clean'; ?></div>
+                        </div>
+                    </div>
+                </div>
+
+                <a href="AISettings.php" class="ai-suite-cta btn rounded-pill py-2 mt-auto d-flex align-items-center justify-content-center gap-2">
+                    Open AI Control Center <i class="bi bi-arrow-right"></i>
                 </a>
 
               </div>

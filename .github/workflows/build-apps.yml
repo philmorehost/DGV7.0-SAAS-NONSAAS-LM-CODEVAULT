@@ -19,6 +19,7 @@ jobs:
           - DGV7.0-NON-SAAS/DG6-Android
           - DGV7.0-NON-SAAS/MZEEVTU-Android
           - DGV7.0-NON-SAAS/PayHub-Android
+          - DGV7.0-NON-SAAS/PayHub-Guest-Android
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -72,6 +73,7 @@ jobs:
           - DGV7.0-NON-SAAS/DG6-iOS
           - DGV7.0-NON-SAAS/MZEEVTU-iOS
           - DGV7.0-NON-SAAS/PayHub-iOS
+          - DGV7.0-NON-SAAS/PayHub-Guest-iOS
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4

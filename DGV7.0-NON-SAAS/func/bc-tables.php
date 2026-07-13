@@ -19,7 +19,20 @@ $create_super_admin_status_message_table = mysqli_query($connection_server, "CRE
 $create_vendor_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_vendors (id INT NOT NULL AUTO_INCREMENT, email VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, balance DECIMAL(65,30) UNSIGNED NOT NULL, website_url VARCHAR(225) NOT NULL, home_address VARCHAR(225) NOT NULL, bank_code VARCHAR(225), account_number VARCHAR(225), bvn VARCHAR(225), nin VARCHAR(225), status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), force_security_pin TINYINT(1) DEFAULT 0, force_2fa TINYINT(1) DEFAULT 0, force_google_sso TINYINT(1) DEFAULT 0, totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', google_client_id VARCHAR(225), security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, PRIMARY KEY (id))");
 
 if ($create_vendor_table) {
-    $cols = ["security_pin" => "VARCHAR(255)", "is_blocked" => "TINYINT(1) DEFAULT 0", "failed_login_count" => "INT DEFAULT 0", "last_failed_login" => "TIMESTAMP NULL", "failed_pin_count" => "INT DEFAULT 0", "last_failed_pin" => "TIMESTAMP NULL"];
+    $cols = [
+        "security_pin" => "VARCHAR(255)",
+        "is_blocked" => "TINYINT(1) DEFAULT 0",
+        "failed_login_count" => "INT DEFAULT 0",
+        "last_failed_login" => "TIMESTAMP NULL",
+        "failed_pin_count" => "INT DEFAULT 0",
+        "last_failed_pin" => "TIMESTAMP NULL",
+        "hollatags_username" => "VARCHAR(255) DEFAULT NULL",
+        "hollatags_password" => "VARCHAR(255) DEFAULT NULL",
+        "hollatags_ussd_code" => "VARCHAR(50) DEFAULT NULL",
+        "ussd_activation_fee" => "DECIMAL(10,2) DEFAULT 0.00",
+        "ussd_per_call_charge" => "DECIMAL(10,2) DEFAULT 0.00",
+        "ussd_channel_mode" => "VARCHAR(20) DEFAULT 'Both'"
+    ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
     foreach($cols as $col => $def) {
@@ -579,6 +592,12 @@ if ($create_user_transaction_table) {
     }
 }
 
+//Create Guest Order Table (Guest Mode checkout — no wallet/api_key, one row per anonymous purchase)
+$create_guest_orders_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_guest_orders (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, reference VARCHAR(225) NOT NULL, service_type VARCHAR(50) NOT NULL, identity VARCHAR(225) NOT NULL, api_id INT UNSIGNED, product_id INT UNSIGNED, api_reference VARCHAR(225), amount DECIMAL(65,30) UNSIGNED NOT NULL, discounted_amount DECIMAL(65,30) UNSIGNED NOT NULL, description LONGTEXT, extra_data LONGTEXT, status TINYINT UNSIGNED NOT NULL DEFAULT 0, payment_reference VARCHAR(225), ip_address VARCHAR(64), api_website VARCHAR(225), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, fulfilled_at TIMESTAMP NULL, UNIQUE KEY uniq_reference (reference), KEY idx_vendor_status (vendor_id, status), KEY idx_payment_reference (payment_reference))");
+
+//Create Guest Abuse Tracker Table (daily per-identity/IP purchase-count limiter for Guest Mode, mirrors sas_daily_purchase_tracker but IP+identity keyed since guests have no username)
+$create_guest_abuse_tracker_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_guest_abuse_tracker (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, service_type VARCHAR(50) NOT NULL, identity VARCHAR(225) NOT NULL, ip_address VARCHAR(64) NOT NULL, reference VARCHAR(225) NOT NULL, date_tracked VARCHAR(50) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, KEY idx_identity_lookup (vendor_id, identity, service_type, date_tracked), KEY idx_ip_lookup (vendor_id, ip_address, service_type, date_tracked))");
+
 //Create Vendor Transaction Table
 $create_vendor_transaction_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_vendor_transactions (vendor_id INT UNSIGNED NOT NULL, product_unique_id VARCHAR(225) NOT NULL, type_alternative VARCHAR(225), reference VARCHAR(225) NOT NULL, amount DECIMAL(65,30) UNSIGNED NOT NULL, discounted_amount DECIMAL(65,30) UNSIGNED NOT NULL, balance_before DECIMAL(65,30) UNSIGNED NOT NULL, balance_after DECIMAL(65,30) UNSIGNED NOT NULL, description LONGTEXT NOT NULL, api_website VARCHAR(225) NOT NULL, status INT UNSIGNED NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
@@ -663,6 +682,15 @@ if ($create_payment_gateway_table) {
     foreach($cols as $col) {
         mysqli_query($connection_server, "ALTER TABLE sas_payment_gateways MODIFY $col VARCHAR(500)");
     }
+    // Security Fix: Dedicated webhook signing secret, distinct from the API secret_key/encrypt_key
+    // (which are already overloaded per-gateway — e.g. encrypt_key means Flutterwave's verif-hash
+    // for one gateway and Monnify's contract code for another). Webhook handlers should prefer this
+    // column and fall back to secret_key/encrypt_key only if it's empty, so existing configured
+    // gateways keep working until an admin explicitly sets a webhook secret.
+    $check_webhook_secret = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_payment_gateways LIKE 'webhook_secret'");
+    if ($check_webhook_secret && mysqli_num_rows($check_webhook_secret) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE sas_payment_gateways ADD COLUMN webhook_secret VARCHAR(500) NOT NULL DEFAULT '' AFTER encrypt_key");
+    }
 }
 
 //Create Bank Transfer Gateway Table
@@ -673,6 +701,12 @@ if ($create_bank_transfer_gateway_table) {
     $cols = ["public_key", "secret_key", "encrypt_key"];
     foreach($cols as $col) {
         mysqli_query($connection_server, "ALTER TABLE sas_bank_transfer_gateways MODIFY $col VARCHAR(500)");
+    }
+    // Security Fix: same dedicated webhook secret column as sas_payment_gateways, for parity
+    // (no withdrawal webhook exists yet, but keeps the two gateway-credential tables schema-aligned).
+    $check_webhook_secret_bt = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_bank_transfer_gateways LIKE 'webhook_secret'");
+    if ($check_webhook_secret_bt && mysqli_num_rows($check_webhook_secret_bt) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE sas_bank_transfer_gateways ADD COLUMN webhook_secret VARCHAR(500) NOT NULL DEFAULT '' AFTER encrypt_key");
     }
 }
 
@@ -708,6 +742,12 @@ if ($create_admin_payment_gateway_table) {
     $cols = ["public_key", "secret_key", "encrypt_key"];
     foreach($cols as $col) {
         mysqli_query($connection_server, "ALTER TABLE sas_super_admin_payment_gateways MODIFY $col VARCHAR(500)");
+    }
+    // Security Fix: same dedicated webhook secret column, for schema parity across all three
+    // gateway-credential tables (vendor, bank-transfer, super-admin).
+    $check_webhook_secret_sa = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_super_admin_payment_gateways LIKE 'webhook_secret'");
+    if ($check_webhook_secret_sa && mysqli_num_rows($check_webhook_secret_sa) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE sas_super_admin_payment_gateways ADD COLUMN webhook_secret VARCHAR(500) NOT NULL DEFAULT '' AFTER encrypt_key");
     }
     $gateways = ["monnify", "flutterwave", "paystack", "payvessel", "payhub", "plisio", "vpay", "vpay-2", "dojah", "qoreid", "smileid"];
     foreach ($gateways as $g) {
@@ -1122,7 +1162,21 @@ if ($create_databundle_config_table) {
     if (mysqli_num_rows($check_col) == 0) {
         mysqli_query($connection_server, "ALTER TABLE `sas_databundle_config` ADD COLUMN service_type VARCHAR(50) NOT NULL DEFAULT 'data' AFTER vendor_id");
     }
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_databundle_config` LIKE 'ussd_channel_enabled'");
+    if (mysqli_num_rows($check_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_databundle_config` ADD COLUMN ussd_channel_enabled TINYINT(1) DEFAULT 0");
+    }
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_databundle_config` LIKE 'ussd_code'");
+    if (mysqli_num_rows($check_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_databundle_config` ADD COLUMN ussd_code VARCHAR(50) DEFAULT NULL");
+    }
 }
+
+//Create USSD Activations Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ussd_activations (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL, amount_paid DECIMAL(10,2) DEFAULT 0.00, activated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, status TINYINT(1) DEFAULT 1, INDEX (vendor_id), INDEX (user_id))");
+
+//Create USSD Sessions Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ussd_sessions (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, session_id VARCHAR(100) NOT NULL, msisdn VARCHAR(20) NOT NULL, session_data TEXT, current_step VARCHAR(50) DEFAULT 'start', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX (vendor_id), INDEX (session_id), INDEX (msisdn))");
 
 //Create DataBundleCard Plans Table
 $create_databundle_plans_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_databundle_plans (id INT NOT NULL AUTO_INCREMENT, vendor_id INT UNSIGNED NOT NULL, product_id INT UNSIGNED NOT NULL, service_type VARCHAR(50) NOT NULL DEFAULT 'data', data_type VARCHAR(50) NOT NULL, plan_code VARCHAR(225) NOT NULL, validity_days VARCHAR(50), price VARCHAR(50), status INT UNSIGNED NOT NULL DEFAULT 1, PRIMARY KEY (id))");
@@ -1143,19 +1197,6 @@ $create_float_services_table = mysqli_query($connection_server, "CREATE TABLE IF
 
 //Create Platform Earnings Table
 mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_platform_earnings (id INT NOT NULL AUTO_INCREMENT, vendor_id INT, amount DECIMAL(65,30), source VARCHAR(225), reference VARCHAR(225), date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");
-
-// Create WhatsApp Templates Table
-mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_wa_templates (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    vendor_id INT NOT NULL,
-    template_name VARCHAR(100) NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    language VARCHAR(20) NOT NULL DEFAULT 'en_US',
-    body_text TEXT NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    meta_template_id VARCHAR(100),
-    date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
 
 // --- Gift Card Integration Tables ---
 
@@ -1753,16 +1794,6 @@ mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS `sas_ai_audit_log` 
 )");
 
 
-// ─── WHATSAPP GATEWAY TABLE (Sprint 7 — WhatsApp) ──────────
-mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS `sas_whatsapp_gateway` (
-    `id`            INT AUTO_INCREMENT PRIMARY KEY,
-    `phone_number`  VARCHAR(30)  NOT NULL,
-    `status`        ENUM('offline','connecting','online') DEFAULT 'offline',
-    `session_data`  LONGTEXT DEFAULT NULL,
-    `last_ping`     TIMESTAMP NULL,
-    `created_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
-
 // ─── AI TRANSACTIONS TABLE (Sprint 3 — Token Economy) ──────
 mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS `sas_ai_transactions` (
     `id`            BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1875,7 +1906,6 @@ $ai_global_options = [
     'ai_global_enabled'         => '0',
     'ai_default_model'          => 'gemini-1.5-flash',
     'ai_price_per_request'      => '5',
-    'ai_whatsapp_number'        => '',
     'ai_voice_unlock_threshold' => '100',
     'ai_provider'               => 'gemini', 
     'ai_gemini_api_key'         => '',

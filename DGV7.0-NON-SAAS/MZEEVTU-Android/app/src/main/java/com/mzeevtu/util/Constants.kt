@@ -19,7 +19,6 @@ object Constants {
     const val KEY_PRIMARY_COLOR = "primary_color"
     const val KEY_LOGO_URL = "logo_url"
     const val KEY_SITE_TITLE = "site_title"
-    const val KEY_SUPPORT_WHATSAPP = "support_whatsapp"
     const val KEY_SUPPORT_EMAIL = "support_email"
     const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
     const val KEY_DARK_MODE = "dark_mode"

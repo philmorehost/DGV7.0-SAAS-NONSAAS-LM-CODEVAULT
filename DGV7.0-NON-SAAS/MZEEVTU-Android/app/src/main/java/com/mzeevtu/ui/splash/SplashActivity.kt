@@ -53,7 +53,6 @@ class SplashActivity : AppCompatActivity() {
                         prefs.saveString(com.mzeevtu.util.Constants.KEY_LOGO_URL, it["logo_url"] as? String ?: "")
                         prefs.saveString(com.mzeevtu.util.Constants.KEY_PRIMARY_COLOR, it["primary_color"] as? String ?: "#0d6efd")
                         val support = it["support"] as? Map<*, *>
-                        prefs.saveString(com.mzeevtu.util.Constants.KEY_SUPPORT_WHATSAPP, support?.get("whatsapp") as? String ?: "")
                         prefs.saveString(com.mzeevtu.util.Constants.KEY_SUPPORT_EMAIL, support?.get("email") as? String ?: "")
                     }
                 }

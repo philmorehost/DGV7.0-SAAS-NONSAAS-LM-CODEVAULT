@@ -51,9 +51,41 @@ if ($event == 'charge.success' || ($catch['status'] ?? '') == 'success' || ($cat
         exit;
     }
 
-    // 2. Process payment and credit wallet
+    // Security Fix: this webhook body is unauthenticated input — a forged POST with
+    // "status":"success" and an arbitrary reference/amount/metadata would previously be
+    // credited without question. Before crediting anything, independently re-verify the
+    // reference against PayHub's own transaction-verify API (same pattern already proven
+    // in reconcileDeposit(), func/bc-func.php ~line 4998) and only proceed using the
+    // VERIFIED transaction data PayHub's API returns — never the raw webhook body.
+    if (empty($reference)) {
+        logPayhub("SECURITY: Webhook payload missing reference. Rejecting.");
+        http_response_code(400);
+        exit("Missing reference");
+    }
+
+    $is_vendor_recon = ($target == 'vendor');
+    $verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($reference), "", $vid, $is_vendor_recon);
+    $v_data = json_decode($verify_res, true);
+    $verified_tx = null;
+    if (($v_data['status'] ?? "") == "success") {
+        $tx_raw = json_decode($v_data['json_result'], true);
+        $tx_data = $tx_raw['data'] ?? $tx_raw;
+        $tx_status = strtolower($tx_data['status'] ?? "");
+        if ($tx_status == "success" || $tx_status == "successful" || ($tx_raw['status'] ?? false) === true) {
+            $verified_tx = $tx_data;
+        }
+    }
+
+    if (!$verified_tx) {
+        logPayhub("SECURITY: Could not independently verify reference $reference via PayHub's API. Refusing to credit.");
+        http_response_code(400);
+        exit("Unverified transaction");
+    }
+
+    // 2. Process payment and credit wallet — using the VERIFIED transaction data from
+    // PayHub's own API, not the raw (attacker-controllable) webhook body.
     $username = $meta['username'] ?? '';
-    $result_ref = processPayhubSuccess($vid, $reference, $data, $payhub_keys, $username);
+    $result_ref = processPayhubSuccess($vid, $verified_tx['reference'] ?? $reference, $verified_tx, $payhub_keys, $username);
 
     if ($result_ref) {
         logPayhub("Successfully processed $reference. Local Ref: $result_ref");

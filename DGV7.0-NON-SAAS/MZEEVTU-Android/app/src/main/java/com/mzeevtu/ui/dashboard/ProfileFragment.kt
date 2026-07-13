@@ -79,14 +79,6 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
             binding.switchBiometric.visibility = View.GONE
         }
 
-        binding.btnWhatsapp.setOnClickListener {
-            val wa = prefs.getString(Constants.KEY_SUPPORT_WHATSAPP)
-            if (wa.isNotEmpty()) {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$wa"))
-                startActivity(intent)
-            }
-        }
-
         binding.btnEmailSupport.setOnClickListener {
             val email = prefs.getString(Constants.KEY_SUPPORT_EMAIL)
             val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email"))

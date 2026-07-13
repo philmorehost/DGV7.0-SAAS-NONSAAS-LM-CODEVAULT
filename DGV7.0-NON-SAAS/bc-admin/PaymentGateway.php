@@ -2,8 +2,8 @@
     include("../func/bc-admin-config.php");
 	
 	$kyc_verification_array = array("bvn", "nin", "liveliness_video", "liveliness_picture", "govt_id", "proof_of_address");
-    $payment_gateway_array = array("monnify", "flutterwave", "paystack", "payvessel", "payhub", "plisio");
-	$payment_gateway_webhook_array = array("monnify" => $web_http_host . "/users-monnify.php", "flutterwave" => $web_http_host . "/users-flutterwave.php", "paystack" => $web_http_host . "/users-paystack.php", "payvessel" => $web_http_host . "/users-payvessel.php", "payhub" => $web_http_host . "/users-payhub.php", "plisio" => $web_http_host . "/users-plisio.php");
+    $payment_gateway_array = array("monnify", "flutterwave", "paystack", "payvessel", "payhub", "plisio", "beewave");
+	$payment_gateway_webhook_array = array("monnify" => $web_http_host . "/users-monnify.php", "flutterwave" => $web_http_host . "/users-flutterwave.php", "paystack" => $web_http_host . "/users-paystack.php", "payvessel" => $web_http_host . "/users-payvessel.php", "payhub" => $web_http_host . "/users-payhub.php", "plisio" => $web_http_host . "/users-plisio.php", "beewave" => $web_http_host . "/web/api/beewave-webhook.php");
 	
 	if(isset($_POST["update-kyc-details"])){
         $force_kyc = isset($_POST["force_kyc"]) ? 1 : 0;
@@ -89,6 +89,7 @@
         $public_key = $_POST["public-key"];
         $secret_key = $_POST["secret-key"];
         $encrypt_key = $_POST["encrypt-key"];
+        $webhook_secret = $_POST["webhook-secret"] ?? [];
         $payment_percent = $_POST["payment-percent"];
         $gateway_array_list = $payment_gateway_array;
 
@@ -101,8 +102,11 @@
                 $each_public_key = mysqli_real_escape_string($connection_server, trim(strip_tags($public_key[$index])));
                 $each_secret_key = mysqli_real_escape_string($connection_server, trim(strip_tags($secret_key[$index])));
                 $each_encrypt_key = mysqli_real_escape_string($connection_server, trim(strip_tags($encrypt_key[$index])));
+                // Security Fix: dedicated webhook signing secret (separate field from secret_key/encrypt_key,
+                // which are already overloaded with other meanings per-gateway).
+                $each_webhook_secret = mysqli_real_escape_string($connection_server, trim(strip_tags($webhook_secret[$index] ?? '')));
                 $each_payment_percent = mysqli_real_escape_string($connection_server, trim(strip_tags($payment_percent[$index])));
-                
+
                 //$each_gateway_status_unrefined = mysqli_real_escape_string($connection_server, preg_replace("/[^0-9]+/","",trim(strip_tags( $_POST["gateway-status-".$each_gateway_name] ))));
                 if(isset($_POST["gateway-status-".$each_gateway_name])){
                     $each_gateway_status = "1";
@@ -113,13 +117,13 @@
                 if(in_array($each_gateway_name, $gateway_array_list)){
                     $get_payment_gateway_details = mysqli_query($connection_server, "SELECT * FROM sas_payment_gateways WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
                     if(mysqli_num_rows($get_payment_gateway_details) == 1){
-                        mysqli_query($connection_server, "UPDATE sas_payment_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', percentage='$each_payment_percent', status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
+                        mysqli_query($connection_server, "UPDATE sas_payment_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', webhook_secret='$each_webhook_secret', percentage='$each_payment_percent', status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
                         //Payment Gateway Information Updated Successfully
                         $json_response_array = array("desc" => "Payment Gateway Information Updated Successfully");
                         $json_response_encode = json_encode($json_response_array,true);
                     }else{
                         if(mysqli_num_rows($get_payment_gateway_details) == 0){
-                            mysqli_query($connection_server, "INSERT INTO sas_payment_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, percentage, status) VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_payment_percent', '$each_gateway_status')");
+                            mysqli_query($connection_server, "INSERT INTO sas_payment_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, webhook_secret, percentage, status) VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_webhook_secret', '$each_payment_percent', '$each_gateway_status')");
                             //Payment Gateway Information Created Successfully
                             $json_response_array = array("desc" => "Payment Gateway Information Created Successfully");
                             $json_response_encode = json_encode($json_response_array,true);
@@ -176,6 +180,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
 ?>
@@ -241,7 +246,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Withdrawal Fee (NGN)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">₦</span>
-                                        <input name="withdrawal_fee" type="number" step="0.01" value="<?php echo $get_logged_admin_details['withdrawal_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
+                                        <input name="withdrawal_fee" type="number" step="any" value="<?php echo $get_logged_admin_details['withdrawal_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
                                     </div>
                                     <small class="text-muted text-xs">Charge applied to every bank withdrawal.</small>
                                 </div>
@@ -249,7 +254,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Crypto Swap Fee (%)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">%</span>
-                                        <input name="crypto_swap_fee" type="number" step="0.01" value="<?php echo $get_logged_admin_details['crypto_swap_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
+                                        <input name="crypto_swap_fee" type="number" step="any" value="<?php echo $get_logged_admin_details['crypto_swap_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
                                     </div>
                                     <small class="text-muted text-xs">Charge for swapping Crypto to NGN.</small>
                                 </div>
@@ -425,11 +430,28 @@
                                                 </div>
                                             </div>
                                         <div class="mb-3">
+                                            <label class="form-label small fw-bold text-muted">WEBHOOK SECRET</label>
+                                            <input name="webhook-secret[]" type="password" value="<?php echo htmlspecialchars($get_gateway_details["webhook_secret"] ?? '', ENT_QUOTES); ?>" class="form-control rounded-3" placeholder="Paste the signing secret from your <?php echo strtoupper($gateway_name); ?> dashboard" />
+                                            <div class="form-text small">Used to verify that webhook callbacks genuinely came from <?php echo strtoupper($gateway_name); ?>, not a forged request. Required for this gateway's webhook to accept payments.</div>
+                                        </div>
+                                        <?php
+                                            // Beewave has no documented HMAC-header signing scheme, so its webhook
+                                            // is verified via a shared secret appended to the URL itself (the only
+                                            // scheme guaranteed to work regardless of what headers Beewave sends).
+                                            $webhook_url_display = $payment_gateway_webhook_array[$gateway_name];
+                                            if ($gateway_name === 'beewave' && !empty($get_gateway_details["webhook_secret"])) {
+                                                $webhook_url_display .= '?secret=' . urlencode($get_gateway_details["webhook_secret"]);
+                                            }
+                                        ?>
+                                        <div class="mb-3">
                                             <label class="form-label small fw-bold text-muted">WEBHOOK URL</label>
                                             <div class="input-group input-group-sm">
-                                                <input type="text" value="<?php echo $payment_gateway_webhook_array[$gateway_name]; ?>" class="form-control bg-light border-0" readonly />
-                                                <button class="btn btn-outline-secondary border-0" type="button" onclick="navigator.clipboard.writeText('<?php echo $payment_gateway_webhook_array[$gateway_name]; ?>')"><i class="bi bi-clipboard"></i></button>
+                                                <input type="text" value="<?php echo htmlspecialchars($webhook_url_display, ENT_QUOTES); ?>" class="form-control bg-light border-0" readonly />
+                                                <button class="btn btn-outline-secondary border-0" type="button" onclick="navigator.clipboard.writeText('<?php echo htmlspecialchars(addslashes($webhook_url_display), ENT_QUOTES); ?>')"><i class="bi bi-clipboard"></i></button>
                                             </div>
+                                            <?php if ($gateway_name === 'beewave' && empty($get_gateway_details["webhook_secret"])): ?>
+                                                <div class="form-text small text-danger">Set a Webhook Secret above first, then copy this URL (it will include the secret) into Beewave's dashboard.</div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>

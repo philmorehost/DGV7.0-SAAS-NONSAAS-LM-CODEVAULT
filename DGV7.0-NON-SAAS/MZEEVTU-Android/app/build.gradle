@@ -23,20 +23,37 @@ android {
 
     signingConfigs {
         release {
-            // Keystore is committed at keystore/mzeevtu-release.jks.
-            // Since the file is tracked in VCS, credentials are stored here directly.
-            storeFile rootProject.file("keystore/mzeevtu-release.jks")
-            storePassword "OMOTERE@234.com"
-            keyAlias "philmore-mzeevtu"
-            keyPassword "OMOTERE@234.com"
+            // Keystore file is committed at keystore/mzeevtu-release.jks, but credentials
+            // load from keystore/keystore.properties (gitignored) or CI env vars — never
+            // hardcoded here. See keystore/keystore.properties.template.
+            def keystorePropsFile = rootProject.file("keystore/keystore.properties")
+            def keystoreBase64 = System.getenv("KEYSTORE_BASE64") ?: ""
+
+            if (keystorePropsFile.exists()) {
+                def keystoreProps = new Properties()
+                keystorePropsFile.withInputStream { keystoreProps.load(it) }
+                storeFile     rootProject.file("keystore/mzeevtu-release.jks")
+                storePassword keystoreProps['STORE_PASSWORD'] as String
+                keyAlias      keystoreProps['KEY_ALIAS'] as String
+                keyPassword   keystoreProps['KEY_PASSWORD'] as String
+            } else if (keystoreBase64) {
+                def keystoreFile = new File("${buildDir}/keystore-release.jks")
+                keystoreFile.parentFile.mkdirs()
+                keystoreFile.bytes = Base64.decoder.decode(keystoreBase64)
+                storeFile     keystoreFile
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias      System.getenv("KEY_ALIAS") ?: ""
+                keyPassword   System.getenv("KEY_PASSWORD") ?: ""
+            }
         }
     }
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
         }
         debug {
             // Debug builds are always signed with the default debug keystore

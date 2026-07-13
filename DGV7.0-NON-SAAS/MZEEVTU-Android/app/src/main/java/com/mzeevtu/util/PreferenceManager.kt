@@ -2,11 +2,23 @@ package com.mzeevtu.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
 class PreferenceManager(context: Context) {
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = run {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        EncryptedSharedPreferences.create(
+            context,
+            Constants.PREF_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
 
     fun saveString(key: String, value: String) = prefs.edit().putString(key, value).apply()
     fun getString(key: String, default: String = "") = prefs.getString(key, default) ?: default
@@ -35,22 +47,8 @@ class PreferenceManager(context: Context) {
             putString(Constants.KEY_ACCOUNT_LEVEL, accountLevel.toString())
             putBoolean(Constants.KEY_PIN_SET, pinSet)
             putBoolean(Constants.KEY_IS_LOGGED_IN, true)
-        
-    fun saveAiVoiceStatus(status: Int) = prefs.edit().putInt("ai_voice_status", status).apply()
-    fun getAiVoiceStatus(): Int = prefs.getInt("ai_voice_status", 0)
-
-    fun saveTrustScore(score: Int) = prefs.edit().putInt("ai_trust_score", score).apply()
-    fun getTrustScore(): Int = prefs.getInt("ai_trust_score", 50)
-
-}.apply()
-    
-    fun saveAiVoiceStatus(status: Int) = prefs.edit().putInt("ai_voice_status", status).apply()
-    fun getAiVoiceStatus(): Int = prefs.getInt("ai_voice_status", 0)
-
-    fun saveTrustScore(score: Int) = prefs.edit().putInt("ai_trust_score", score).apply()
-    fun getTrustScore(): Int = prefs.getInt("ai_trust_score", 50)
-
-}
+        }.apply()
+    }
 
     fun clear() = prefs.edit().clear().apply()
 
@@ -65,5 +63,4 @@ class PreferenceManager(context: Context) {
 
     fun saveTrustScore(score: Int) = prefs.edit().putInt("ai_trust_score", score).apply()
     fun getTrustScore(): Int = prefs.getInt("ai_trust_score", 50)
-
 }

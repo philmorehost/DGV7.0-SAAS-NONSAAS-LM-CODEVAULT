@@ -37,7 +37,26 @@
         $GLOBALS['vendor_id'] = $vendor_id;
 		$beewave_keys = mysqli_fetch_assoc(mysqli_query($connection_server,"SELECT * FROM sas_payment_gateways WHERE vendor_id='$vendor_id' && gateway_name='beewave'"));
 
-        // Beewave signature verification logic would go here
+        // Security Fix: verify this callback genuinely came from Beewave before crediting anything.
+        // Beewave has no documented HMAC-header signing scheme available in this codebase, so the
+        // supported mechanism is a shared secret configured as a query parameter on the webhook URL
+        // itself (set in the Beewave dashboard as .../beewave-webhook.php?secret=XXXX via the admin
+        // panel's generated Webhook URL) — this works regardless of what header scheme Beewave may
+        // or may not send. If Beewave also sends a signature header, that's accepted too as an
+        // alternative. Compared with hash_equals() to avoid timing attacks.
+        $configured_secret = trim($beewave_keys['webhook_secret'] ?? '');
+        if (empty($configured_secret)) {
+            error_log("SECURITY: Beewave webhook secret not configured for vendor $vendor_id. Rejecting webhook.");
+            http_response_code(401);
+            die("Webhook not configured");
+        }
+
+        $provided_secret = $_GET['secret'] ?? ($_SERVER['HTTP_X_BEEWAVE_SIGNATURE'] ?? '');
+        if (empty($provided_secret) || !hash_equals($configured_secret, $provided_secret)) {
+            error_log("SECURITY: Beewave webhook signature mismatch for vendor $vendor_id, ref $transaction_ref.");
+            http_response_code(401);
+            die("Invalid signature");
+        }
 
         $amount_paid = (float)($event_data["amount"] ?? 0);
 

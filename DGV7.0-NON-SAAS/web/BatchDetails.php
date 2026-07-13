@@ -7,12 +7,16 @@
     }
 
     $batch = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["batch"])));
+    $batch_progress = bc_get_bulk_batch_progress($connection_server, $get_logged_user_details["vendor_id"], $get_logged_user_details["username"], $batch);
 ?>
 <!DOCTYPE html>
 <head>
     <title>Batch Details | <?php echo $get_all_site_details["site_title"]; ?></title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <?php if ($batch_progress["status"] !== "completed"): ?>
+    <meta http-equiv="refresh" content="10">
+    <?php endif; ?>
     <link rel="stylesheet" href="<?php echo $css_style_template_location; ?>">
     <link rel="stylesheet" href="/cssfile/bc-style.css">
 
@@ -42,6 +46,28 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h5 class="card-title mb-0">Transactions in Batch: <?php echo $batch; ?></h5>
                 <a href="BatchTransactions.php" class="btn btn-secondary btn-sm">Back to Batches</a>
+            </div>
+
+            <?php
+                $bp_status = $batch_progress["status"];
+                $bp_total = max(1, $batch_progress["total"]);
+                $bp_done_pct = round((($batch_progress["successful"] + $batch_progress["failed"]) / $bp_total) * 100);
+                $bp_badge_class = $bp_status === "completed" ? "bg-success" : ($bp_status === "processing" ? "bg-warning text-dark" : "bg-secondary");
+            ?>
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge <?php echo $bp_badge_class; ?> text-uppercase"><?php echo htmlspecialchars($bp_status); ?></span>
+                    <small class="text-muted"><?php echo $batch_progress["successful"]; ?> successful &middot; <?php echo $batch_progress["failed"]; ?> failed &middot; <?php echo $batch_progress["pending"]; ?> pending of <?php echo $batch_progress["total"]; ?></small>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar <?php echo $bp_status === 'completed' ? 'bg-success' : 'bg-primary progress-bar-striped progress-bar-animated'; ?>" role="progressbar" style="width: <?php echo $bp_done_pct; ?>%"></div>
+                </div>
+                <?php if ($bp_status !== "completed"): ?>
+                    <small class="text-muted d-block mt-1">Processing in the background — this page refreshes automatically. You don't need to keep it open.</small>
+                <?php endif; ?>
+                <?php if (!empty($batch_progress["ai_diagnosis"])): ?>
+                    <div class="alert alert-warning mt-3 mb-0"><strong>AI Diagnosis:</strong> <?php echo htmlspecialchars($batch_progress["ai_diagnosis"]); ?></div>
+                <?php endif; ?>
             </div>
 
             <div class="table-responsive">
