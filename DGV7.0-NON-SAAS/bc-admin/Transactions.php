@@ -69,6 +69,7 @@
         header("Location: /bc-admin/Transactions.php");
         exit();
     }
+    }
 ?>
 <!DOCTYPE html>
 <head>

@@ -123,7 +123,11 @@ function guest_attempt_paid_fulfillment($reference) {
     }
 
     $vendor_id = $order['vendor_id'];
-    $verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($reference), "", $vendor_id, false);
+    // PayHub's verify endpoint is keyed by ITS OWN reference (captured into payment_reference
+    // at checkout-init time — see the comment there), not the one we originally submitted.
+    // Fall back to our own reference only for pre-fix orders that never got a payment_reference.
+    $verify_ref = !empty($order['payment_reference']) ? $order['payment_reference'] : $reference;
+    $verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($verify_ref), "", $vendor_id, false);
     $v_data = json_decode($verify_res, true);
     $verified_tx = null;
     if (($v_data['status'] ?? "") == "success") {
@@ -143,7 +147,7 @@ function guest_attempt_paid_fulfillment($reference) {
     }
 
     if (!guest_claim_order_for_payment($reference)) return;
-    guest_update_order($reference, 'payment_reference', $verified_tx['reference'] ?? $reference);
+    guest_update_order($reference, 'payment_reference', $verified_tx['reference'] ?? $verify_ref);
 
     $order = guest_get_order($reference);
     guest_fulfill_order($order);

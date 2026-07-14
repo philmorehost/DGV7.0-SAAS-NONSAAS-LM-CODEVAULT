@@ -35,12 +35,25 @@ if (!($event == 'charge.success' || ($catch['status'] ?? '') == 'success' || ($c
     exit("Event ignored");
 }
 
-$order = guest_get_order($reference);
+// $reference here is PayHub's OWN reference (confirmed live: format "PH_...", distinct from
+// what we submitted at initialize) — matches payment_reference, captured at checkout-init time.
+// Fall back to metadata.reference (the one we originally embedded) for orders whose
+// payment_reference wasn't captured, mirroring processPayhubSuccess()'s proven metadata-based
+// reconciliation for the authenticated wallet-funding flow (func/bc-func.php ~line 3583).
+$order = guest_get_order_by_payment_reference($reference);
+if (!$order) {
+    $meta = is_array($data['metadata'] ?? null) ? $data['metadata'] : (json_decode($data['metadata'] ?? '', true) ?: []);
+    $orig_reference = $meta['reference'] ?? '';
+    if (!empty($orig_reference)) {
+        $order = guest_get_order($orig_reference);
+    }
+}
 if (!$order) {
     bc_log_security_event('SECURITY', 'guest_webhook', guest_client_ip(), "Unknown guest order reference: $reference");
     http_response_code(404);
     exit("Unknown order");
 }
+$reference = $order['reference']; // switch to OUR reference — every helper below keys on it.
 
 // Idempotency: only a pending_payment order should ever be advanced by this webhook.
 if ((int)$order['status'] !== GUEST_STATUS_PENDING_PAYMENT) {
@@ -52,7 +65,9 @@ $vendor_id = $order['vendor_id'];
 
 // Security Fix (mirrors users-payhub.php): never trust the raw webhook body — independently
 // re-verify the reference against PayHub's own transaction-verify API before doing anything.
-$verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($reference), "", $vendor_id, false);
+// Verify by PayHub's OWN reference (payment_reference), not ours — see the comment above.
+$verify_ref = !empty($order['payment_reference']) ? $order['payment_reference'] : $reference;
+$verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($verify_ref), "", $vendor_id, false);
 $v_data = json_decode($verify_res, true);
 $verified_tx = null;
 if (($v_data['status'] ?? "") == "success") {
@@ -87,7 +102,7 @@ if (!guest_claim_order_for_payment($reference)) {
     http_response_code(200);
     exit("ALREADY_PROCESSED");
 }
-guest_update_order($reference, 'payment_reference', $verified_tx['reference'] ?? $reference);
+guest_update_order($reference, 'payment_reference', $verified_tx['reference'] ?? $verify_ref);
 
 $order = guest_get_order($reference);
 $result = guest_fulfill_order($order);

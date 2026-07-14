@@ -293,7 +293,15 @@ if (empty($checkout_url)) {
     guest_fail($res['message'] ?? "Could not initialize payment. Please try again.", 502);
 }
 
-guest_update_order($reference, 'payment_reference', $reference);
+// PayHub assigns its OWN transaction reference on initialize (observed live: format "PH_...",
+// unrelated to the one we submitted) — every later verify/webhook call is keyed by PayHub's
+// reference, not ours. Capture it now, while we have it; guest_attempt_paid_fulfillment() and
+// guest-webhook.php both verify against this column, falling back to our own reference only if
+// PayHub genuinely never returned one (defensive — the metadata.reference we also send below
+// exists specifically as the reconciliation fallback for that case, mirroring
+// processPayhubSuccess()'s proven metadata-reference matching for the authenticated flow).
+$payhub_reference = $inner['data']['reference'] ?? ($inner['reference'] ?? null);
+guest_update_order($reference, 'payment_reference', !empty($payhub_reference) ? $payhub_reference : $reference);
 
 guest_json([
     "status" => "success",

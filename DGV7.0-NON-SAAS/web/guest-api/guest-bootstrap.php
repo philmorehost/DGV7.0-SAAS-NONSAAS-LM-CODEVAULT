@@ -272,6 +272,15 @@ function guest_get_order($reference, $vendor_id = null) {
     return mysqli_fetch_array(mysqli_query($connection_server, $sql));
 }
 
+/** Looks up an order by PayHub's OWN reference (captured into payment_reference at checkout-init
+ *  time) — this is how guest-webhook.php finds the order, since the webhook payload's own
+ *  "reference" field is PayHub's, not ours. See checkout-init.php's payment_reference comment. */
+function guest_get_order_by_payment_reference($payment_reference) {
+    global $connection_server;
+    $ref_esc = mysqli_real_escape_string($connection_server, $payment_reference);
+    return mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_guest_orders WHERE payment_reference='$ref_esc' LIMIT 1"));
+}
+
 /** Mirrors alterTransaction() but targets sas_guest_orders and allows "0" values through. */
 function guest_update_order($reference, $column_name, $column_value) {
     global $connection_server;
