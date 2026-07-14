@@ -1,0 +1,16 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Keystore files — stored as GitHub Actions secret (GUEST_KEYSTORE_BASE64), not in VCS
+keystore/
+*.jks
+*.keystore
+key.properties

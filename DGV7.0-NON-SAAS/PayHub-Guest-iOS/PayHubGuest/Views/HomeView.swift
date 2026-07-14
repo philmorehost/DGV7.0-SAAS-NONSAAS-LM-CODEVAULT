@@ -12,13 +12,9 @@ struct HomeView: View {
     @ObservedObject var viewModel: GuestViewModel
 
     private var actions: [QuickAction] {
-        [
-            QuickAction(label: "Airtime", icon: "phone.fill", color: PHColor.airtime) { viewModel.navigate(to: .purchase("airtime")) },
-            QuickAction(label: "Data", icon: "wifi", color: PHColor.data) { viewModel.navigate(to: .purchase("data")) },
-            QuickAction(label: "Cable TV", icon: "tv.fill", color: PHColor.cable) { viewModel.navigate(to: .purchase("cable")) },
-            QuickAction(label: "Electric", icon: "bolt.fill", color: PHColor.electric) { viewModel.navigate(to: .purchase("electricity")) },
-            QuickAction(label: "Exam Pins", icon: "graduationcap.fill", color: PHColor.exam) { viewModel.navigate(to: .purchase("exam")) },
-            QuickAction(label: "Betting", icon: "dice.fill", color: PHColor.betting) { viewModel.navigate(to: .purchase("betting")) },
+        GuestServiceCatalog.filterEnabled(viewModel.enabledServices).map { s in
+            QuickAction(label: s.shortLabel, icon: s.icon, color: s.color) { viewModel.navigate(to: .purchase(s.key)) }
+        } + [
             QuickAction(label: "History", icon: "clock.arrow.circlepath", color: PHColor.primary) { viewModel.setTab(.history) },
         ]
     }
@@ -68,6 +64,24 @@ struct HomeView: View {
                     }
                 }
                 .padding(.top, 8)
+
+                if !viewModel.transactionHistory.isEmpty {
+                    HStack {
+                        Text("Recent Transactions").font(.system(size: 15, weight: .bold)).foregroundColor(PHColor.text)
+                        Spacer()
+                        Text("See All")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(PHColor.primary)
+                            .onTapGesture { viewModel.setTab(.history) }
+                    }
+                    .padding(.top, 12)
+
+                    VStack(spacing: 8) {
+                        ForEach(Array(viewModel.transactionHistory.prefix(3))) { receipt in
+                            RecentTransactionRow(receipt: receipt) { viewModel.setTab(.history) }
+                        }
+                    }
+                }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 100)
@@ -82,5 +96,56 @@ struct HomeView: View {
             .padding(.vertical, 5)
             .background(Color.white.opacity(0.18))
             .clipShape(Capsule())
+    }
+}
+
+private struct RecentTransactionRow: View {
+    let receipt: GuestReceipt
+    let onTap: () -> Void
+
+    private var entry: GuestServiceEntry? {
+        GuestServiceCatalog.all.first { $0.key == receipt.service }
+    }
+
+    private var statusColor: Color {
+        switch receipt.status {
+        case "success": return PHColor.success
+        case "pending": return Color(hex: 0xF59E0B)
+        default: return PHColor.error
+        }
+    }
+
+    private var statusLabel: String {
+        switch receipt.status {
+        case "success": return "Successful"
+        case "pending": return "Pending"
+        default: return "Failed"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 11)
+                .fill(entry?.bg ?? PHColor.text2.opacity(0.12))
+                .frame(width: 38, height: 38)
+                .overlay(
+                    Group {
+                        if let entry { Image(systemName: entry.icon).font(.system(size: 14)).foregroundColor(entry.color) }
+                    }
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry?.title ?? receipt.service.capitalized).font(.system(size: 13, weight: .semibold)).foregroundColor(PHColor.text)
+                Text(receipt.date.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 11)).foregroundColor(PHColor.text2)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(String(format: "₦%.0f", receipt.amountPaid)).font(.system(size: 13, weight: .bold)).foregroundColor(PHColor.text)
+                Text(statusLabel).font(.system(size: 10, weight: .semibold)).foregroundColor(statusColor)
+            }
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(14)
+        .onTapGesture(perform: onTap)
     }
 }

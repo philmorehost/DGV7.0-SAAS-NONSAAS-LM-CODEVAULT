@@ -1,10 +1,14 @@
 package com.payhub.guest.navigation
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +23,9 @@ import androidx.navigation.navArgument
 import com.payhub.guest.ui.GuestViewModel
 import com.payhub.guest.ui.checkout.CheckoutScreen
 import com.payhub.guest.ui.components.BottomNavBar
+import com.payhub.guest.ui.components.GuestHomeIndicator
+import com.payhub.guest.ui.components.GuestNavBubble
+import com.payhub.guest.ui.components.GuestNavSpringSpec
 import com.payhub.guest.ui.components.GuestTab
 import com.payhub.guest.ui.history.HistoryScreen
 import com.payhub.guest.ui.home.HomeScreen
@@ -60,13 +67,21 @@ fun GuestNavHost(viewModel: GuestViewModel) {
                 })
             }
             composable(Routes.HOME) {
+                val enabledServices by viewModel.enabledServices.collectAsState()
+                val transactionHistory by viewModel.transactionHistory.collectAsState()
                 HomeScreen(
+                    enabledServices = enabledServices,
+                    recentTransactions = transactionHistory,
                     onOpenService = { service -> navController.navigate(Routes.purchase(service)) },
                     onOpenHistory = { navController.navigate(Routes.HISTORY) },
                 )
             }
             composable(Routes.SERVICES) {
-                ServicesScreen(onOpenService = { service -> navController.navigate(Routes.purchase(service)) })
+                val enabledServices by viewModel.enabledServices.collectAsState()
+                ServicesScreen(
+                    enabledServices = enabledServices,
+                    onOpenService = { service -> navController.navigate(Routes.purchase(service)) },
+                )
             }
             composable(
                 Routes.PURCHASE,
@@ -109,8 +124,14 @@ fun GuestNavHost(viewModel: GuestViewModel) {
                     },
                 )
             }
-            composable(Routes.HISTORY) { HistoryScreen() }
-            composable(Routes.SUPPORT) { SupportScreen() }
+            composable(Routes.HISTORY) {
+                val transactionHistory by viewModel.transactionHistory.collectAsState()
+                HistoryScreen(history = transactionHistory)
+            }
+            composable(Routes.SUPPORT) {
+                val supportInfo by viewModel.supportInfo.collectAsState()
+                SupportScreen(supportInfo = supportInfo)
+            }
         }
 
         if (isTopLevel) {
@@ -120,8 +141,25 @@ fun GuestNavHost(viewModel: GuestViewModel) {
                 Routes.SUPPORT -> GuestTab.Support
                 else -> GuestTab.Home
             }
-            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 16.dp)) {
-                BottomNavBar(current = currentTab) { tab ->
+            // Home indicator sits closer to the true screen edge, independent of the floating
+            // bar's own margin — matches the mockup's separate bottom:8px vs the bar's bottom:22px.
+            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) {
+                GuestHomeIndicator()
+            }
+            BoxWithConstraints(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+            ) {
+                val tabIndex = GuestTab.values().indexOf(currentTab)
+                val tabFraction = (tabIndex + 0.5f) / GuestTab.values().size
+                val notchX by animateDpAsState(
+                    targetValue = maxWidth * tabFraction,
+                    animationSpec = GuestNavSpringSpec,
+                    label = "notchX",
+                )
+                BottomNavBar(current = currentTab, notchX = notchX) { tab ->
                     val route = when (tab) {
                         GuestTab.Home -> Routes.HOME
                         GuestTab.Services -> Routes.SERVICES
@@ -134,6 +172,7 @@ fun GuestNavHost(viewModel: GuestViewModel) {
                         restoreState = true
                     }
                 }
+                GuestNavBubble(current = currentTab, bubbleX = notchX)
             }
         }
     }

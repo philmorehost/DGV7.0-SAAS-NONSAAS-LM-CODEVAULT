@@ -17,14 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,33 +31,30 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.payhub.guest.ui.theme.CAirtime
-import com.payhub.guest.ui.theme.CBetting
-import com.payhub.guest.ui.theme.CCable
-import com.payhub.guest.ui.theme.CData
-import com.payhub.guest.ui.theme.CElectric
-import com.payhub.guest.ui.theme.CExam
+import com.payhub.guest.data.GuestServiceCatalog
+import com.payhub.guest.data.model.GuestReceipt
+import com.payhub.guest.ui.theme.CError
+import com.payhub.guest.ui.theme.CSuccess
 import com.payhub.guest.ui.theme.CText
 import com.payhub.guest.ui.theme.CText2
 import com.payhub.guest.ui.theme.PhPrimary
 import com.payhub.guest.ui.theme.PhPrimaryDark
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class QuickAction(val label: String, val icon: ImageVector, val color: Color, val onClick: () -> Unit)
 
 @Composable
 fun HomeScreen(
+    enabledServices: Map<String, Int>,
+    recentTransactions: List<GuestReceipt> = emptyList(),
     onOpenService: (String) -> Unit,
     onOpenHistory: () -> Unit,
 ) {
-    val actions = listOf(
-        QuickAction("Airtime", Icons.Filled.Phone, CAirtime) { onOpenService("airtime") },
-        QuickAction("Data", Icons.Filled.Wifi, CData) { onOpenService("data") },
-        QuickAction("Cable TV", Icons.Filled.Tv, CCable) { onOpenService("cable") },
-        QuickAction("Electric", Icons.Filled.Bolt, CElectric) { onOpenService("electricity") },
-        QuickAction("Exam Pins", Icons.Filled.School, CExam) { onOpenService("exam") },
-        QuickAction("Betting", Icons.Filled.Casino, CBetting) { onOpenService("betting") },
-        QuickAction("History", Icons.Filled.History, PhPrimary) { onOpenHistory() },
-    )
+    val actions = GuestServiceCatalog.filterEnabled(enabledServices).map { s ->
+        QuickAction(s.shortLabel, s.icon, s.color) { onOpenService(s.key) }
+    } + QuickAction("History", Icons.Filled.History, PhPrimary) { onOpenHistory() }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Row(
@@ -136,6 +127,64 @@ fun HomeScreen(
                     Text(action.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = CText, modifier = Modifier.padding(top = 6.dp))
                 }
             }
+        }
+
+        if (recentTransactions.isNotEmpty()) {
+            androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Recent Transactions", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = CText)
+                Text(
+                    "See All",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PhPrimary,
+                    modifier = Modifier.clickable { onOpenHistory() },
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 24.dp)) {
+                recentTransactions.take(3).forEach { receipt -> RecentTransactionRow(receipt, onOpenHistory) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentTransactionRow(receipt: GuestReceipt, onClick: () -> Unit) {
+    val entry = GuestServiceCatalog.ALL.find { it.key == receipt.service }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(38.dp).background(entry?.bg ?: CText2.copy(alpha = 0.12f), RoundedCornerShape(11.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            entry?.let { Icon(it.icon, contentDescription = null, tint = it.color, modifier = Modifier.size(18.dp)) }
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(entry?.title ?: receipt.service.replaceFirstChar(Char::uppercase), fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = CText)
+            Text(
+                SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(receipt.dateMillis)),
+                fontSize = 11.sp,
+                color = CText2,
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text("₦${"%,.0f".format(receipt.amountPaid)}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CText)
+            Text(
+                if (receipt.status == "success") "Successful" else if (receipt.status == "pending") "Pending" else "Failed",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (receipt.status == "success") CSuccess else if (receipt.status == "pending") Color(0xFFF59E0B) else CError,
+            )
         }
     }
 }

@@ -9,6 +9,36 @@ final class GuestViewModel: ObservableObject {
 
     private let api = GuestAPIService.shared
 
+    init() {
+        Task { await loadSiteInfo() }
+        transactionHistory = GuestHistoryStore.load()
+    }
+
+    // ---------- Local transaction history (on-device only — no server-side guest history) ----------
+
+    @Published var transactionHistory: [GuestReceipt] = []
+
+    /// Idempotent per reference — safe to call every time the Receipt screen appears.
+    func saveReceipt(_ receipt: GuestReceipt) {
+        transactionHistory = GuestHistoryStore.save(receipt)
+    }
+
+    // ---------- Site info / Service Control Centre honoring ----------
+
+    // A service key absent here is treated as enabled (see GuestServiceCatalog.filterEnabled) —
+    // start with an empty dict rather than nil so screens render the full catalog immediately
+    // and only narrow down once (if ever) the admin has actually disabled something.
+    @Published var enabledServices: [String: Int] = [:]
+    @Published var supportInfo: GuestSupportInfo? = nil
+
+    private func loadSiteInfo() async {
+        if case .success(let r) = await api.getSiteInfo() {
+            if let services = r.data?.services { enabledServices = services }
+            supportInfo = r.data?.support
+        }
+        // On failure, keep the empty-dict default (every service stays visible).
+    }
+
     // ---------- Navigation (mirrors the Android app's NavHost with a simple stack) ----------
 
     enum Screen: Equatable {

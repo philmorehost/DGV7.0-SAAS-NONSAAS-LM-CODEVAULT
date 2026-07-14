@@ -60,8 +60,10 @@ struct GuestOrderStatusResponse: Codable {
 
 /// Local-only receipt snapshot used for the Receipt screen and PDF/image export.
 /// Guest Mode stores no server-side transaction history — this is the only durable
-/// copy of a purchase, generated client-side right after payment.
-struct GuestReceipt {
+/// copy of a purchase, generated client-side right after payment. Codable so
+/// GuestHistoryStore can cache a list of these on-device (UserDefaults, JSON-encoded).
+struct GuestReceipt: Codable, Identifiable {
+    var id: String { reference }
     let reference: String
     let service: String
     let recipient: String

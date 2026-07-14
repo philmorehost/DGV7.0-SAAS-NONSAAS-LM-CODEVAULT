@@ -53,6 +53,10 @@ final class GuestAPIService {
         await get(path: "web/guest-api/status.php", query: ["reference": reference])
     }
 
+    func getSiteInfo() async -> ApiResult<SiteInfoResponse> {
+        await get(path: "web/guest-api/site-info.php", query: [:])
+    }
+
     // MARK: - Core request helpers
 
     private func get<T: Decodable>(path: String, query: [String: String]) async -> ApiResult<T> {

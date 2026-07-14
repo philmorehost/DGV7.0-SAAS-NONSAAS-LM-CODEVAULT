@@ -55,6 +55,8 @@ private struct ReceiptCard: View {
     @State private var showEmailForm = false
     @State private var email = ""
     @State private var shareItems: [Any]? = nil
+    @State private var showMailComposer = false
+    @State private var pdfForEmail: URL? = nil
 
     private var receipt: GuestReceipt {
         let pending = viewModel.pendingTransaction
@@ -91,6 +93,7 @@ private struct ReceiptCard: View {
         .padding(24)
         .background(Color.white)
         .cornerRadius(24)
+        .onAppear { viewModel.saveReceipt(receipt) }
 
         HStack(spacing: 8) {
             actionButton("Download PDF") {
@@ -102,7 +105,15 @@ private struct ReceiptCard: View {
         }
         .padding(.top, 16)
         HStack(spacing: 8) {
-            actionButton("Email Receipt") { showEmailForm.toggle() }
+            actionButton(MailComposeView.canSendMail ? "Email Receipt" : "Share Receipt") {
+                if MailComposeView.canSendMail {
+                    showEmailForm.toggle()
+                } else {
+                    // No Mail account configured on this device — the composer can't even
+                    // present, so fall back to the existing share sheet rather than a dead button.
+                    if let url = ReceiptRenderer.savePdfToCache(receipt) { shareItems = [url] }
+                }
+            }
             actionButton("WhatsApp", bg: Color(hex: 0x25D366), fg: .white) {
                 if let url = ReceiptRenderer.saveImageToCache(receipt) { shareItems = [url] }
             }
@@ -116,8 +127,9 @@ private struct ReceiptCard: View {
                     .textInputAutocapitalization(.never)
                     .textFieldStyle(.roundedBorder)
                 Button("Send") {
-                    if !email.isEmpty, let url = ReceiptRenderer.savePdfToCache(receipt) {
-                        shareItems = [url]
+                    if let url = ReceiptRenderer.savePdfToCache(receipt) {
+                        pdfForEmail = url
+                        showMailComposer = true
                     }
                 }
                 .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
@@ -135,6 +147,17 @@ private struct ReceiptCard: View {
             .padding(.bottom, 40)
             .sheet(isPresented: Binding(get: { shareItems != nil }, set: { if !$0 { shareItems = nil } })) {
                 if let shareItems { ShareSheet(items: shareItems) }
+            }
+            .sheet(isPresented: $showMailComposer) {
+                if let pdfForEmail {
+                    MailComposeView(
+                        recipient: email,
+                        subject: "Your PayHub Guest Receipt",
+                        body: "Thank you for using PayHub Guest!\n\nYour receipt for reference \(receipt.reference) is attached.",
+                        attachmentURL: pdfForEmail,
+                        onFinish: { showMailComposer = false }
+                    )
+                }
             }
     }
 

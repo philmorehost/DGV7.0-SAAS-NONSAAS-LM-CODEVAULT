@@ -9,6 +9,7 @@ import com.payhub.guest.data.model.ElectricCatalogResponse
 import com.payhub.guest.data.model.ExamCatalogResponse
 import com.payhub.guest.data.model.GuestOrderStatusResponse
 import com.payhub.guest.data.model.NetworkDetectResponse
+import com.payhub.guest.data.model.SiteInfoResponse
 import com.payhub.guest.data.model.VerifyCustomerResponse
 import retrofit2.Response
 import retrofit2.http.Body
@@ -48,4 +49,7 @@ interface GuestApiService {
 
     @GET("web/guest-api/status.php")
     suspend fun getOrderStatus(@Query("reference") reference: String): Response<GuestOrderStatusResponse>
+
+    @GET("web/guest-api/site-info.php")
+    suspend fun getSiteInfo(): Response<SiteInfoResponse>
 }

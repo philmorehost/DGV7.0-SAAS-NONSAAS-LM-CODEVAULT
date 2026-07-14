@@ -10,6 +10,7 @@ import com.payhub.guest.data.model.ElectricCatalogResponse
 import com.payhub.guest.data.model.ExamCatalogResponse
 import com.payhub.guest.data.model.GuestOrderStatusResponse
 import com.payhub.guest.data.model.NetworkDetectResponse
+import com.payhub.guest.data.model.SiteInfoResponse
 import com.payhub.guest.data.model.VerifyCustomerResponse
 import retrofit2.Response
 import java.io.IOException
@@ -34,6 +35,8 @@ class GuestRepository {
     suspend fun initCheckout(body: Map<String, Any?>) = safeCall { api.initCheckout(body) }
 
     suspend fun getOrderStatus(reference: String) = safeCall { api.getOrderStatus(reference) }
+
+    suspend fun getSiteInfo() = safeCall { api.getSiteInfo() }
 
     private suspend fun <T> safeCall(block: suspend () -> Response<T>): ApiResult<T> {
         return try {

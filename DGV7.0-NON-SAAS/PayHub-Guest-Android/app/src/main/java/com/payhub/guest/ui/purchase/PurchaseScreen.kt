@@ -95,6 +95,33 @@ fun PurchaseScreen(service: String, viewModel: GuestViewModel, onBack: () -> Uni
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
+            val catalogError by viewModel.catalogError.collectAsState()
+            if (catalogError != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .background(CError.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        catalogError ?: "Couldn't load plans. Please try again.",
+                        color = CError,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "Retry",
+                        color = CError,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clickable { viewModel.loadCatalog(service) }
+                            .padding(start = 12.dp),
+                    )
+                }
+            }
             when (service) {
                 "airtime" -> AirtimeForm(viewModel)
                 "data" -> DataForm(viewModel)

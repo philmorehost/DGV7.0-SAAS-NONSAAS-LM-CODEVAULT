@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.payhub.guest.data.model.GuestSupportInfo
 import com.payhub.guest.ui.theme.CText
 import com.payhub.guest.ui.theme.CText2
 
@@ -41,8 +42,11 @@ private val FAQS = listOf(
 )
 
 @Composable
-fun SupportScreen() {
+fun SupportScreen(supportInfo: GuestSupportInfo? = null) {
     val context = LocalContext.current
+    // Falls back to placeholder contact info only if site-info.php hasn't returned real values yet.
+    val whatsappPhone = supportInfo?.phone?.takeIf { it.isNotBlank() } ?: "2348000000000"
+    val supportEmail = supportInfo?.email?.takeIf { it.isNotBlank() } ?: "support@payhub.com.ng"
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -63,7 +67,7 @@ fun SupportScreen() {
                     .fillMaxWidth()
                     .background(Color(0xFF25D366), RoundedCornerShape(14.dp))
                     .clickable {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/2348000000000"))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$whatsappPhone"))
                         context.startActivity(intent)
                     }
                     .padding(vertical = 14.dp),
@@ -77,7 +81,7 @@ fun SupportScreen() {
                     .fillMaxWidth()
                     .background(Color(0xFFF1F5F9), RoundedCornerShape(14.dp))
                     .clickable {
-                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:support@payhub.com.ng"))
+                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$supportEmail"))
                         context.startActivity(intent)
                     }
                     .padding(vertical = 14.dp),

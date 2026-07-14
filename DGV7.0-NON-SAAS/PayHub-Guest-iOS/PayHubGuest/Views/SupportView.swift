@@ -13,6 +13,18 @@ private let FAQS: [Faq] = [
 ]
 
 struct SupportView: View {
+    var supportInfo: GuestSupportInfo? = nil
+
+    // Falls back to placeholder contact info only if site-info.php hasn't returned real values yet.
+    private var whatsappPhone: String {
+        let phone = supportInfo?.phone ?? ""
+        return phone.isEmpty ? "2348000000000" : phone
+    }
+    private var supportEmail: String {
+        let email = supportInfo?.email ?? ""
+        return email.isEmpty ? "support@payhub.com.ng" : email
+    }
+
     var body: some View {
         ScrollView {
             Text("Support").font(.system(size: 20, weight: .bold)).padding(.vertical, 20)
@@ -21,7 +33,7 @@ struct SupportView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Need help?").font(.system(size: 15, weight: .bold))
                 Button {
-                    if let url = URL(string: "https://wa.me/2348000000000") {
+                    if let url = URL(string: "https://wa.me/\(whatsappPhone)") {
                         UIApplication.shared.open(url)
                     }
                 } label: {
@@ -31,7 +43,7 @@ struct SupportView: View {
                 .background(Color(hex: 0x25D366)).cornerRadius(14)
 
                 Button {
-                    if let url = URL(string: "mailto:support@payhub.com.ng") {
+                    if let url = URL(string: "mailto:\(supportEmail)") {
                         UIApplication.shared.open(url)
                     }
                 } label: {

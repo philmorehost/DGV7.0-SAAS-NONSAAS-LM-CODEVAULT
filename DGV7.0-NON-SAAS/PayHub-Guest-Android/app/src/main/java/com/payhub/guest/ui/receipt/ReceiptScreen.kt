@@ -112,6 +112,8 @@ private fun ReceiptCard(order: GuestOrderStatusResponse, viewModel: GuestViewMod
             tokenUnit = order.tokenUnit,
         )
     }
+    LaunchedEffect(receipt.reference) { viewModel.saveReceipt(receipt) }
+
     var showEmailForm by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
 

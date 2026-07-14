@@ -1,12 +1,16 @@
 package com.payhub.guest.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.payhub.guest.data.GuestHistoryStore
 import com.payhub.guest.data.model.BettingProvider
 import com.payhub.guest.data.model.CablePlan
 import com.payhub.guest.data.model.DataPlan
 import com.payhub.guest.data.model.ExamPlan
 import com.payhub.guest.data.model.GuestOrderStatusResponse
+import com.payhub.guest.data.model.GuestReceipt
+import com.payhub.guest.data.model.GuestSupportInfo
 import com.payhub.guest.data.repository.ApiResult
 import com.payhub.guest.data.repository.GuestRepository
 import kotlinx.coroutines.delay
@@ -19,10 +23,46 @@ import kotlinx.coroutines.launch
  * Single shared ViewModel for the whole guest flow (Home -> Purchase -> Checkout -> Receipt).
  * The app has no login/session, so one activity-scoped ViewModel holding "current transaction"
  * state is simpler and safer here than threading arguments through five nav destinations.
+ *
+ * AndroidViewModel (not plain ViewModel) so transaction history can be cached on-device via
+ * GuestHistoryStore — there is no server-side history for an anonymous guest to fetch instead.
  */
-class GuestViewModel : ViewModel() {
+class GuestViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = GuestRepository()
+
+    // ---------- Local transaction history (on-device only — no server-side guest history) ----------
+
+    private val _transactionHistory = MutableStateFlow(GuestHistoryStore.load(application))
+    val transactionHistory: StateFlow<List<GuestReceipt>> = _transactionHistory.asStateFlow()
+
+    /** Idempotent per reference — safe to call every time the Receipt screen recomposes. */
+    fun saveReceipt(receipt: GuestReceipt) {
+        _transactionHistory.value = GuestHistoryStore.save(getApplication(), receipt)
+    }
+
+    // ---------- Site info / Service Control Centre honoring ----------
+
+    // A service key absent here is treated as enabled (see GuestServiceCatalog.filterEnabled) —
+    // start with an empty map rather than null so screens render the full catalog immediately
+    // and only narrow down once (if ever) the admin has actually disabled something.
+    private val _enabledServices = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val enabledServices: StateFlow<Map<String, Int>> = _enabledServices.asStateFlow()
+
+    private val _supportInfo = MutableStateFlow<GuestSupportInfo?>(null)
+    val supportInfo: StateFlow<GuestSupportInfo?> = _supportInfo.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            when (val r = repo.getSiteInfo()) {
+                is ApiResult.Success -> {
+                    r.data.data?.services?.let { _enabledServices.value = it }
+                    _supportInfo.value = r.data.data?.support
+                }
+                is ApiResult.Error -> {} // Keep the empty-map default (every service stays visible).
+            }
+        }
+    }
 
     // ---------- Catalog (fetched once per service, cached for the session) ----------
 
@@ -47,36 +87,42 @@ class GuestViewModel : ViewModel() {
     private val _bettingProviders = MutableStateFlow<List<BettingProvider>>(emptyList())
     val bettingProviders: StateFlow<List<BettingProvider>> = _bettingProviders.asStateFlow()
 
+    // Surfaced so the Purchase screen can show a real error + retry button instead of a
+    // silently-empty plan list when a catalog fetch fails.
+    private val _catalogError = MutableStateFlow<String?>(null)
+    val catalogError: StateFlow<String?> = _catalogError.asStateFlow()
+
     fun loadCatalog(service: String) {
+        _catalogError.value = null
         viewModelScope.launch {
             when (service) {
                 "airtime" -> when (val r = repo.getAirtimeCatalog()) {
                     is ApiResult.Success -> _airtimeNetworks.value = (r.data.airtimeVtu ?: emptyMap()).map { (label, info) ->
                         AirtimeNetwork(label.lowercase(), label, info.discountPercent)
                     }
-                    is ApiResult.Error -> {}
+                    is ApiResult.Error -> _catalogError.value = r.message
                 }
                 "data" -> when (val r = repo.getDataCatalog()) {
                     is ApiResult.Success -> _dataNetworks.value = r.data.mobileNetwork ?: emptyMap()
-                    is ApiResult.Error -> {}
+                    is ApiResult.Error -> _catalogError.value = r.message
                 }
                 "cable" -> when (val r = repo.getCableCatalog()) {
                     is ApiResult.Success -> _cableProviders.value = r.data.cableSubscription ?: emptyMap()
-                    is ApiResult.Error -> {}
+                    is ApiResult.Error -> _catalogError.value = r.message
                 }
                 "electricity" -> when (val r = repo.getElectricCatalog()) {
                     is ApiResult.Success -> _electricProviders.value = (r.data.electricPayment ?: emptyMap()).map { (label, info) ->
                         ElectricProvider(label.lowercase(), label, info.discountPercent)
                     }
-                    is ApiResult.Error -> {}
+                    is ApiResult.Error -> _catalogError.value = r.message
                 }
                 "exam" -> when (val r = repo.getExamCatalog()) {
                     is ApiResult.Success -> _examPlans.value = r.data.examPin ?: emptyMap()
-                    is ApiResult.Error -> {}
+                    is ApiResult.Error -> _catalogError.value = r.message
                 }
                 "betting" -> when (val r = repo.getBettingCatalog()) {
                     is ApiResult.Success -> _bettingProviders.value = r.data.bettingProviders ?: emptyList()
-                    is ApiResult.Error -> {}
+                    is ApiResult.Error -> _catalogError.value = r.message
                 }
             }
         }

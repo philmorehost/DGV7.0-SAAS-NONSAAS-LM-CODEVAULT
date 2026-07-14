@@ -10,10 +10,28 @@ if (isset($_POST['update-api'])) {
     $api_id = (int)$_POST['api_id'];
     $api_key = bc_sanitize($_POST['api_key'] ?? '');
     $status = (int)($_POST['status'] ?? 0) === 1 ? 1 : 0;
-    
+    $apply_to_all_matching = isset($_POST['apply_to_all_matching']) && $_POST['apply_to_all_matching'] == '1';
+
     $api_key_esc = mysqli_real_escape_string($connection_server, $api_key);
-    mysqli_query($connection_server, "UPDATE sas_apis SET api_key='$api_key_esc', status='$status' WHERE id='$api_id' AND vendor_id='$esc_vid'");
-    $_SESSION['product_purchase_response'] = "✅ API Gateway updated successfully!";
+
+    if ($apply_to_all_matching) {
+        // A single provider (e.g. HDKDATA.COM) is often configured under several service types
+        // (SME Data, CG Data, Shared Data...) with the SAME key. Instead of editing each one
+        // individually, update every sas_apis row for this vendor sharing this base URL at once.
+        $get_base_url_q = mysqli_query($connection_server, "SELECT api_base_url FROM sas_apis WHERE id='$api_id' AND vendor_id='$esc_vid' LIMIT 1");
+        $get_base_url_row = $get_base_url_q ? mysqli_fetch_assoc($get_base_url_q) : null;
+        if ($get_base_url_row) {
+            $base_url_esc = mysqli_real_escape_string($connection_server, $get_base_url_row['api_base_url']);
+            mysqli_query($connection_server, "UPDATE sas_apis SET api_key='$api_key_esc', status='$status' WHERE vendor_id='$esc_vid' AND api_base_url='$base_url_esc'");
+            $affected = mysqli_affected_rows($connection_server);
+            $_SESSION['product_purchase_response'] = "✅ Updated $affected API Gateway(s) sharing base URL '" . htmlspecialchars($get_base_url_row['api_base_url']) . "'!";
+        } else {
+            $_SESSION['product_purchase_response'] = "❌ Gateway not found.";
+        }
+    } else {
+        mysqli_query($connection_server, "UPDATE sas_apis SET api_key='$api_key_esc', status='$status' WHERE id='$api_id' AND vendor_id='$esc_vid'");
+        $_SESSION['product_purchase_response'] = "✅ API Gateway updated successfully!";
+    }
     header("Location: MarketPlace.php");
     exit();
 }
@@ -28,7 +46,7 @@ if (isset($_POST['add-api'])) {
     
     if (!empty($api_base_url)) {
         $api_type_esc = mysqli_real_escape_string($connection_server, $api_type);
-        $api_url_esc = mysqli_real_escape_string($connection_server, str_replace(["http://", "https://"], "", $api_base_url));
+        $api_url_esc = mysqli_real_escape_string($connection_server, strtolower(str_replace(["http://", "https://"], "", $api_base_url)));
         $api_key_esc = mysqli_real_escape_string($connection_server, $api_key);
         
         mysqli_query($connection_server, "INSERT INTO sas_apis (vendor_id, api_type, api_base_url, api_key, status) VALUES ('$esc_vid', '$api_type_esc', '$api_url_esc', '$api_key_esc', '$status')");
@@ -64,6 +82,16 @@ if (!empty($type_filter)) {
 }
 
 $apis_q = mysqli_query($connection_server, "SELECT * FROM sas_apis $where_clause ORDER BY api_type ASC, api_base_url ASC");
+
+// How many total entries (across ALL service types, ignoring the current search/type filter) share
+// each base URL — used to surface the "apply to all matching" option only where it's meaningful.
+$base_url_counts = [];
+$count_q = mysqli_query($connection_server, "SELECT api_base_url, COUNT(*) as cnt FROM sas_apis WHERE vendor_id='$esc_vid' GROUP BY api_base_url");
+if ($count_q) {
+    while ($count_row = mysqli_fetch_assoc($count_q)) {
+        $base_url_counts[$count_row['api_base_url']] = (int)$count_row['cnt'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -228,14 +256,15 @@ $apis_q = mysqli_query($connection_server, "SELECT * FROM sas_apis $where_clause
                         </div>
 
                         <div class="mt-auto pt-3 d-flex gap-2">
-                            <button class="btn btn-outline-dark rounded-pill px-3 py-2 btn-sm w-100 fw-bold" 
-                                    data-bs-toggle="modal" 
+                            <button class="btn btn-outline-dark rounded-pill px-3 py-2 btn-sm w-100 fw-bold"
+                                    data-bs-toggle="modal"
                                     data-bs-target="#editApiModal"
                                     data-id="<?php echo $api['id']; ?>"
                                     data-url="<?php echo $provider; ?>"
                                     data-type="<?php echo $type; ?>"
                                     data-key="<?php echo $key; ?>"
-                                    data-status="<?php echo $status; ?>">
+                                    data-status="<?php echo $status; ?>"
+                                    data-count="<?php echo $base_url_counts[$api['api_base_url']] ?? 1; ?>">
                                 <i class="bi bi-pencil-square me-1"></i>Configure
                             </button>
                             <a href="MarketPlace.php?delete-api=<?php echo $api['id']; ?>" 
@@ -285,6 +314,12 @@ $apis_q = mysqli_query($connection_server, "SELECT * FROM sas_apis $where_clause
                         <div class="form-check form-switch mt-4">
                             <input class="form-check-input" type="checkbox" name="status" value="1" id="edit_api_status">
                             <label class="form-check-label fw-bold text-dark" for="edit_api_status">Enable this Gateway Provider</label>
+                        </div>
+                        <div class="form-check mt-3 p-3 rounded-3 bg-light d-none" id="edit_apply_all_wrapper">
+                            <input class="form-check-input" type="checkbox" name="apply_to_all_matching" value="1" id="edit_apply_all">
+                            <label class="form-check-label small text-dark" for="edit_apply_all">
+                                Apply this Key & Status to <b><span id="edit_apply_all_count"></span> other entries</b> that use this same Base URL (e.g. across SME Data, CG Data, Shared Data, etc.)
+                            </label>
                         </div>
                     </div>
                     <div class="modal-footer border-0 p-4 pt-0">
@@ -351,12 +386,23 @@ $apis_q = mysqli_query($connection_server, "SELECT * FROM sas_apis $where_clause
                 const type = button.getAttribute('data-type');
                 const key = button.getAttribute('data-key');
                 const status = parseInt(button.getAttribute('data-status'));
+                const count = parseInt(button.getAttribute('data-count')) || 1;
 
                 document.getElementById('edit_api_id').value = id;
                 document.getElementById('edit_api_url').value = 'https://' + url;
                 document.getElementById('edit_api_type').value = type.toUpperCase().replace('_', ' ').replace('-', ' ');
                 document.getElementById('edit_api_key').value = key;
                 document.getElementById('edit_api_status').checked = (status === 1);
+
+                const applyAllWrapper = document.getElementById('edit_apply_all_wrapper');
+                const applyAllCheckbox = document.getElementById('edit_apply_all');
+                applyAllCheckbox.checked = false;
+                if (count > 1) {
+                    document.getElementById('edit_apply_all_count').textContent = (count - 1);
+                    applyAllWrapper.classList.remove('d-none');
+                } else {
+                    applyAllWrapper.classList.add('d-none');
+                }
             });
         }
     </script>

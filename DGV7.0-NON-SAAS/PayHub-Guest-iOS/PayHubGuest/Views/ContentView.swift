@@ -51,13 +51,19 @@ struct ContentView: View {
                     viewModel.setTab(.home)
                 }
             case .history:
-                HistoryView()
+                HistoryView(history: viewModel.transactionHistory)
             case .support:
-                SupportView()
+                SupportView(supportInfo: viewModel.supportInfo)
             }
 
             if isTopLevel {
-                BottomNavBar(current: currentTab) { tab in
+                // Home indicator sits closer to the true screen edge, independent of the
+                // floating bar's own margin — matches the mockup's separate bottom:8px vs the
+                // bar's bottom:22px.
+                GuestHomeIndicator()
+                    .padding(.bottom, 8)
+
+                GuestBottomNavArea(current: currentTab) { tab in
                     viewModel.setTab(tab.screen)
                 }
                 .padding(.horizontal, 20)
