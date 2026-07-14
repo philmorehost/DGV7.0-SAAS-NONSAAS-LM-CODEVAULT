@@ -182,12 +182,12 @@
                                     <label class="form-label small fw-bold">Category</label>
                                     <select name="category" class="form-select">
                                         <option value="">All Categories</option>
-                                        <option value="airtime" <?php echo ($_GET['category'] == 'airtime') ? 'selected' : ''; ?>>Airtime</option>
-                                        <option value="data" <?php echo ($_GET['category'] == 'data') ? 'selected' : ''; ?>>Data</option>
-                                        <option value="cable" <?php echo ($_GET['category'] == 'cable') ? 'selected' : ''; ?>>Cable TV</option>
-                                        <option value="electric" <?php echo ($_GET['category'] == 'electric') ? 'selected' : ''; ?>>Electricity</option>
-                                        <option value="wallet-funding" <?php echo ($_GET['category'] == 'wallet-funding') ? 'selected' : ''; ?>>Funding</option>
-                                        <option value="transfer" <?php echo ($_GET['category'] == 'transfer') ? 'selected' : ''; ?>>Transfers</option>
+                                        <option value="airtime" <?php echo (($_GET['category'] ?? '') == 'airtime') ? 'selected' : ''; ?>>Airtime</option>
+                                        <option value="data" <?php echo (($_GET['category'] ?? '') == 'data') ? 'selected' : ''; ?>>Data</option>
+                                        <option value="cable" <?php echo (($_GET['category'] ?? '') == 'cable') ? 'selected' : ''; ?>>Cable TV</option>
+                                        <option value="electric" <?php echo (($_GET['category'] ?? '') == 'electric') ? 'selected' : ''; ?>>Electricity</option>
+                                        <option value="wallet-funding" <?php echo (($_GET['category'] ?? '') == 'wallet-funding') ? 'selected' : ''; ?>>Funding</option>
+                                        <option value="transfer" <?php echo (($_GET['category'] ?? '') == 'transfer') ? 'selected' : ''; ?>>Transfers</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2">

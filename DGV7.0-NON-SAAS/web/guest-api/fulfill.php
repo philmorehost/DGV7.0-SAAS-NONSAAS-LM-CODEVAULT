@@ -77,12 +77,27 @@ function guest_requery_pending_order($order) {
     if (!$api_detail || empty($api_detail['api_key'])) return;
 
     $gw_name = guest_gateway_filename('requery', $api_detail['api_type'], $api_detail['api_base_url']);
-    $res = guest_run_gateway('requery', $gw_name, [
-        'api_detail' => $api_detail,
-        'get_api_reference_id' => $order['api_reference'],
-        'reference' => $reference,
-        'get_logged_user_details' => ['vendor_id' => $order['vendor_id'], 'username' => 'guest:' . $order['identity']],
-    ]);
+    try {
+        $res = guest_run_gateway('requery', $gw_name, [
+            'api_detail' => $api_detail,
+            // The requery gateway files were written only against the authenticated flow and
+            // call getTransaction($requery_reference, ...) directly rather than accepting
+            // injected data — getTransaction() now falls back to sas_guest_orders (func/bc-func.php)
+            // when the reference isn't in sas_transactions, so this must be OUR reference, not
+            // the provider's api_reference.
+            'requery_reference' => $reference,
+            'get_api_reference_id' => $order['api_reference'],
+            'reference' => $reference,
+            'get_logged_user_details' => ['vendor_id' => $order['vendor_id'], 'username' => 'guest:' . $order['identity']],
+        ]);
+    } catch (\Throwable $e) {
+        // A bug in any one provider's gateway file (confirmed to happen — see the
+        // airtime-localserver.php $curl_request crash this was built to survive) must never
+        // take down the app's whole status-poll response with a fatal 500. Leave the order
+        // exactly as it was; the next throttled poll tries again.
+        bc_log_security_event('GUEST_REQUERY_GATEWAY_ERROR', $order['service_type'], $reference, $e->getMessage());
+        return;
+    }
     $api_response = $res['api_response'] ? strtolower($res['api_response']) : $res['api_response'];
 
     if ($api_response === 'successful') {
@@ -224,8 +239,19 @@ function guest_fulfill_order($order) {
     }
 
     $gw_name = guest_gateway_filename('purchase', $type_prefix, $api_base_url);
-    $res = guest_run_gateway('purchase', $gw_name, $vars);
-    $api_response = $res['api_response'] ? strtolower($res['api_response']) : $res['api_response'];
+    try {
+        $res = guest_run_gateway('purchase', $gw_name, $vars);
+        $api_response = $res['api_response'] ? strtolower($res['api_response']) : $res['api_response'];
+    } catch (\Throwable $e) {
+        // A bug in any one provider's gateway file must never crash the whole checkout/poll
+        // response with a fatal 500 (confirmed to happen — see the airtime-localserver.php
+        // requery crash this pattern was built to survive). Payment was already captured by
+        // PayHub at this point, so treat this exactly like a failed gateway response: no
+        // wallet to auto-refund into, flag the vendor for a manual PayHub refund.
+        bc_log_security_event('GUEST_FULFILLMENT_GATEWAY_ERROR', $service, $reference, $e->getMessage());
+        $res = ['api_response' => 'failed', 'api_response_description' => 'Gateway error', 'api_response_reference' => null];
+        $api_response = 'failed';
+    }
 
     if ($api_response === 'successful') {
         guest_update_order($reference, 'api_reference', $res['api_response_reference']);

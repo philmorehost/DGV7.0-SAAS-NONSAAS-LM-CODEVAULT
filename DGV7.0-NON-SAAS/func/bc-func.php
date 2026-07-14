@@ -1154,6 +1154,19 @@ function getTransaction($reference, $column_name)
 			$get_transaction_column = mysqli_fetch_array($select_transaction);
 			return $get_transaction_column[$column_name];
 		}
+
+		// Guest Mode orders (web/guest-api/*) live in sas_guest_orders, a differently-shaped
+		// table — but func/api-gateway/requery/*.php files were only ever written against
+		// sas_transactions and call this exact helper directly (they were never designed to
+		// accept injected variables the way the purchase-time gateway files are), so alias the
+		// guest schema onto the columns those files actually read rather than duplicating
+		// requery logic per provider. identity (recipient phone/IUC/meter) -> product_unique_id
+		// is the one real name difference; every other column name already matches.
+		$select_guest_order = mysqli_query($connection_server, "SELECT *, identity AS product_unique_id FROM sas_guest_orders WHERE reference='" . $reference . "' LIMIT 1");
+		if (($select_guest_order == true) && (mysqli_num_rows($select_guest_order) == 1)) {
+			$get_guest_order_column = mysqli_fetch_array($select_guest_order);
+			return $get_guest_order_column[$column_name] ?? false;
+		}
 	}
 	return false;
 }
