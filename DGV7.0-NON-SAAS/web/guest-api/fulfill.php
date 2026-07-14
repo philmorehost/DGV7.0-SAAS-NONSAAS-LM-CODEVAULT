@@ -14,6 +14,49 @@
  * Requires guest-bootstrap.php to already be included by the caller.
  */
 
+/**
+ * Independently verifies a still-pending order against PayHub and, if genuinely paid, atomically
+ * claims + fulfills it. This is what guest-webhook.php calls when PayHub's server-to-server
+ * webhook arrives — but a guest checkout should not be a single point of failure on PayHub's
+ * webhook actually being registered/reachable for this merchant. status.php calls this exact
+ * same function on every poll too, so the app's own "confirming your payment" screen drives
+ * completion by itself if the webhook never shows up. guest_claim_order_for_payment() is an
+ * atomic compare-and-swap, so it's safe for the webhook and several concurrent polls to all
+ * call this for the same reference — only one ever wins the claim and fulfills.
+ */
+function guest_attempt_paid_fulfillment($reference) {
+    $order = guest_get_order($reference);
+    if (!$order || (int)$order['status'] !== GUEST_STATUS_PENDING_PAYMENT) {
+        return;
+    }
+
+    $vendor_id = $order['vendor_id'];
+    $verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($reference), "", $vendor_id, false);
+    $v_data = json_decode($verify_res, true);
+    $verified_tx = null;
+    if (($v_data['status'] ?? "") == "success") {
+        $tx_raw = json_decode($v_data['json_result'], true);
+        $tx_data = $tx_raw['data'] ?? $tx_raw;
+        $tx_status = strtolower($tx_data['status'] ?? "");
+        if ($tx_status == "success" || $tx_status == "successful" || ($tx_raw['status'] ?? false) === true) {
+            $verified_tx = $tx_data;
+        }
+    }
+    if (!$verified_tx) return;
+
+    $verified_amount = (float)($verified_tx['amount'] ?? 0);
+    if ($verified_amount <= 0 || abs($verified_amount - (float)$order['discounted_amount']) > 0.5) {
+        bc_log_security_event('SECURITY', 'guest_status_verify', $reference, "Amount mismatch: quoted {$order['discounted_amount']}, paid $verified_amount");
+        return;
+    }
+
+    if (!guest_claim_order_for_payment($reference)) return;
+    guest_update_order($reference, 'payment_reference', $verified_tx['reference'] ?? $reference);
+
+    $order = guest_get_order($reference);
+    guest_fulfill_order($order);
+}
+
 function guest_fulfill_order($order) {
     global $connection_server;
 

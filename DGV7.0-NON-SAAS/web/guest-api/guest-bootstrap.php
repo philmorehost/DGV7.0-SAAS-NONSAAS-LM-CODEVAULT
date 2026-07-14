@@ -11,6 +11,13 @@
  * never a username, since none exists in this flow.
  */
 
+// Every response here must be pure JSON. A single stray PHP notice/warning printed inline
+// (the host's display_errors default) breaks JSON parsing for every client and leaks server
+// file paths — this happened in production (an undefined-index warning corrupted the Data/
+// Cable/Exam catalog responses). Errors are still logged, just never echoed into the body.
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, X-App-Source");

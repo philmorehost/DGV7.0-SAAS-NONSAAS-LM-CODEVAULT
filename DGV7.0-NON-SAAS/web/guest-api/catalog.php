@@ -76,7 +76,7 @@ switch ($service) {
                     while ($plan_details = mysqli_fetch_assoc($price_query)) {
                         $data_type_label = ucwords(str_replace("-", " ", $type_key));
                         $plans_response["MOBILE_NETWORK"][$network_label][] = [
-                            "ID" => $plan_details["id"],
+                            "ID" => $plan_details["val_1"] ?? '',
                             "PRODUCT_CODE" => $plan_details["val_1"],
                             "PRODUCT_NAME" => !empty($plan_details["val_4"]) ? $plan_details["val_4"] : str_replace("_", " ", $plan_details["val_1"]),
                             "DATA_TYPE" => $data_type_label,
@@ -105,7 +105,7 @@ switch ($service) {
                     $price_query = mysqli_query($connection_server, "SELECT * FROM $price_table WHERE vendor_id='" . (int)$vendor_id . "' && api_id='" . (int)$resolved['api_detail']['id'] . "' && product_id='" . $product["id"] . "'");
                     while ($plan_details = mysqli_fetch_assoc($price_query)) {
                         $plans_response["CABLE_SUBSCRIPTION"][$cable_label][] = [
-                            "ID" => $plan_details["id"],
+                            "ID" => $plan_details["val_1"] ?? '',
                             "PACKAGE" => $plan_details["val_1"],
                             "AMOUNT" => $plan_details["val_2"]
                         ];
@@ -152,7 +152,7 @@ switch ($service) {
                     $price_query = mysqli_query($connection_server, "SELECT * FROM $price_table WHERE vendor_id='" . (int)$vendor_id . "' && api_id='" . (int)$resolved['api_detail']['id'] . "' && product_id='" . $product["id"] . "'");
                     while ($plan_details = mysqli_fetch_assoc($price_query)) {
                         $plans_response["EXAM_PIN"][$exam_label][] = [
-                            "ID" => $plan_details["id"],
+                            "ID" => $plan_details["val_1"] ?? '',
                             "EXAM_TYPE" => $plan_details["val_1"],
                             "AMOUNT" => $plan_details["val_2"]
                         ];

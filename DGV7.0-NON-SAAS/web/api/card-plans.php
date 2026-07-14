@@ -66,7 +66,7 @@ if ($select_vendor_table) {
                                 $card_type_label = ucwords($type_key);
 
                                 $plans_response["CARD_PRINTING"][$network_label][] = [
-                                    "ID" => $plan_details["id"],
+                                    "ID" => $plan_details["val_1"] ?? '',
                                     "PRODUCT_CODE" => $plan_details["val_1"],
                                     "PRODUCT_NAME" => str_replace("_", " ", $plan_details["val_1"]),
                                     "CARD_TYPE" => $card_type_label,

@@ -56,7 +56,7 @@ if ($select_vendor_table) {
 
                         while ($plan_details = mysqli_fetch_assoc($price_query)) {
                             $plans_response["EXAM_PIN"][$exam_label][] = [
-                                "ID" => $plan_details["id"],
+                                "ID" => $plan_details["val_1"] ?? '',
                                 "EXAM_TYPE" => $plan_details["val_1"],
                                 "AMOUNT" => $plan_details["val_2"]
                             ];

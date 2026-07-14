@@ -82,7 +82,7 @@ if ($select_vendor_table) {
                                     $data_type_label = ucwords(str_replace("-", " ", $type_key));
 
                                     $plans_response["MOBILE_NETWORK"][$network_label][] = [
-                                        "ID" => $plan_details["id"],
+                                        "ID" => $plan_details["val_1"] ?? '',
                                         "PRODUCT_CODE" => $plan_details["val_1"],
                                         "PRODUCT_NAME" => !empty($plan_details["val_4"]) ? $plan_details["val_4"] : str_replace("_", " ", $plan_details["val_1"]),
                                         "DATA_TYPE" => $data_type_label,

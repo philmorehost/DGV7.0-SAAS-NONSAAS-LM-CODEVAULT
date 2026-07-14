@@ -6,6 +6,7 @@
  * service-specific extra fields (token/meter_number/customer_name) from extra_data.
  */
 include_once(__DIR__ . "/guest-bootstrap.php");
+include_once(__DIR__ . "/fulfill.php");
 
 $vendor = guest_resolve_vendor();
 $vendor_id = $vendor['id'];
@@ -20,6 +21,15 @@ if (empty($reference)) {
 $order = guest_get_order($reference, $vendor_id);
 if (!$order) {
     guest_fail("Order not found", 404);
+}
+
+// Don't rely solely on PayHub's server-to-server webhook actually being registered/reachable —
+// the app is already polling this endpoint right after checkout, so use that same poll to drive
+// completion: independently re-verify with PayHub and fulfill if the webhook hasn't beaten us to
+// it. guest_attempt_paid_fulfillment() is a no-op if the order already moved past pending_payment.
+if ((int)$order['status'] === GUEST_STATUS_PENDING_PAYMENT) {
+    guest_attempt_paid_fulfillment($reference);
+    $order = guest_get_order($reference, $vendor_id);
 }
 
 $status_map = [
