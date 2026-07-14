@@ -61,7 +61,36 @@ if (isset($_POST['add-api'])) {
 // Handle Delete API Gateway (Optional safety feature for custom additions)
 if (isset($_GET['delete-api'])) {
     $api_id = (int)$_GET['delete-api'];
+    $get_deleted_api = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT api_type FROM sas_apis WHERE id='$api_id' AND vendor_id='$esc_vid' LIMIT 1"));
     mysqli_query($connection_server, "DELETE FROM sas_apis WHERE id='$api_id' AND vendor_id='$esc_vid'");
+
+    // sas_apis has no FK/cascade, so every product/network still assigned to this gateway (in
+    // whichever sas_*_status table matches its api_type) would otherwise keep a dangling api_id
+    // forever and fail every purchase with "Gateway Error" instead of falling back cleanly.
+    // Re-point those rows at another remaining active gateway of the same type if one exists,
+    // otherwise clear the reference so the product correctly shows as unconfigured.
+    if ($get_deleted_api) {
+        $status_tables_by_type = [
+            'airtime' => 'sas_airtime_status', 'shared-data' => 'sas_shared_data_status',
+            'sme-data' => 'sas_sme_data_status', 'cg-data' => 'sas_cg_data_status',
+            'dd-data' => 'sas_dd_data_status', 'cable' => 'sas_cable_status',
+            'electric' => 'sas_electric_status', 'exam' => 'sas_exam_status',
+            'betting' => 'sas_betting_status', 'bulk-sms' => 'sas_bulk_sms_status',
+            'datacard' => 'sas_datacard_status', 'dollarcard' => 'sas_dollarcard_status',
+            'nairacard' => 'sas_nairacard_status', 'rechargecard' => 'sas_rechargecard_status',
+        ];
+        $api_type_esc = mysqli_real_escape_string($connection_server, $get_deleted_api['api_type']);
+        $status_table = $status_tables_by_type[$get_deleted_api['api_type']] ?? null;
+        if ($status_table) {
+            $fallback = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='$esc_vid' AND api_type='$api_type_esc' AND status='1' ORDER BY id DESC LIMIT 1"));
+            if ($fallback) {
+                mysqli_query($connection_server, "UPDATE $status_table SET api_id='" . (int)$fallback['id'] . "' WHERE vendor_id='$esc_vid' AND api_id='$api_id'");
+            } else {
+                mysqli_query($connection_server, "UPDATE $status_table SET api_id='0' WHERE vendor_id='$esc_vid' AND api_id='$api_id'");
+            }
+        }
+    }
+
     $_SESSION['product_purchase_response'] = "API Gateway deleted successfully.";
     header("Location: MarketPlace.php");
     exit();

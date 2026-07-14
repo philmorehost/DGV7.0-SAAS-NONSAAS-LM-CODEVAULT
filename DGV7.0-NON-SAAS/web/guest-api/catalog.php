@@ -26,17 +26,16 @@ switch ($service) {
             $network_label = strtoupper($network);
             if ($network == '9mobile') $network_label = '9MOBILE';
 
-            $status = guest_status_row($vendor_id, 'sas_airtime_status', $network);
-            if ($status && !empty($status['api_id'])) {
-                $product = guest_product_row($vendor_id, $network);
-                if ($product) {
-                    $price = guest_price_percent($vendor_id, $status['api_id'], $product['id']);
-                    if ($price) {
-                        $plans_response["AIRTIME_VTU"][$network_label] = [
-                            "PRODUCT_CODE" => $product["product_name"],
-                            "DISCOUNT_PERCENT" => toDecimal($price["val_1"], 2) . "%"
-                        ];
-                    }
+            $resolved = guest_resolve_enabled_api($vendor_id, 'sas_airtime_status', $network, 'airtime');
+            if (!$resolved['ok']) continue;
+            $product = guest_product_row($vendor_id, $network);
+            if ($product) {
+                $price = guest_price_percent($vendor_id, $resolved['api_detail']['id'], $product['id']);
+                if ($price) {
+                    $plans_response["AIRTIME_VTU"][$network_label] = [
+                        "PRODUCT_CODE" => $product["product_name"],
+                        "DISCOUNT_PERCENT" => toDecimal($price["val_1"], 2) . "%"
+                    ];
                 }
             }
         }
@@ -64,14 +63,11 @@ switch ($service) {
             $plans_response["MOBILE_NETWORK"][$network_label] = [];
 
             foreach ($data_types as $type_key => $status_table) {
-                $status = guest_status_row($vendor_id, $status_table, $network_key);
-                if (!$status || empty($status['api_id'])) continue;
-                $api_id = $status['api_id'];
+                $resolved = guest_resolve_enabled_api($vendor_id, $status_table, $network_key, $type_key);
+                if (!$resolved['ok']) continue;
+                $api_id = $resolved['api_detail']['id'];
 
                 global $connection_server;
-                $api_check = mysqli_fetch_array(mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='" . (int)$vendor_id . "' && id='" . (int)$api_id . "' && api_type='$type_key' && status='1' LIMIT 1"));
-                if (!$api_check) continue;
-
                 foreach ($product_names as $p_name) {
                     $product = guest_product_row($vendor_id, $p_name);
                     if (!$product) continue;
@@ -102,11 +98,11 @@ switch ($service) {
         foreach ($cables as $cable) {
             $cable_label = strtoupper($cable);
             $plans_response["CABLE_SUBSCRIPTION"][$cable_label] = [];
-            $status = guest_status_row($vendor_id, 'sas_cable_status', $cable);
-            if ($status && !empty($status['api_id'])) {
+            $resolved = guest_resolve_enabled_api($vendor_id, 'sas_cable_status', $cable, 'cable');
+            if ($resolved['ok']) {
                 $product = guest_product_row($vendor_id, $cable);
                 if ($product) {
-                    $price_query = mysqli_query($connection_server, "SELECT * FROM $price_table WHERE vendor_id='" . (int)$vendor_id . "' && api_id='" . (int)$status['api_id'] . "' && product_id='" . $product["id"] . "'");
+                    $price_query = mysqli_query($connection_server, "SELECT * FROM $price_table WHERE vendor_id='" . (int)$vendor_id . "' && api_id='" . (int)$resolved['api_detail']['id'] . "' && product_id='" . $product["id"] . "'");
                     while ($plan_details = mysqli_fetch_assoc($price_query)) {
                         $plans_response["CABLE_SUBSCRIPTION"][$cable_label][] = [
                             "ID" => $plan_details["id"],
@@ -125,11 +121,11 @@ switch ($service) {
         $plans_response = ["ELECTRIC_PAYMENT" => []];
         foreach ($providers as $provider) {
             $provider_label = strtoupper($provider);
-            $status = guest_status_row($vendor_id, 'sas_electric_status', $provider);
-            if ($status && !empty($status['api_id'])) {
+            $resolved = guest_resolve_enabled_api($vendor_id, 'sas_electric_status', $provider, 'electric');
+            if ($resolved['ok']) {
                 $product = guest_product_row($vendor_id, $provider);
                 if ($product) {
-                    $price = guest_price_percent($vendor_id, $status['api_id'], $product['id']);
+                    $price = guest_price_percent($vendor_id, $resolved['api_detail']['id'], $product['id']);
                     if ($price) {
                         $plans_response["ELECTRIC_PAYMENT"][$provider_label] = [
                             "PROVIDER_CODE" => $product["product_name"],
@@ -149,11 +145,11 @@ switch ($service) {
         foreach ($exams as $exam) {
             $exam_label = strtoupper($exam);
             $plans_response["EXAM_PIN"][$exam_label] = [];
-            $status = guest_status_row($vendor_id, 'sas_exam_status', $exam);
-            if ($status && !empty($status['api_id'])) {
+            $resolved = guest_resolve_enabled_api($vendor_id, 'sas_exam_status', $exam, 'exam');
+            if ($resolved['ok']) {
                 $product = guest_product_row($vendor_id, $exam);
                 if ($product) {
-                    $price_query = mysqli_query($connection_server, "SELECT * FROM $price_table WHERE vendor_id='" . (int)$vendor_id . "' && api_id='" . (int)$status['api_id'] . "' && product_id='" . $product["id"] . "'");
+                    $price_query = mysqli_query($connection_server, "SELECT * FROM $price_table WHERE vendor_id='" . (int)$vendor_id . "' && api_id='" . (int)$resolved['api_detail']['id'] . "' && product_id='" . $product["id"] . "'");
                     while ($plan_details = mysqli_fetch_assoc($price_query)) {
                         $plans_response["EXAM_PIN"][$exam_label][] = [
                             "ID" => $plan_details["id"],
@@ -172,15 +168,12 @@ switch ($service) {
         $plans_response = ["BETTING_PROVIDERS" => []];
         global $connection_server;
         foreach ($betting_providers as $provider) {
-            $status = guest_status_row($vendor_id, 'sas_betting_status', $provider);
-            if ($status && !empty($status['api_id'])) {
-                $api_check = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='" . (int)$vendor_id . "' && id='" . (int)$status['api_id'] . "' && api_type='betting' && status=1 LIMIT 1");
-                if (mysqli_num_rows($api_check) > 0) {
-                    $plans_response["BETTING_PROVIDERS"][] = [
-                        "provider_code" => $provider,
-                        "provider_name" => ucwords(str_replace(["-", "_"], " ", $provider))
-                    ];
-                }
+            $resolved = guest_resolve_enabled_api($vendor_id, 'sas_betting_status', $provider, 'betting');
+            if ($resolved['ok']) {
+                $plans_response["BETTING_PROVIDERS"][] = [
+                    "provider_code" => $provider,
+                    "provider_name" => ucwords(str_replace(["-", "_"], " ", $provider))
+                ];
             }
         }
         guest_json($plans_response);

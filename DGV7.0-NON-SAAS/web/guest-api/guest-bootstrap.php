@@ -166,6 +166,24 @@ function guest_resolve_enabled_api($vendor_id, $status_table, $product_name, $ap
     $api_id = (int)($item_status['api_id'] ?? 0);
 
     $all_apis = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='$vid' && id='$api_id' && api_type='$api_type_esc'");
+
+    // Self-heal: sas_apis has no FK/cascade, so deleting or replacing a gateway in the
+    // MarketPlace (bc-admin/MarketPlace.php's delete-api action) leaves this status row's
+    // api_id dangling — every purchase for this product would otherwise fail with "Gateway
+    // Error" forever, even though the vendor has a perfectly good active gateway of the same
+    // type configured. Re-point the status row at whichever active gateway of this api_type
+    // exists instead of hard-failing, and persist the repair so it's fixed for every future
+    // request (guest or authenticated — this same status table backs both).
+    if (mysqli_num_rows($all_apis) < 1 && $item_status) {
+        $fallback = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='$vid' && api_type='$api_type_esc' && status='1' ORDER BY id DESC LIMIT 1");
+        if ($fallback && mysqli_num_rows($fallback) > 0) {
+            $fallback_api_id = (int)mysqli_fetch_array($fallback)['id'];
+            mysqli_query($connection_server, "UPDATE $status_table SET api_id='$fallback_api_id' WHERE vendor_id='$vid' && product_name='$product_name_esc'");
+            $api_id = $fallback_api_id;
+            $all_apis = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='$vid' && id='$api_id' && api_type='$api_type_esc'");
+        }
+    }
+
     $enabled_apis = mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='$vid' && id='$api_id' && api_type='$api_type_esc' && status='1'");
 
     if (mysqli_num_rows($all_apis) < 1) {
