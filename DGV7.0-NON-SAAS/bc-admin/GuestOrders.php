@@ -11,6 +11,14 @@
         $process_ref = trim(strip_tags($_GET['process']));
         $process_order = guest_get_order($process_ref, $get_logged_admin_details['id']);
         if ($process_order) {
+            // Orders created before the checkout-init fix that captures PayHub's own reference
+            // never got a correct payment_reference, so automatic verify can't find them on
+            // PayHub's side. Let an admin paste the real reference from PayHub's own dashboard
+            // (shown to the guest on PayHub's success page) to unstick exactly those.
+            $payhub_ref_override = trim(strip_tags($_GET['payhub_ref'] ?? ''));
+            if (!empty($payhub_ref_override)) {
+                guest_update_order($process_ref, 'payment_reference', $payhub_ref_override);
+            }
             if ((int)$process_order['status'] === GUEST_STATUS_PENDING_PAYMENT) {
                 guest_attempt_paid_fulfillment($process_ref);
             } elseif ((int)$process_order['status'] === GUEST_STATUS_GATEWAY_PENDING) {
@@ -138,6 +146,9 @@
                                 <td class="text-nowrap">
                                     <?php if((int)$guest_order["status"] === 0){ ?>
                                         <a href="GuestOrders.php?process=<?php echo urlencode($guest_order["reference"]); ?>" class="btn btn-sm btn-outline-primary">Verify &amp; Process</a>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            onclick="var r=prompt('Optional: paste the reference PayHub showed the customer on its success page (only needed for orders placed before this fix). Leave blank to just re-verify normally.'); if(r!==null){ window.location='GuestOrders.php?process=<?php echo urlencode($guest_order["reference"]); ?>'+(r?('&payhub_ref='+encodeURIComponent(r)):''); }"
+                                        >Verify w/ PayHub Ref…</button>
                                     <?php }elseif((int)$guest_order["status"] === 3){ ?>
                                         <a href="GuestOrders.php?process=<?php echo urlencode($guest_order["reference"]); ?>" class="btn btn-sm btn-outline-warning">Requery</a>
                                     <?php } ?>
