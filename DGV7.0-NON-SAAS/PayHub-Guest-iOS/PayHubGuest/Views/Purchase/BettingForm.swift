@@ -6,6 +6,7 @@ struct BettingForm: View {
     @State private var provider: BettingProvider? = nil
     @State private var customerId = ""
     @State private var amount = ""
+    @State private var email = ""
 
     var body: some View {
         SimpleDropdown(
@@ -38,13 +39,15 @@ struct BettingForm: View {
 
         AmountField(label: "Amount", amountChips: [500, 1000, 2000, 5000], amount: $amount)
 
+        EmailReceiptField(email: $email)
+
         let amt = Int(amount) ?? 0
         let ready = provider != nil && !customerId.isEmpty && amt > 0
         PayButton(amount: amt, enabled: ready, loading: viewModel.checkoutState == .loading) {
             viewModel.startCheckout(
                 service: "betting",
                 recipient: customerId,
-                fields: ["provider": provider?.providerCode, "customer_id": customerId, "amount": amt]
+                fields: ["provider": provider?.providerCode, "customer_id": customerId, "amount": amt, "email": email.isEmpty ? nil : email]
             )
         }
     }

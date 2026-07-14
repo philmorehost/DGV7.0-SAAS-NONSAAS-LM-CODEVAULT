@@ -7,6 +7,7 @@ struct ElectricityForm: View {
     @State private var meterType: String? = nil
     @State private var meterNumber = ""
     @State private var amount = ""
+    @State private var email = ""
 
     var body: some View {
         SimpleDropdown(
@@ -42,13 +43,15 @@ struct ElectricityForm: View {
 
         AmountField(label: "Amount", amountChips: [1000, 2000, 5000, 10000], amount: $amount)
 
+        EmailReceiptField(email: $email)
+
         let amt = Int(amount) ?? 0
         let ready = disco != nil && meterType != nil && !meterNumber.isEmpty && amt > 0
         PayButton(amount: amt, enabled: ready, loading: viewModel.checkoutState == .loading) {
             viewModel.startCheckout(
                 service: "electricity",
                 recipient: meterNumber,
-                fields: ["provider": disco?.code, "type": meterType, "meter_number": meterNumber, "amount": amt]
+                fields: ["provider": disco?.code, "type": meterType, "meter_number": meterNumber, "amount": amt, "email": email.isEmpty ? nil : email]
             )
         }
     }

@@ -1,0 +1,143 @@
+<?php session_start();
+    include("../func/bc-admin-config.php");
+?>
+<!DOCTYPE html>
+<head>
+    <title>Guest Orders | <?php echo $get_all_super_admin_site_details["site_title"]; ?></title>
+    <meta charset="UTF-8" />
+    <meta name="description" content="<?php echo substr($get_all_super_admin_site_details["site_desc"], 0, 160); ?>" />
+    <meta http-equiv="Content-Type" content="text/html; " />
+    <meta name="theme-color" content="black" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="stylesheet" href="<?php echo $css_style_template_location; ?>">
+    <link rel="stylesheet" href="/cssfile/bc-style.css">
+    <meta name="author" content="Philmore Codes">
+    <meta name="dc.creator" content="Philmore Codes">
+
+          <!-- Vendor CSS Files -->
+  <link href="../assets-2/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+  <link href="../assets-2/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+  <link href="../assets-2/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
+  <link href="../assets-2/vendor/quill/quill.snow.css" rel="stylesheet">
+  <link href="../assets-2/vendor/quill/quill.bubble.css" rel="stylesheet">
+  <link href="../assets-2/vendor/remixicon/remixicon.css" rel="stylesheet">
+  <link href="../assets-2/vendor/simple-datatables/style.css" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+  <link href="../assets-2/css/style.css" rel="stylesheet">
+
+</head>
+<body>
+    <?php include("../func/bc-admin-header.php"); ?>
+    <div class="pagetitle">
+      <h1>GUEST ORDERS (PayHub Guest App)</h1>
+      <nav>
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="#">Home</a></li>
+          <li class="breadcrumb-item active">Guest Orders</li>
+        </ol>
+      </nav>
+    </div><!-- End Page Title -->
+
+    <section class="section dashboard">
+      <div class="col-12">
+
+        <?php
+            // Pay-per-transaction orders from the no-login Guest App (sas_guest_orders) — these
+            // never appear in sas_transactions since there is no user/wallet, so this page is
+            // the only place an admin can see and trace them.
+            if(!isset($_GET["searchq"]) && isset($_GET["page"]) && !empty(trim(strip_tags($_GET["page"]))) && is_numeric(trim(strip_tags($_GET["page"]))) && (trim(strip_tags($_GET["page"])) >= 1)){
+                $page_num = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["page"])));
+                $offset_statement = " OFFSET ".((20 * $page_num) - 20);
+            }else{
+                $offset_statement = "";
+            }
+
+            if(isset($_GET["searchq"]) && !empty(trim(strip_tags($_GET["searchq"])))){
+                $searchq_esc = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["searchq"])));
+                $search_statement = " && (reference LIKE '%$searchq_esc%' OR identity LIKE '%$searchq_esc%' OR service_type LIKE '%$searchq_esc%' OR payment_reference LIKE '%$searchq_esc%')";
+                $search_parameter = "searchq=".trim(strip_tags($_GET["searchq"]))."&&";
+            }else{
+                $search_statement = "";
+                $search_parameter = "";
+            }
+            $get_guest_orders = mysqli_query($connection_server, "SELECT * FROM sas_guest_orders WHERE vendor_id='".$get_logged_admin_details["id"]."' $search_statement ORDER BY created_at DESC LIMIT 20 $offset_statement");
+
+            // Same values as web/guest-api/guest-bootstrap.php's GUEST_STATUS_* constants.
+            $guest_status_labels = array(
+                0 => array("Pending Payment", "secondary"),
+                1 => array("Processing", "info"),
+                2 => array("Successful", "success"),
+                3 => array("Pending", "warning"),
+                4 => array("Failed", "danger"),
+            );
+        ?>
+        <div class="card info-card px-3 py-5 px-lg-5">
+            <div class="row">
+                <form method="get" action="GuestOrders.php" class="">
+                    <input style="user-select: auto;" name="searchq" type="text" value="<?php echo htmlspecialchars(trim(strip_tags($_GET["searchq"] ?? ''))); ?>" placeholder="Reference, phone/IUC/meter number, service" class="form-control mt-3" />
+                    <button style="user-select: auto;" type="submit" class="btn btn-primary d-inline col-12 col-lg-auto my-2" >
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </form>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Reference</th>
+                            <th>Service</th>
+                            <th>Recipient</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if($get_guest_orders && mysqli_num_rows($get_guest_orders) > 0){ ?>
+                            <?php while($guest_order = mysqli_fetch_assoc($get_guest_orders)){
+                                $status_info = $guest_status_labels[(int)$guest_order["status"]] ?? array("Unknown", "dark");
+                            ?>
+                            <tr>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($guest_order["created_at"]); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($guest_order["reference"]); ?></td>
+                                <td><?php echo htmlspecialchars(ucwords(str_replace(array("-", "_"), " ", $guest_order["service_type"]))); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($guest_order["identity"]); ?></td>
+                                <td class="text-nowrap">&#8358;<?php echo number_format((float)$guest_order["discounted_amount"], 2); ?></td>
+                                <td><span class="badge bg-<?php echo $status_info[1]; ?>"><?php echo $status_info[0]; ?></span></td>
+                                <td style="max-width:280px;"><?php echo htmlspecialchars($guest_order["description"] ?? ''); ?></td>
+                            </tr>
+                            <?php } ?>
+                        <?php }else{ ?>
+                            <tr><td colspan="7" class="text-center py-4">No guest orders found.</td></tr>
+                        <?php } ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-2 justify-content-between justify-items-center">
+                <?php if(isset($_GET["page"]) && is_numeric(trim(strip_tags($_GET["page"]))) && (trim(strip_tags($_GET["page"])) > 1)){ ?>
+                <a href="GuestOrders.php?<?php echo $search_parameter; ?>page=<?php echo (trim(strip_tags($_GET["page"])) - 1); ?>">
+                    <button style="user-select: auto;" class="btn btn-primary col-auto">Prev</button>
+                </a>
+                <?php } ?>
+                <?php
+                	if(isset($_GET["page"]) && is_numeric(trim(strip_tags($_GET["page"]))) && (trim(strip_tags($_GET["page"])) >= 1)){
+                		$trans_next = (trim(strip_tags($_GET["page"])) +1);
+                	}else{
+                		$trans_next = 2;
+                	}
+                ?>
+                <a href="GuestOrders.php?<?php echo $search_parameter; ?>page=<?php echo $trans_next; ?>">
+                    <button style="user-select: auto;" class="btn btn-primary col-auto">Next</button>
+                </a>
+            </div>
+        </div>
+      </div>
+    </section>
+    <?php include("../func/bc-admin-footer.php"); ?>
+
+</body>
+</html>

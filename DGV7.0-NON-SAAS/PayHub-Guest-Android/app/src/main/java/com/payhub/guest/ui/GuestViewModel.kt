@@ -216,7 +216,45 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun resetCheckout() { _checkoutState.value = CheckoutState.Idle }
+    fun resetCheckout() {
+        _checkoutState.value = CheckoutState.Idle
+        // Also drop any stale payment detection — without this, cancelling a checkout after
+        // the poll already fired would instantly "complete" the next checkout that opens.
+        _paymentDetected.value = null
+    }
+
+    // ---------- Checkout payment watcher (poll-driven return-to-app) ----------
+
+    // PayHub's hosted checkout does not reliably honor our callback_url (observed live: it
+    // redirects to merchant.payhub.com.ng home instead), so URL-watching alone can leave the
+    // guest stranded on PayHub's site after paying. While the checkout WebView is open we ALSO
+    // poll status.php — which itself verifies + fulfills server-side — and advance to the
+    // Receipt screen the moment the order moves past pending_payment, redirect or no redirect.
+    private val _paymentDetected = MutableStateFlow<String?>(null)
+    val paymentDetected: StateFlow<String?> = _paymentDetected.asStateFlow()
+
+    fun watchPayment(reference: String) {
+        viewModelScope.launch {
+            while (checkoutState.value is CheckoutState.Ready && _paymentDetected.value == null) {
+                when (val r = repo.getOrderStatus(reference)) {
+                    is ApiResult.Success -> {
+                        val st = r.data.status
+                        if (st != null && st != "pending_payment" && st != "unknown") {
+                            _paymentDetected.value = reference
+                            return@launch
+                        }
+                    }
+                    is ApiResult.Error -> {} // transient — keep watching
+                }
+                delay(3000)
+            }
+        }
+    }
+
+    /** Fast path: the WebView spotted a completion URL before the next poll tick. */
+    fun notifyPaymentDetected(reference: String) { _paymentDetected.value = reference }
+
+    fun resetPaymentWatch() { _paymentDetected.value = null }
 
     // ---------- Order status polling (after the WebView reports the PayHub redirect) ----------
 

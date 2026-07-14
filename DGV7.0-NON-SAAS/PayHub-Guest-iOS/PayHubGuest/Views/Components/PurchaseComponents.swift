@@ -12,6 +12,19 @@ struct FieldLabel: View {
     }
 }
 
+/// Optional receipt-email field shared by every purchase form — checkout-init.php stores it
+/// with the order and fulfill.php emails the receipt there after successful delivery.
+struct EmailReceiptField: View {
+    @Binding var email: String
+    var body: some View {
+        FieldLabel(text: "Email (optional — we'll send your receipt here)")
+        TextField("you@example.com", text: $email)
+            .keyboardType(.emailAddress)
+            .textInputAutocapitalization(.never)
+            .textFieldStyle(.roundedBorder)
+    }
+}
+
 struct ChipRow<T: Hashable>: View {
     let options: [T]
     let labelOf: (T) -> String

@@ -6,6 +6,7 @@ struct CableForm: View {
     @State private var provider: String? = nil
     @State private var iucNumber = ""
     @State private var pkg: CablePlan? = nil
+    @State private var email = ""
 
     private var plans: [CablePlan] {
         provider.flatMap { viewModel.cableProviders[$0] } ?? []
@@ -45,13 +46,15 @@ struct CableForm: View {
             onSelect: { pkg = $0; viewModel.resetVerify() }
         )
 
+        EmailReceiptField(email: $email)
+
         let amt = pkg.flatMap { Double($0.amount) }.map { Int($0) } ?? 0
         let ready = provider != nil && !iucNumber.isEmpty && pkg != nil
         PayButton(amount: amt, enabled: ready, loading: viewModel.checkoutState == .loading) {
             viewModel.startCheckout(
                 service: "cable",
                 recipient: iucNumber,
-                fields: ["type": provider?.lowercased(), "iuc_number": iucNumber, "package": pkg?.packageName]
+                fields: ["type": provider?.lowercased(), "iuc_number": iucNumber, "package": pkg?.packageName, "email": email.isEmpty ? nil : email]
             )
         }
     }

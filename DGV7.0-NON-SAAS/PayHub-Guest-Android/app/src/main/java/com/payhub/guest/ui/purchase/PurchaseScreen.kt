@@ -145,6 +145,17 @@ fun PurchaseScreen(service: String, viewModel: GuestViewModel, onBack: () -> Uni
 }
 
 @Composable
+private fun EmailReceiptField(email: String, onChange: (String) -> Unit) {
+    FieldLabel("Email (optional — we'll send your receipt here)")
+    OutlinedTextField(
+        value = email, onValueChange = onChange,
+        placeholder = { Text("you@example.com") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+        modifier = Modifier.fillMaxWidth(), singleLine = true,
+    )
+}
+
+@Composable
 private fun PayButton(amount: Int, enabled: Boolean, loading: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
@@ -188,6 +199,7 @@ private fun AirtimeForm(vm: GuestViewModel) {
     var userPicked by remember { mutableStateOf(false) }
     var phone by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
 
     LaunchedEffect(phone) { if (phone.length == 11) vm.detectNetwork(phone) }
     LaunchedEffect(detected) {
@@ -207,13 +219,15 @@ private fun AirtimeForm(vm: GuestViewModel) {
 
     AmountField("Amount", listOf(100, 200, 500, 1000), amount) { amount = it }
 
+    EmailReceiptField(email) { email = it }
+
     val amt = amount.toIntOrNull() ?: 0
     val ready = network != null && phone.length == 11 && amt > 0
     PayButton(amt, ready, checkoutState is GuestViewModel.CheckoutState.Loading) {
         vm.startCheckout(
             service = "airtime",
             recipient = phone,
-            fields = mapOf("network" to network, "phone_number" to phone, "amount" to amt),
+            fields = mapOf("network" to network, "phone_number" to phone, "amount" to amt, "email" to email.ifBlank { null }),
         )
     }
 }
@@ -266,6 +280,9 @@ private fun DataForm(vm: GuestViewModel) {
         onSelect = { plan = it },
     )
 
+    var email by remember { mutableStateOf("") }
+    EmailReceiptField(email) { email = it }
+
     val amt = plan?.amount?.toDoubleOrNull()?.toInt() ?: 0
     val ready = network != null && phone.length == 11 && plan != null
     PayButton(amt, ready, checkoutState is GuestViewModel.CheckoutState.Loading) {
@@ -277,6 +294,7 @@ private fun DataForm(vm: GuestViewModel) {
                 "phone_number" to phone,
                 "type" to plan?.dataTypeCode,
                 "quantity" to plan?.productCode,
+                "email" to email.ifBlank { null },
             ),
         )
     }
@@ -328,13 +346,16 @@ private fun CableForm(vm: GuestViewModel) {
         onSelect = { pkg = it; vm.resetVerify() },
     )
 
+    var email by remember { mutableStateOf("") }
+    EmailReceiptField(email) { email = it }
+
     val amt = pkg?.amount?.toDoubleOrNull()?.toInt() ?: 0
     val ready = provider != null && iucNumber.isNotBlank() && pkg != null
     PayButton(amt, ready, checkoutState is GuestViewModel.CheckoutState.Loading) {
         vm.startCheckout(
             service = "cable",
             recipient = iucNumber,
-            fields = mapOf("type" to provider?.lowercase(), "iuc_number" to iucNumber, "package" to pkg?.packageName),
+            fields = mapOf("type" to provider?.lowercase(), "iuc_number" to iucNumber, "package" to pkg?.packageName, "email" to email.ifBlank { null }),
         )
     }
 }
@@ -386,13 +407,16 @@ private fun ElectricityForm(vm: GuestViewModel) {
 
     AmountField("Amount", listOf(1000, 2000, 5000, 10000), amount) { amount = it }
 
+    var email by remember { mutableStateOf("") }
+    EmailReceiptField(email) { email = it }
+
     val amt = amount.toIntOrNull() ?: 0
     val ready = disco != null && meterType != null && meterNumber.isNotBlank() && amt > 0
     PayButton(amt, ready, checkoutState is GuestViewModel.CheckoutState.Loading) {
         vm.startCheckout(
             service = "electricity",
             recipient = meterNumber,
-            fields = mapOf("provider" to disco?.code, "type" to meterType, "meter_number" to meterNumber, "amount" to amt),
+            fields = mapOf("provider" to disco?.code, "type" to meterType, "meter_number" to meterNumber, "amount" to amt, "email" to email.ifBlank { null }),
         )
     }
 }
@@ -486,13 +510,16 @@ private fun BettingForm(vm: GuestViewModel) {
 
     AmountField("Amount", listOf(500, 1000, 2000, 5000), amount) { amount = it }
 
+    var email by remember { mutableStateOf("") }
+    EmailReceiptField(email) { email = it }
+
     val amt = amount.toIntOrNull() ?: 0
     val ready = provider != null && customerId.isNotBlank() && amt > 0
     PayButton(amt, ready, checkoutState is GuestViewModel.CheckoutState.Loading) {
         vm.startCheckout(
             service = "betting",
             recipient = customerId,
-            fields = mapOf("provider" to provider?.providerCode, "customer_id" to customerId, "amount" to amt),
+            fields = mapOf("provider" to provider?.providerCode, "customer_id" to customerId, "amount" to amt, "email" to email.ifBlank { null }),
         )
     }
 }

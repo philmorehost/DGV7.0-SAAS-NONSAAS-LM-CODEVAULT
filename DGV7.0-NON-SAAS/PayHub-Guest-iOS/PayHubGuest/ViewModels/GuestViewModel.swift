@@ -208,7 +208,48 @@ final class GuestViewModel: ObservableObject {
         }
     }
 
-    func resetCheckout() { checkoutState = .idle }
+    func resetCheckout() {
+        checkoutState = .idle
+        // Also drop any stale payment detection — without this, cancelling a checkout after
+        // the poll already fired would instantly "complete" the next checkout that opens.
+        resetPaymentWatch()
+    }
+
+    // ---------- Checkout payment watcher (poll-driven return-to-app) ----------
+
+    // PayHub's hosted checkout does not reliably honor our callback_url (observed live: it
+    // redirects to merchant.payhub.com.ng home instead), so URL-watching alone can leave the
+    // guest stranded on PayHub's site after paying. While the checkout WebView is open we ALSO
+    // poll status.php — which itself verifies + fulfills server-side — and advance to the
+    // Receipt screen the moment the order moves past pending_payment, redirect or no redirect.
+    @Published var paymentDetected: String? = nil
+    private var paymentWatchTask: Task<Void, Never>? = nil
+
+    func watchPayment(reference: String) {
+        paymentWatchTask?.cancel()
+        paymentWatchTask = Task {
+            while !Task.isCancelled && paymentDetected == nil {
+                guard case .ready = checkoutState else { break }
+                if case .success(let order) = await api.getOrderStatus(reference: reference) {
+                    let st = order.status ?? ""
+                    if !st.isEmpty && st != "pending_payment" && st != "unknown" {
+                        paymentDetected = reference
+                        return
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
+    }
+
+    /// Fast path: the WKWebView spotted a completion URL before the next poll tick.
+    func notifyPaymentDetected(reference: String) { paymentDetected = reference }
+
+    func resetPaymentWatch() {
+        paymentWatchTask?.cancel()
+        paymentWatchTask = nil
+        paymentDetected = nil
+    }
 
     // ---------- Order status polling (after the WebView reports the PayHub redirect) ----------
 

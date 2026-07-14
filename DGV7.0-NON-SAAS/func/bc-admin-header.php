@@ -123,7 +123,7 @@ function hex2rgb($hex) {
   <?php
     $current_page_base = basename($_SERVER['PHP_SELF']);
     $load_editor_css = in_array($current_page_base, ['AccountSettings.php', 'SiteSettings.php', 'Announcement.php', 'StatusMessage.php', 'EmailTemplates.php', 'SendMail.php']);
-    $load_tables_css = in_array($current_page_base, ['Transactions.php', 'UserManagement.php', 'PaymentOrders.php', 'GiftCard.php', 'Users.php', 'BatchTransactions.php', 'Withdrawals.php', 'FundTransferRequests.php', 'MarketPlace.php', 'APIRequests.php', 'KnowledgeBase.php']);
+    $load_tables_css = in_array($current_page_base, ['Transactions.php', 'UserManagement.php', 'PaymentOrders.php', 'GiftCard.php', 'Users.php', 'BatchTransactions.php', 'GuestOrders.php', 'Withdrawals.php', 'FundTransferRequests.php', 'MarketPlace.php', 'APIRequests.php', 'KnowledgeBase.php']);
   ?>
   <?php if($load_editor_css): ?>
   <link href="../assets-2/vendor/quill/quill.snow.css" rel="stylesheet">
@@ -289,7 +289,7 @@ function hex2rgb($hex) {
       <li class="nav-heading">Business Management</li>
 
       <li class="nav-item">
-        <?php $manage_user_active = in_array($current_page, ['CreateUser.php', 'KnowledgeBase.php', 'Users.php', 'Transactions.php', 'BatchTransactions.php', 'PaymentOrders.php', 'FundTransferRequests.php', 'ShareFund.php', 'APIRequests.php']); ?>
+        <?php $manage_user_active = in_array($current_page, ['CreateUser.php', 'KnowledgeBase.php', 'Users.php', 'Transactions.php', 'BatchTransactions.php', 'GuestOrders.php', 'PaymentOrders.php', 'FundTransferRequests.php', 'ShareFund.php', 'APIRequests.php']); ?>
         <a class="nav-link <?php echo $manage_user_active ? 'active_item' : 'collapsed'; ?>" data-bs-target="#manage-user-nav" data-bs-toggle="collapse" href="#">
           <i class="bi bi-menu-button-wide"></i><span>Manage User</span><i class="bi bi-chevron-down ms-auto"></i>
         </a>
@@ -327,6 +327,11 @@ function hex2rgb($hex) {
           <li>
             <a href="<?php echo $web_http_host; ?>/bc-admin/BatchTransactions.php" class="<?php echo ($current_page == 'BatchTransactions.php') ? 'active' : ''; ?>">
               <i class="bi bi-circle"></i><span>Batch Transactions</span>
+            </a>
+          </li>
+          <li>
+            <a href="<?php echo $web_http_host; ?>/bc-admin/GuestOrders.php" class="<?php echo ($current_page == 'GuestOrders.php') ? 'active' : ''; ?>">
+              <i class="bi bi-circle"></i><span>Guest Orders</span>
             </a>
           </li>
           <li>

@@ -15,6 +15,43 @@
  */
 
 /**
+ * Emails the guest a simple HTML receipt after successful delivery — only when they typed a
+ * real email at checkout (extra_data.guest_email; the synthesized guest+ref@host placeholder
+ * used for PayHub's initialize call is never stored there). Subject deliberately avoids the
+ * words Transaction/Purchase/Fulfillment so sendVendorEmail()'s vendor-side "transaction
+ * emails disabled" toggle doesn't suppress it — this is the guest's only durable server-sent
+ * copy of their purchase.
+ */
+function guest_send_receipt_email($order, $delivery_desc, $service_outputs = []) {
+    $extra = json_decode($order['extra_data'] ?? '{}', true) ?: [];
+    $to = $extra['guest_email'] ?? '';
+    if (empty($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) return;
+
+    $rows = [
+        "Reference" => $order['reference'],
+        "Service" => ucwords(str_replace(['-', '_'], ' ', $order['service_type'])),
+        "Recipient" => $order['identity'],
+        "Amount Paid" => "NGN " . number_format((float)$order['discounted_amount'], 2),
+        "Status" => "Successful",
+        "Details" => $delivery_desc,
+    ];
+    if (!empty($service_outputs['token'])) $rows["Token"] = $service_outputs['token'];
+    if (!empty($service_outputs['token_unit'])) $rows["Units"] = $service_outputs['token_unit'];
+
+    $body = "<div style='font-family:sans-serif;max-width:520px;margin:auto'>"
+          . "<h2 style='color:#0D6EFD'>Payment Receipt</h2>"
+          . "<p>Thank you for your payment. Here is your receipt:</p>"
+          . "<table style='width:100%;border-collapse:collapse'>";
+    foreach ($rows as $label => $value) {
+        $body .= "<tr><td style='padding:8px;border-bottom:1px solid #eee;color:#64748B'>" . htmlspecialchars($label) . "</td>"
+               . "<td style='padding:8px;border-bottom:1px solid #eee;font-weight:bold;text-align:right'>" . htmlspecialchars((string)$value) . "</td></tr>";
+    }
+    $body .= "</table><p style='color:#94A3B8;font-size:12px;margin-top:16px'>Keep this email as proof of payment.</p></div>";
+
+    sendVendorEmail($to, "Your payment receipt — " . $order['reference'], $body);
+}
+
+/**
  * Independently verifies a still-pending order against PayHub and, if genuinely paid, atomically
  * claims + fulfills it. This is what guest-webhook.php calls when PayHub's server-to-server
  * webhook arrives — but a guest checkout should not be a single point of failure on PayHub's
@@ -144,6 +181,8 @@ function guest_fulfill_order($order) {
             ];
         }
         if ($service_outputs) guest_merge_extra_data($reference, $service_outputs);
+
+        guest_send_receipt_email($order, $res['api_response_description'], $service_outputs);
 
         return ['status' => 'success', 'desc' => $res['api_response_description']];
     }

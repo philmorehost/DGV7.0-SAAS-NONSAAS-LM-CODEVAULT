@@ -35,6 +35,13 @@ $product_id = null;
 $api_base_url = null;
 $extra_data = ['service' => $service];
 
+// Persist a REAL guest email with the order so fulfill.php can send a receipt after delivery.
+// The synthesized guest+ref@host placeholder (generated below only for PayHub's initialize
+// call) must never end up here — receipts to a fake mailbox just bounce.
+if (!empty($guest_email) && filter_var($guest_email, FILTER_VALIDATE_EMAIL)) {
+    $extra_data['guest_email'] = $guest_email;
+}
+
 switch ($service) {
 
     case 'airtime': {

@@ -7,6 +7,7 @@ struct AirtimeForm: View {
     @State private var userPicked = false
     @State private var phone = ""
     @State private var amount = ""
+    @State private var email = ""
 
     var body: some View {
         FieldLabel(text: "Select Network")
@@ -25,13 +26,15 @@ struct AirtimeForm: View {
 
         AmountField(label: "Amount", amountChips: [100, 200, 500, 1000], amount: $amount)
 
+        EmailReceiptField(email: $email)
+
         let amt = Int(amount) ?? 0
         let ready = network != nil && phone.count == 11 && amt > 0
         PayButton(amount: amt, enabled: ready, loading: viewModel.checkoutState == .loading) {
             viewModel.startCheckout(
                 service: "airtime",
                 recipient: phone,
-                fields: ["network": network, "phone_number": phone, "amount": amt]
+                fields: ["network": network, "phone_number": phone, "amount": amt, "email": email.isEmpty ? nil : email]
             )
         }
         .onChange(of: viewModel.detectedNetwork) { detected in

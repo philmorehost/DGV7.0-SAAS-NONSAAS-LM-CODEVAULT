@@ -3,11 +3,16 @@ import WebKit
 
 /// Loads the PayHub-hosted checkout URL returned by checkout-init.php directly — no local
 /// gateway-SDK HTML/JS bridge is needed since Guest Mode uses PayHub exclusively and
-/// checkout-init.php already returns a ready-to-load hosted page. Completion is detected
-/// purely by URL: once the WKWebView navigates to web/guest-payment-complete.php (the
-/// callback_url passed at checkout-init time), payment is done from PayHub's perspective and
-/// we hand off to the Receipt screen, which polls status.php for the authoritative,
-/// webhook-driven fulfillment result.
+/// checkout-init.php already returns a ready-to-load hosted page.
+///
+/// Completion is detected two ways, whichever fires first:
+///  1. URL watch — the WKWebView lands on our guest-payment-complete.php callback.
+///  2. Status poll — viewModel.watchPayment() polls status.php every 3s. This is the one that
+///     actually matters in practice: PayHub's hosted page was observed redirecting to
+///     merchant.payhub.com.ng home INSTEAD of our callback_url, so the URL watch alone left
+///     paid guests stranded. status.php also self-verifies + fulfills server-side, so polling
+///     it both detects payment and drives crediting even if PayHub's webhook never arrives.
+/// Both paths funnel through viewModel.paymentDetected so navigation fires exactly once.
 struct CheckoutView: View {
     @ObservedObject var viewModel: GuestViewModel
     let onCancel: () -> Void
@@ -20,10 +25,12 @@ struct CheckoutView: View {
 
             if case .ready(let reference, let checkoutUrl, _) = viewModel.checkoutState, let url = URL(string: checkoutUrl) {
                 PayHubWebView(url: url) { loadedUrl in
-                    if loadedUrl.absoluteString.contains("guest-payment-complete.php") {
-                        onPaymentComplete(reference)
+                    let s = loadedUrl.absoluteString
+                    if s.contains("guest-payment-complete.php") || s.contains("payhub-success.php") {
+                        viewModel.notifyPaymentDetected(reference: reference)
                     }
                 }
+                .onAppear { viewModel.watchPayment(reference: reference) }
             } else {
                 VStack(spacing: 16) {
                     ProgressView().tint(.white)
@@ -37,6 +44,12 @@ struct CheckoutView: View {
                 .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.85))
                 .padding(.bottom, 24)
+        }
+        .onChange(of: viewModel.paymentDetected) { detected in
+            if let reference = detected {
+                viewModel.resetPaymentWatch()
+                onPaymentComplete(reference)
+            }
         }
     }
 }

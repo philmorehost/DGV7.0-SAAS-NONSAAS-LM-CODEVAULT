@@ -8,6 +8,7 @@ struct DataForm: View {
     @State private var phone = ""
     @State private var dataType: String? = nil
     @State private var plan: DataPlan? = nil
+    @State private var email = ""
 
     private var networkPlans: [DataPlan] {
         network.flatMap { viewModel.dataNetworks[$0] } ?? []
@@ -48,6 +49,8 @@ struct DataForm: View {
             onSelect: { plan = $0 }
         )
 
+        EmailReceiptField(email: $email)
+
         let amt = plan.flatMap { Double($0.amount) }.map { Int($0) } ?? 0
         let ready = network != nil && phone.count == 11 && plan != nil
         PayButton(amount: amt, enabled: ready, loading: viewModel.checkoutState == .loading) {
@@ -59,6 +62,7 @@ struct DataForm: View {
                     "phone_number": phone,
                     "type": plan?.dataTypeCode,
                     "quantity": plan?.productCode,
+                    "email": email.isEmpty ? nil : email,
                 ]
             )
         }
