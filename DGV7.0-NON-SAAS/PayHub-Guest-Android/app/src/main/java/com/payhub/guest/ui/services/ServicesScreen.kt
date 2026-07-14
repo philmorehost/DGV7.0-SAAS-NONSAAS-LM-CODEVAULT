@@ -25,12 +25,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.payhub.guest.data.GuestServiceCatalog
+import com.payhub.guest.ui.components.PullToRefreshWrapper
 import com.payhub.guest.ui.theme.CText
 import com.payhub.guest.ui.theme.CText2
 
 @Composable
-fun ServicesScreen(enabledServices: Map<String, Int>, onOpenService: (String) -> Unit) {
+fun ServicesScreen(
+    enabledServices: Map<String, Int>,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
+    onOpenService: (String) -> Unit,
+) {
     val services = GuestServiceCatalog.filterEnabled(enabledServices)
+    PullToRefreshWrapper(isRefreshing = isRefreshing, onRefresh = onRefresh) {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Text("All Services", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(vertical = 20.dp))
         LazyVerticalGrid(
@@ -60,5 +67,6 @@ fun ServicesScreen(enabledServices: Map<String, Int>, onOpenService: (String) ->
                 }
             }
         }
+    }
     }
 }

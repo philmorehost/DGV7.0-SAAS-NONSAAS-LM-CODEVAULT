@@ -5,15 +5,18 @@ import SwiftUI
 /// from the backend. Still an empty state when the guest hasn't completed a purchase yet.
 struct HistoryView: View {
     let history: [GuestReceipt]
+    var viewModel: GuestViewModel? = nil
 
     @State private var selected: GuestReceipt? = nil
 
-    init(history: [GuestReceipt] = []) {
+    init(history: [GuestReceipt] = [], viewModel: GuestViewModel? = nil) {
         self.history = history
+        self.viewModel = viewModel
     }
 
     var body: some View {
         content
+            .refreshable { if let viewModel { await viewModel.refresh() } }
             .sheet(item: $selected) { receipt in
                 ReceiptDetailSheet(receipt: receipt) { selected = nil }
             }
@@ -22,17 +25,19 @@ struct HistoryView: View {
     @ViewBuilder
     private var content: some View {
         if history.isEmpty {
-            VStack(spacing: 8) {
-                Text("Transaction History").font(.system(size: 20, weight: .bold)).padding(.bottom, 40)
-                Image(systemName: "doc.text").font(.system(size: 40)).foregroundColor(PHColor.text2)
-                Text("No saved history").font(.system(size: 15, weight: .bold)).foregroundColor(PHColor.text)
-                Text("Your completed purchases will show up here, saved on this device only.")
-                    .font(.system(size: 13))
-                    .foregroundColor(PHColor.text2)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+            ScrollView {
+                VStack(spacing: 8) {
+                    Text("Transaction History").font(.system(size: 20, weight: .bold)).padding(.bottom, 40).padding(.top, 60)
+                    Image(systemName: "doc.text").font(.system(size: 40)).foregroundColor(PHColor.text2)
+                    Text("No saved history").font(.system(size: 15, weight: .bold)).foregroundColor(PHColor.text)
+                    Text("Your completed purchases will show up here, saved on this device only.")
+                        .font(.system(size: 13))
+                        .foregroundColor(PHColor.text2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {

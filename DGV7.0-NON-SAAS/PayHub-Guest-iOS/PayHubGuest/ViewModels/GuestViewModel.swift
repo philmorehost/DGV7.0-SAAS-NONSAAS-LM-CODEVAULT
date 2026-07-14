@@ -308,29 +308,40 @@ final class GuestViewModel: ObservableObject {
     /// so a transaction that settled after the guest closed the Receipt screen still corrects
     /// itself the next time they look.
     func refreshPendingHistory() {
+        Task { await refreshPendingHistoryAsync() }
+    }
+
+    private func refreshPendingHistoryAsync() async {
         let stale = transactionHistory.filter { $0.status == "pending" || $0.status == "processing" }
         guard !stale.isEmpty else { return }
-        Task {
-            for receipt in stale {
-                if case .success(let order) = await api.getOrderStatus(reference: receipt.reference) {
-                    let st = order.status ?? ""
-                    if st == "success" || st == "failed" {
-                        saveReceipt(GuestReceipt(
-                            reference: receipt.reference,
-                            service: receipt.service,
-                            recipient: receipt.recipient,
-                            amountPaid: receipt.amountPaid,
-                            status: st,
-                            date: receipt.date,
-                            meterNumber: receipt.meterNumber,
-                            token: order.token ?? receipt.token,
-                            tokenUnit: receipt.tokenUnit
-                        ))
-                    }
+        for receipt in stale {
+            if case .success(let order) = await api.getOrderStatus(reference: receipt.reference) {
+                let st = order.status ?? ""
+                if st == "success" || st == "failed" {
+                    saveReceipt(GuestReceipt(
+                        reference: receipt.reference,
+                        service: receipt.service,
+                        recipient: receipt.recipient,
+                        amountPaid: receipt.amountPaid,
+                        status: st,
+                        date: receipt.date,
+                        meterNumber: receipt.meterNumber,
+                        token: order.token ?? receipt.token,
+                        tokenUnit: receipt.tokenUnit
+                    ))
                 }
             }
         }
     }
 
     func resetReceipt() { receiptState = .idle }
+
+    // ---------- Pull-to-refresh (Home / Services / History) ----------
+
+    /// Awaitable so SwiftUI's native .refreshable{} modifier can drive its own spinner timing —
+    /// re-fetches site-info (service toggles, support contact) and re-checks pending history.
+    func refresh() async {
+        await loadSiteInfo()
+        await refreshPendingHistoryAsync()
+    }
 }

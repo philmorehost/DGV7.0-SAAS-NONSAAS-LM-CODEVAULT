@@ -88,6 +88,7 @@ struct HomeView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 100)
         }
+        .refreshable { await viewModel.refresh() }
         .onAppear { viewModel.refreshPendingHistory() }
         .sheet(item: $selected) { receipt in
             ReceiptDetailSheet(receipt: receipt) { selected = nil }

@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.Icon
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.payhub.guest.data.GuestServiceCatalog
 import com.payhub.guest.data.model.GuestReceipt
+import com.payhub.guest.ui.components.PullToRefreshWrapper
 import com.payhub.guest.ui.components.ReceiptDetailDialog
 import com.payhub.guest.ui.theme.CError
 import com.payhub.guest.ui.theme.CSuccess
@@ -49,37 +52,38 @@ import java.util.Locale
  * Tapping an entry opens the full ReceiptDetailDialog with share-as-PDF/image.
  */
 @Composable
-fun HistoryScreen(history: List<GuestReceipt> = emptyList()) {
+fun HistoryScreen(history: List<GuestReceipt> = emptyList(), isRefreshing: Boolean = false, onRefresh: () -> Unit = {}) {
     var selected by remember { mutableStateOf<GuestReceipt?>(null) }
     selected?.let { ReceiptDetailDialog(receipt = it, onDismiss = { selected = null }) }
 
-    if (history.isEmpty()) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("Transaction History", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 40.dp))
-            Icon(Icons.Filled.Receipt, contentDescription = null, tint = CText2, modifier = Modifier.padding(bottom = 12.dp))
-            Text("No saved history", fontWeight = FontWeight.Bold, color = CText, modifier = Modifier.padding(bottom = 6.dp))
-            Text(
-                "Your completed purchases will show up here, saved on this device only.",
-                fontSize = 13.sp,
-                color = CText2,
-                textAlign = TextAlign.Center,
-            )
-        }
-        return
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        Text("Transaction History", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(vertical = 20.dp))
-        LazyColumn(
-            contentPadding = PaddingValues(bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(history, key = { it.reference }) { receipt ->
-                HistoryRow(receipt) { selected = receipt }
+    PullToRefreshWrapper(isRefreshing = isRefreshing, onRefresh = onRefresh) {
+        if (history.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text("Transaction History", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 40.dp))
+                Icon(Icons.Filled.Receipt, contentDescription = null, tint = CText2, modifier = Modifier.padding(bottom = 12.dp))
+                Text("No saved history", fontWeight = FontWeight.Bold, color = CText, modifier = Modifier.padding(bottom = 6.dp))
+                Text(
+                    "Your completed purchases will show up here, saved on this device only.",
+                    fontSize = 13.sp,
+                    color = CText2,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+                Text("Transaction History", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(vertical = 20.dp))
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(history, key = { it.reference }) { receipt ->
+                        HistoryRow(receipt) { selected = receipt }
+                    }
+                }
             }
         }
     }

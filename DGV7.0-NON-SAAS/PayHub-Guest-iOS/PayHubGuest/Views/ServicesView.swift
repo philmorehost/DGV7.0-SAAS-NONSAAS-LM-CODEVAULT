@@ -27,5 +27,6 @@ struct ServicesView: View {
             .padding(.bottom, 100)
         }
         .padding(.horizontal, 20)
+        .refreshable { await viewModel.refresh() }
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = GuestViewModel()
+    @StateObject private var connectivity = ConnectivityMonitor()
 
     private var isTopLevel: Bool {
         switch viewModel.screen {
@@ -51,7 +52,7 @@ struct ContentView: View {
                     viewModel.setTab(.home)
                 }
             case .history:
-                HistoryView(history: viewModel.transactionHistory)
+                HistoryView(history: viewModel.transactionHistory, viewModel: viewModel)
                     .onAppear { viewModel.refreshPendingHistory() }
             case .support:
                 SupportView(supportInfo: viewModel.supportInfo)
@@ -69,6 +70,11 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 16)
+            }
+
+            VStack {
+                ConnectivityBanner(isOnline: connectivity.isOnline)
+                Spacer()
             }
         }
     }

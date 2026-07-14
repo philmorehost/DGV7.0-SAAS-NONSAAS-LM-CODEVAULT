@@ -23,6 +23,7 @@ import androidx.navigation.navArgument
 import com.payhub.guest.ui.GuestViewModel
 import com.payhub.guest.ui.checkout.CheckoutScreen
 import com.payhub.guest.ui.components.BottomNavBar
+import com.payhub.guest.ui.components.ConnectivityBanner
 import com.payhub.guest.ui.components.GuestHomeIndicator
 import com.payhub.guest.ui.components.GuestNavBubble
 import com.payhub.guest.ui.components.GuestNavSpringSpec
@@ -69,18 +70,24 @@ fun GuestNavHost(viewModel: GuestViewModel) {
             composable(Routes.HOME) {
                 val enabledServices by viewModel.enabledServices.collectAsState()
                 val transactionHistory by viewModel.transactionHistory.collectAsState()
+                val isRefreshing by viewModel.isRefreshing.collectAsState()
                 androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshPendingHistory() }
                 HomeScreen(
                     enabledServices = enabledServices,
                     recentTransactions = transactionHistory,
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refresh() },
                     onOpenService = { service -> navController.navigate(Routes.purchase(service)) },
                     onOpenHistory = { navController.navigate(Routes.HISTORY) },
                 )
             }
             composable(Routes.SERVICES) {
                 val enabledServices by viewModel.enabledServices.collectAsState()
+                val isRefreshing by viewModel.isRefreshing.collectAsState()
                 ServicesScreen(
                     enabledServices = enabledServices,
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refresh() },
                     onOpenService = { service -> navController.navigate(Routes.purchase(service)) },
                 )
             }
@@ -127,8 +134,13 @@ fun GuestNavHost(viewModel: GuestViewModel) {
             }
             composable(Routes.HISTORY) {
                 val transactionHistory by viewModel.transactionHistory.collectAsState()
+                val isRefreshing by viewModel.isRefreshing.collectAsState()
                 androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshPendingHistory() }
-                HistoryScreen(history = transactionHistory)
+                HistoryScreen(
+                    history = transactionHistory,
+                    isRefreshing = isRefreshing,
+                    onRefresh = { viewModel.refresh() },
+                )
             }
             composable(Routes.SUPPORT) {
                 val supportInfo by viewModel.supportInfo.collectAsState()
@@ -176,6 +188,11 @@ fun GuestNavHost(viewModel: GuestViewModel) {
                 }
                 GuestNavBubble(current = currentTab, bubbleX = notchX)
             }
+        }
+
+        val isOnline by viewModel.isOnline.collectAsState()
+        Box(modifier = Modifier.align(Alignment.TopCenter)) {
+            ConnectivityBanner(isOnline = isOnline)
         }
     }
 }

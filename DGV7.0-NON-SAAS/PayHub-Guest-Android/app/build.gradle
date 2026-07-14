@@ -92,6 +92,10 @@ dependencies {
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
+    // Material3 doesn't get pull-to-refresh (PullToRefreshBox) until a Compose BOM newer than
+    // the one pinned here — androidx.compose.material's pullRefresh/rememberPullRefreshState
+    // has been stable for years and mixes fine alongside material3 components.
+    implementation 'androidx.compose.material:material'
     implementation 'androidx.navigation:navigation-compose:2.7.4'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2'
 

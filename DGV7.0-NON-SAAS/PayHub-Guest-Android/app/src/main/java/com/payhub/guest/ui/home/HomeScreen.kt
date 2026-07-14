@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.History
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.payhub.guest.data.GuestServiceCatalog
 import com.payhub.guest.data.model.GuestReceipt
+import com.payhub.guest.ui.components.PullToRefreshWrapper
 import com.payhub.guest.ui.theme.CError
 import com.payhub.guest.ui.theme.CSuccess
 import com.payhub.guest.ui.theme.CText
@@ -53,6 +56,8 @@ data class QuickAction(val label: String, val icon: ImageVector, val color: Colo
 fun HomeScreen(
     enabledServices: Map<String, Int>,
     recentTransactions: List<GuestReceipt> = emptyList(),
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
     onOpenService: (String) -> Unit,
     onOpenHistory: () -> Unit,
 ) {
@@ -63,7 +68,8 @@ fun HomeScreen(
     var selected by remember { mutableStateOf<GuestReceipt?>(null) }
     selected?.let { com.payhub.guest.ui.components.ReceiptDetailDialog(receipt = it, onDismiss = { selected = null }) }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+    PullToRefreshWrapper(isRefreshing = isRefreshing, onRefresh = onRefresh) {
+    Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -156,6 +162,7 @@ fun HomeScreen(
                 recentTransactions.take(3).forEach { receipt -> RecentTransactionRow(receipt) { selected = receipt } }
             }
         }
+    }
     }
 }
 

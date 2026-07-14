@@ -13,10 +13,13 @@ import com.payhub.guest.data.model.GuestReceipt
 import com.payhub.guest.data.model.GuestSupportInfo
 import com.payhub.guest.data.repository.ApiResult
 import com.payhub.guest.data.repository.GuestRepository
+import com.payhub.guest.util.ConnectivityObserver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -53,13 +56,41 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
     val supportInfo: StateFlow<GuestSupportInfo?> = _supportInfo.asStateFlow()
 
     init {
+        viewModelScope.launch { loadSiteInfoOnce() }
+    }
+
+    private suspend fun loadSiteInfoOnce() {
+        when (val r = repo.getSiteInfo()) {
+            is ApiResult.Success -> {
+                r.data.data?.services?.let { _enabledServices.value = it }
+                _supportInfo.value = r.data.data?.support
+            }
+            is ApiResult.Error -> {} // Keep the empty-map default (every service stays visible).
+        }
+    }
+
+    // ---------- Connectivity (online/offline banner) ----------
+
+    val isOnline: StateFlow<Boolean> = ConnectivityObserver.observe(application)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    // ---------- Pull-to-refresh (Home / Services / History) ----------
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    /** Re-fetches site-info (service toggles, support contact) and re-checks any pending
+     *  history entries against the server — shared pull-to-refresh handler for every
+     *  top-level screen, since none of them have their own separate "loading" concept. */
+    fun refresh() {
+        if (_isRefreshing.value) return
         viewModelScope.launch {
-            when (val r = repo.getSiteInfo()) {
-                is ApiResult.Success -> {
-                    r.data.data?.services?.let { _enabledServices.value = it }
-                    _supportInfo.value = r.data.data?.support
-                }
-                is ApiResult.Error -> {} // Keep the empty-map default (every service stays visible).
+            _isRefreshing.value = true
+            try {
+                loadSiteInfoOnce()
+                refreshPendingHistoryOnce()
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }
@@ -303,19 +334,21 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
      *  so a transaction that settled after the guest closed the Receipt screen still corrects
      *  itself the next time they look. */
     fun refreshPendingHistory() {
+        if (_transactionHistory.value.none { it.status == "pending" || it.status == "processing" }) return
+        viewModelScope.launch { refreshPendingHistoryOnce() }
+    }
+
+    private suspend fun refreshPendingHistoryOnce() {
         val stale = _transactionHistory.value.filter { it.status == "pending" || it.status == "processing" }
-        if (stale.isEmpty()) return
-        viewModelScope.launch {
-            for (receipt in stale) {
-                when (val r = repo.getOrderStatus(receipt.reference)) {
-                    is ApiResult.Success -> {
-                        val st = r.data.status
-                        if (st == "success" || st == "failed") {
-                            saveReceipt(receipt.copy(status = st, token = r.data.token ?: receipt.token))
-                        }
+        for (receipt in stale) {
+            when (val r = repo.getOrderStatus(receipt.reference)) {
+                is ApiResult.Success -> {
+                    val st = r.data.status
+                    if (st == "success" || st == "failed") {
+                        saveReceipt(receipt.copy(status = st, token = r.data.token ?: receipt.token))
                     }
-                    is ApiResult.Error -> {} // transient — try again next visit
                 }
+                is ApiResult.Error -> {} // transient — try again next visit
             }
         }
     }
