@@ -10,9 +10,15 @@
 # Gson
 -keep class com.google.gson.stream.** { *; }
 -keep class sun.misc.Unsafe { *; }
--keep class com.google.gson.reflect.TypeToken
--keep class * extends com.google.gson.reflect.TypeToken
 -dontwarn sun.misc.**
+
+# "java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType" is R8's classic
+# TypeToken failure mode: a plain `-keep class * extends TypeToken` still lets R8 merge/simplify
+# the anonymous subclass in ways that erase its generic superclass signature at runtime. The
+# `,allowobfuscation,allowshrinking` variants below (Gson's own documented R8 fix) let R8 rename
+# and remove-if-unused as normal, but forbid the structural changes that break the generic lookup.
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
 
 # Retrofit / OkHttp (bundled consumer-rules cover most of this; kept for older AGP/R8 configs)
 -dontwarn okhttp3.**
@@ -22,3 +28,9 @@
 -keepclasseswithmembers class * {
     @retrofit2.http.* <methods>;
 }
+
+# Retrofit's suspend-fun call adapter inspects the Continuation parameter's generic signature to
+# find the real response type — the other classic source of the same ParameterizedType crash,
+# specific to Kotlin coroutine endpoints (every method in GuestApiService.kt). Official Retrofit
+# R8 rule: https://github.com/square/retrofit/blob/master/retrofit/src/main/resources/META-INF/proguard/retrofit2.pro
+-keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
