@@ -226,10 +226,14 @@ function isKYCEnforced($v_id = null) {
     if ($v_id === null) $v_id = resolveVendorID();
     if ($v_id <= 0) return false;
 
-    if (isset($kyc_enforced_cache[$v_id])) return $kyc_enforced_cache[$v_id];
+    // Check config page bypass
+    $current_uri = explode("?", trim($_SERVER["REQUEST_URI"] ?? ""))[0];
+    $is_config_page = in_array($current_uri, ["/web/AccountSettings.php", "/web/KYCVerification.php", "/web/SecurityQuest.php"]);
 
-    // Branch DG6.7 Optimization: Session Cache
-    if (isset($_SESSION['kyc_enforced_cache'][$v_id])) {
+    if (!$is_config_page && isset($kyc_enforced_cache[$v_id])) return $kyc_enforced_cache[$v_id];
+
+    // Branch DG6.7 Optimization: Session Cache with 30s TTL
+    if (!$is_config_page && isset($_SESSION['kyc_enforced_cache'][$v_id]) && isset($_SESSION['kyc_enforced_time'][$v_id]) && (time() - $_SESSION['kyc_enforced_time'][$v_id] < 30)) {
         $kyc_enforced_cache[$v_id] = $_SESSION['kyc_enforced_cache'][$v_id];
         return $kyc_enforced_cache[$v_id];
     }
@@ -238,7 +242,10 @@ function isKYCEnforced($v_id = null) {
     $global_force_kyc = getSuperAdminOption('force_kyc', '0');
     if ($global_force_kyc == 1) {
         $kyc_enforced_cache[$v_id] = true;
-        if (isset($_SESSION)) $_SESSION['kyc_enforced_cache'][$v_id] = true;
+        if (isset($_SESSION)) {
+            $_SESSION['kyc_enforced_cache'][$v_id] = true;
+            $_SESSION['kyc_enforced_time'][$v_id] = time();
+        }
         return true;
     }
 
@@ -248,13 +255,19 @@ function isKYCEnforced($v_id = null) {
     if ($r = mysqli_fetch_assoc($q_v)) {
         if ($r['force_kyc'] == 1) {
             $kyc_enforced_cache[$v_id] = true;
-            if (isset($_SESSION)) $_SESSION['kyc_enforced_cache'][$v_id] = true;
+            if (isset($_SESSION)) {
+                $_SESSION['kyc_enforced_cache'][$v_id] = true;
+                $_SESSION['kyc_enforced_time'][$v_id] = time();
+            }
             return true;
         }
     }
 
     $kyc_enforced_cache[$v_id] = false;
-    if (isset($_SESSION)) $_SESSION['kyc_enforced_cache'][$v_id] = false;
+    if (isset($_SESSION)) {
+        $_SESSION['kyc_enforced_cache'][$v_id] = false;
+        $_SESSION['kyc_enforced_time'][$v_id] = time();
+    }
     return false;
 }
 
@@ -1807,7 +1820,7 @@ function sendVendorEmail($recipient_email, $email_subject, $email_body)
 	// More headers
     $from_name = $get_all_site_details["site_title"] ?? $get_all_super_admin_site_details["site_title"] ?? "System Admin";
 	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
-	$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
+	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
 	$website_admin_phone_number = "234" . substr($logged_account_details["phone_number"], 1, 11);
@@ -1843,7 +1856,7 @@ function sendSuperAdminEmail($recipient_email, $email_subject, $email_body)
 	// More headers
     $from_name = $get_all_super_admin_site_details["site_title"] ?? "Super Admin";
 	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
-	$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
+	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
 	$website_admin_phone_number = "234" . substr($logged_account_details["phone_number"], 1, 11);
@@ -3396,6 +3409,8 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
 {
     global $connection_server, $get_logged_user_details, $get_logged_admin_details;
 
+    $debug_file = __DIR__ . "/../logs/payhub_api_debug.txt";
+
     if ($vid === null) {
         $vid = $get_logged_user_details["vendor_id"] ?? $get_logged_admin_details["id"] ?? resolveVendorID();
     }
@@ -3525,6 +3540,13 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
     $err = curl_error($ch);
     curl_close($ch);
 
+    // Diagnostic logging — logs/ is protected (deny from all via logs/.htaccess), so the raw
+    // response (which may include PayHub's own transaction reference under a field name this
+    // codebase hasn't had to read before) is safe to capture here for troubleshooting the
+    // guest checkout reference-mismatch issue. Intentionally verbose; trim once confirmed.
+    $log_entry .= "HTTP: $http_code" . (!empty($err) ? " | cURL Error: $err" : "") . "\n";
+    $log_entry .= "Response: " . substr((string)$result, 0, 4000) . "\n";
+    @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
 
     if ($http_code >= 200 && $http_code < 300) {
         $json = json_decode($result, true);
@@ -5165,7 +5187,6 @@ function getSuperAdminOption($key, $default = '') {
         'force_kyc'                  => '0',
         'force_vendor_pin'           => '0',
         'allow_self_registration'    => '1',
-        'whatsapp_per_message_price' => '0',
         'ai_model_access'            => '255',
         'max_apis_per_vendor'        => '9999',
         'max_products_per_vendor'    => '9999',
