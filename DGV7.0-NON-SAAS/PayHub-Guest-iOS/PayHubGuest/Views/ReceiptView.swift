@@ -24,9 +24,14 @@ struct ReceiptView: View {
                 .padding(.vertical, 60)
 
             case .success(let order):
+                // .id(statusLabel) forces a fresh view identity when the poll upgrades
+                // Pending -> Success in place, so onAppear re-fires and re-saves the receipt
+                // to history with its final settled status.
                 ReceiptCard(order: order, viewModel: viewModel, statusLabel: "success", onDone: onDone)
+                    .id("success")
             case .pending(let order):
                 ReceiptCard(order: order, viewModel: viewModel, statusLabel: "pending", onDone: onDone)
+                    .id("pending")
             case .failed(let message):
                 VStack(spacing: 10) {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 44)).foregroundColor(PHColor.error)
@@ -80,6 +85,11 @@ private struct ReceiptCard: View {
                 .foregroundColor(statusLabel == "success" ? PHColor.success : PHColor.primary)
             Text(String(format: "₦%.0f", receipt.amountPaid)).font(.system(size: 26, weight: .heavy)).foregroundColor(PHColor.text)
             Text(statusLabel == "success" ? "Payment Successful" : "Payment Pending").foregroundColor(PHColor.text2)
+            if statusLabel == "success", let guestEmail = viewModel.pendingTransaction?.email {
+                Text("📧 A copy of your receipt has been sent to \(guestEmail)")
+                    .font(.system(size: 11))
+                    .foregroundColor(PHColor.success)
+            }
 
             VStack(spacing: 6) {
                 receiptRow("Reference", receipt.reference)

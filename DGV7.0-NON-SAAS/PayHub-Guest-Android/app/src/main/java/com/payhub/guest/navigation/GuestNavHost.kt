@@ -69,6 +69,7 @@ fun GuestNavHost(viewModel: GuestViewModel) {
             composable(Routes.HOME) {
                 val enabledServices by viewModel.enabledServices.collectAsState()
                 val transactionHistory by viewModel.transactionHistory.collectAsState()
+                androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshPendingHistory() }
                 HomeScreen(
                     enabledServices = enabledServices,
                     recentTransactions = transactionHistory,
@@ -126,6 +127,7 @@ fun GuestNavHost(viewModel: GuestViewModel) {
             }
             composable(Routes.HISTORY) {
                 val transactionHistory by viewModel.transactionHistory.collectAsState()
+                androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.refreshPendingHistory() }
                 HistoryScreen(history = transactionHistory)
             }
             composable(Routes.SUPPORT) {

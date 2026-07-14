@@ -32,6 +32,14 @@ if ((int)$order['status'] === GUEST_STATUS_PENDING_PAYMENT) {
     $order = guest_get_order($reference, $vendor_id);
 }
 
+// Some providers (Airtime, Direct Data) answer "pending" at purchase and only settle on requery,
+// usually within a minute — same poll drives that too (throttled inside to one real provider
+// requery per 15s), so the app's history shows the true final status without manual requerying.
+if ((int)$order['status'] === GUEST_STATUS_GATEWAY_PENDING) {
+    guest_requery_pending_order($order);
+    $order = guest_get_order($reference, $vendor_id);
+}
+
 $status_map = [
     GUEST_STATUS_PENDING_PAYMENT => 'pending_payment',
     GUEST_STATUS_PAID            => 'processing',

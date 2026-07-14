@@ -185,12 +185,14 @@ final class GuestViewModel: ObservableObject {
     struct PendingTransaction {
         let service: String
         let recipient: String
+        var email: String? = nil
     }
     private(set) var pendingTransaction: PendingTransaction?
 
     func startCheckout(service: String, recipient: String, fields: [String: Any?]) {
         checkoutState = .loading
-        pendingTransaction = PendingTransaction(service: service, recipient: recipient)
+        let guestEmail = (fields["email"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        pendingTransaction = PendingTransaction(service: service, recipient: recipient, email: guestEmail)
         Task {
             let backendService = service == "electricity" ? "electric" : service
             var body = fields
@@ -237,7 +239,7 @@ final class GuestViewModel: ObservableObject {
                         return
                     }
                 }
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
     }
@@ -273,19 +275,21 @@ final class GuestViewModel: ObservableObject {
 
     @Published var receiptState: ReceiptState = .idle
 
-    /// Polls status.php until the webhook-driven fulfillment settles (success/pending/failed),
-    /// or gives up after ~20 tries (~40s) — the webhook is the source of truth; this just
-    /// reflects it back to the guest without requiring a push/socket connection.
+    /// Polls status.php until fulfillment settles (success/failed) or ~2 minutes pass.
+    /// A "pending" answer does NOT stop the poll: Airtime and Direct Data providers routinely
+    /// answer pending at purchase and settle within a minute — the server requeries the
+    /// provider on each poll (throttled), so we keep listening and show the Pending receipt
+    /// in the meantime, upgrading it in place when the true status lands.
     func pollOrderStatus(reference: String) {
         receiptState = .polling
         Task {
-            for _ in 0..<20 {
+            for _ in 0..<60 {
                 switch await api.getOrderStatus(reference: reference) {
                 case .success(let order):
                     switch order.status {
                     case "success": receiptState = .success(order); return
                     case "failed": receiptState = .failed(order.desc ?? "Transaction failed"); return
-                    case "pending": receiptState = .pending(order); return
+                    case "pending": receiptState = .pending(order) // keep polling for the settled status
                     default: break // pending_payment / processing -> keep polling
                     }
                 case .failure:
@@ -295,6 +299,35 @@ final class GuestViewModel: ObservableObject {
             }
             if case .polling = receiptState {
                 receiptState = .failed("We couldn't confirm your payment yet. Check your email/WhatsApp receipt, or contact support with your reference.")
+            }
+        }
+    }
+
+    /// Re-checks stored history entries still marked pending/processing against the server and
+    /// updates the on-device cache to the true settled status — called when Home/History opens
+    /// so a transaction that settled after the guest closed the Receipt screen still corrects
+    /// itself the next time they look.
+    func refreshPendingHistory() {
+        let stale = transactionHistory.filter { $0.status == "pending" || $0.status == "processing" }
+        guard !stale.isEmpty else { return }
+        Task {
+            for receipt in stale {
+                if case .success(let order) = await api.getOrderStatus(reference: receipt.reference) {
+                    let st = order.status ?? ""
+                    if st == "success" || st == "failed" {
+                        saveReceipt(GuestReceipt(
+                            reference: receipt.reference,
+                            service: receipt.service,
+                            recipient: receipt.recipient,
+                            amountPaid: receipt.amountPaid,
+                            status: st,
+                            date: receipt.date,
+                            meterNumber: receipt.meterNumber,
+                            token: order.token ?? receipt.token,
+                            tokenUnit: receipt.tokenUnit
+                        ))
+                    }
+                }
             }
         }
     }

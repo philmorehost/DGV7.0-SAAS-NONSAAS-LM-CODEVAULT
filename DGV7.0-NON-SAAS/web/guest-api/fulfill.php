@@ -52,6 +52,61 @@ function guest_send_receipt_email($order, $delivery_desc, $service_outputs = [])
 }
 
 /**
+ * Requeries the provider for a GATEWAY_PENDING guest order and settles it to its true status —
+ * some providers (notably Airtime and Direct Data) always answer "pending" at purchase time and
+ * only settle on requery, usually within a minute. Mirrors web/func/requery-transaction.php's
+ * gateway sequence (func/api-gateway/requery/{type}-{host}.php reading $get_api_reference_id)
+ * minus the wallet refund logic — a failed guest order has no wallet to refund into, so it's
+ * flagged to the vendor for a manual PayHub refund exactly like a fulfillment-time failure.
+ *
+ * Throttled via extra_data.last_requery_at: the app polls status.php every 2s, and hitting the
+ * upstream provider that often would be abusive — one real requery per 15s window is plenty.
+ */
+function guest_requery_pending_order($order) {
+    global $connection_server;
+
+    if ((int)$order['status'] !== GUEST_STATUS_GATEWAY_PENDING) return;
+    $reference = $order['reference'];
+    $extra = json_decode($order['extra_data'] ?? '{}', true) ?: [];
+
+    $last = (int)($extra['last_requery_at'] ?? 0);
+    if (time() - $last < 15) return;
+    guest_merge_extra_data($reference, ['last_requery_at' => time()]);
+
+    $api_detail = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE id='" . (int)$order['api_id'] . "' LIMIT 1"));
+    if (!$api_detail || empty($api_detail['api_key'])) return;
+
+    $gw_name = guest_gateway_filename('requery', $api_detail['api_type'], $api_detail['api_base_url']);
+    $res = guest_run_gateway('requery', $gw_name, [
+        'api_detail' => $api_detail,
+        'get_api_reference_id' => $order['api_reference'],
+        'reference' => $reference,
+        'get_logged_user_details' => ['vendor_id' => $order['vendor_id'], 'username' => 'guest:' . $order['identity']],
+    ]);
+    $api_response = $res['api_response'] ? strtolower($res['api_response']) : $res['api_response'];
+
+    if ($api_response === 'successful') {
+        if (!empty($res['api_response_description'])) guest_update_order($reference, 'description', $res['api_response_description']);
+        guest_update_order($reference, 'status', (string)GUEST_STATUS_SUCCESS);
+        guest_mark_fulfilled($reference);
+        $order = guest_get_order($reference);
+        guest_send_receipt_email($order, $order['description']);
+    } elseif ($api_response === 'failed') {
+        if (!empty($res['api_response_description'])) guest_update_order($reference, 'description', $res['api_response_description']);
+        guest_update_order($reference, 'status', (string)GUEST_STATUS_FAILED);
+        bc_log_security_event('GUEST_FULFILLMENT_FAILED_AFTER_PAYMENT', $order['service_type'], $reference, "Paid order failed on requery — manual PayHub refund required. Identity: " . $order['identity']);
+        $vendor = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='" . (int)$order['vendor_id'] . "' LIMIT 1"));
+        if ($vendor && !empty($vendor['email'])) {
+            sendVendorEmail($vendor['email'], "ACTION REQUIRED: Guest order $reference failed after payment",
+                "A Guest Mode order settled as FAILED on requery AFTER the customer's PayHub payment was captured.<br><br>"
+              . "Reference: $reference<br>Service: " . $order['service_type'] . "<br>Identity: " . $order['identity'] . "<br>Amount: " . $order['discounted_amount'] . "<br><br>"
+              . "Please issue a manual refund via PayHub for this reference.");
+        }
+    }
+    // 'pending' or null: leave as-is, the next throttled requery will try again.
+}
+
+/**
  * Independently verifies a still-pending order against PayHub and, if genuinely paid, atomically
  * claims + fulfills it. This is what guest-webhook.php calls when PayHub's server-to-server
  * webhook arrives — but a guest checkout should not be a single point of failure on PayHub's

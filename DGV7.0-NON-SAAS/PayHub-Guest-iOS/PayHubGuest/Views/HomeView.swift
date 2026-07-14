@@ -11,6 +11,8 @@ private struct QuickAction: Identifiable {
 struct HomeView: View {
     @ObservedObject var viewModel: GuestViewModel
 
+    @State private var selected: GuestReceipt? = nil
+
     private var actions: [QuickAction] {
         GuestServiceCatalog.filterEnabled(viewModel.enabledServices).map { s in
             QuickAction(label: s.shortLabel, icon: s.icon, color: s.color) { viewModel.navigate(to: .purchase(s.key)) }
@@ -78,13 +80,17 @@ struct HomeView: View {
 
                     VStack(spacing: 8) {
                         ForEach(Array(viewModel.transactionHistory.prefix(3))) { receipt in
-                            RecentTransactionRow(receipt: receipt) { viewModel.setTab(.history) }
+                            RecentTransactionRow(receipt: receipt) { selected = receipt }
                         }
                     }
                 }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 100)
+        }
+        .onAppear { viewModel.refreshPendingHistory() }
+        .sheet(item: $selected) { receipt in
+            ReceiptDetailSheet(receipt: receipt) { selected = nil }
         }
     }
 
@@ -110,7 +116,7 @@ private struct RecentTransactionRow: View {
     private var statusColor: Color {
         switch receipt.status {
         case "success": return PHColor.success
-        case "pending": return Color(hex: 0xF59E0B)
+        case "pending", "processing": return Color(hex: 0xF59E0B)
         default: return PHColor.error
         }
     }
@@ -118,7 +124,7 @@ private struct RecentTransactionRow: View {
     private var statusLabel: String {
         switch receipt.status {
         case "success": return "Successful"
-        case "pending": return "Pending"
+        case "pending", "processing": return "Pending"
         default: return "Failed"
         }
     }

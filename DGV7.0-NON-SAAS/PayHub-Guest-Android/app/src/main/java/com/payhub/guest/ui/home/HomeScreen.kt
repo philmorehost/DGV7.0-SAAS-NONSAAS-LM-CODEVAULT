@@ -23,6 +23,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -55,6 +59,9 @@ fun HomeScreen(
     val actions = GuestServiceCatalog.filterEnabled(enabledServices).map { s ->
         QuickAction(s.shortLabel, s.icon, s.color) { onOpenService(s.key) }
     } + QuickAction("History", Icons.Filled.History, PhPrimary) { onOpenHistory() }
+
+    var selected by remember { mutableStateOf<GuestReceipt?>(null) }
+    selected?.let { com.payhub.guest.ui.components.ReceiptDetailDialog(receipt = it, onDismiss = { selected = null }) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Row(
@@ -146,7 +153,7 @@ fun HomeScreen(
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 24.dp)) {
-                recentTransactions.take(3).forEach { receipt -> RecentTransactionRow(receipt, onOpenHistory) }
+                recentTransactions.take(3).forEach { receipt -> RecentTransactionRow(receipt) { selected = receipt } }
             }
         }
     }
@@ -179,11 +186,12 @@ private fun RecentTransactionRow(receipt: GuestReceipt, onClick: () -> Unit) {
         }
         Column(horizontalAlignment = Alignment.End) {
             Text("₦${"%,.0f".format(receipt.amountPaid)}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CText)
+            val pendingLike = receipt.status == "pending" || receipt.status == "processing"
             Text(
-                if (receipt.status == "success") "Successful" else if (receipt.status == "pending") "Pending" else "Failed",
+                if (receipt.status == "success") "Successful" else if (pendingLike) "Pending" else "Failed",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (receipt.status == "success") CSuccess else if (receipt.status == "pending") Color(0xFFF59E0B) else CError,
+                color = if (receipt.status == "success") CSuccess else if (pendingLike) Color(0xFFF59E0B) else CError,
             )
         }
     }

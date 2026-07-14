@@ -43,7 +43,16 @@ switch ($service) {
         $gw = guest_gateway_filename('verify', 'cable', $api_detail['api_base_url']);
         $res = guest_run_gateway('verify', $gw, ['api_detail' => $api_detail, 'isp' => $isp, 'product_name' => $isp, 'iuc_no' => $iuc_no, 'quantity' => $quantity]);
         if (in_array($res['api_response'], ['successful', 'pending'])) {
-            guest_json(["status" => "success", "desc" => $res['api_response_description']]);
+            // Cable verify gateways return the smartcard owner's name either in a dedicated
+            // customer_name var or (most of them) as the description itself — surface it as
+            // customer_name so the app's "Verified" card can show WHO owns the IUC number,
+            // matching the electric/betting branches below.
+            guest_json([
+                "status" => "success",
+                "desc" => $res['api_response_description'],
+                "customer_name" => $res['api_response_customer_name'] ?? $res['api_response_description'],
+                "customer_address" => $res['api_response_customer_address']
+            ]);
         }
         guest_fail("Error: Unable to verify customer");
     }

@@ -192,13 +192,13 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
     val checkoutState: StateFlow<CheckoutState> = _checkoutState.asStateFlow()
 
     /** Snapshot of what's being purchased, kept for the Receipt screen after payment completes. */
-    data class PendingTransaction(val service: String, val recipient: String)
+    data class PendingTransaction(val service: String, val recipient: String, val email: String? = null)
     var pendingTransaction: PendingTransaction? = null
         private set
 
     fun startCheckout(service: String, recipient: String, fields: Map<String, Any?>) {
         _checkoutState.value = CheckoutState.Loading
-        pendingTransaction = PendingTransaction(service, recipient)
+        pendingTransaction = PendingTransaction(service, recipient, (fields["email"] as? String)?.takeIf { it.isNotBlank() })
         viewModelScope.launch {
             val backendService = if (service == "electricity") "electric" else service
             val body = fields + ("service" to backendService)
@@ -246,7 +246,7 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     is ApiResult.Error -> {} // transient — keep watching
                 }
-                delay(3000)
+                delay(2000)
             }
         }
     }
@@ -269,21 +269,23 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
     private val _receiptState = MutableStateFlow<ReceiptState>(ReceiptState.Idle)
     val receiptState: StateFlow<ReceiptState> = _receiptState.asStateFlow()
 
-    /** Polls status.php until the webhook-driven fulfillment settles (success/pending/failed),
-     *  or gives up after ~20 tries (~40s) — the webhook is the source of truth; this just
-     *  reflects it back to the guest without requiring a push/socket connection. */
+    /** Polls status.php until fulfillment settles (success/failed) or ~2 minutes pass.
+     *  Unlike the first version, a "pending" answer does NOT stop the poll: Airtime and Direct
+     *  Data providers routinely answer pending at purchase and settle within a minute — the
+     *  server requeries the provider on each poll (throttled), so we keep listening and show
+     *  the Pending receipt in the meantime, upgrading it in place when the true status lands. */
     fun pollOrderStatus(reference: String) {
         _receiptState.value = ReceiptState.Polling
         viewModelScope.launch {
-            repeat(20) { _ ->
+            repeat(60) { _ ->
                 when (val r = repo.getOrderStatus(reference)) {
                     is ApiResult.Success -> {
                         val order = r.data
                         when (order.status) {
                             "success" -> { _receiptState.value = ReceiptState.Success(order); return@launch }
                             "failed" -> { _receiptState.value = ReceiptState.Failed(order.desc ?: "Transaction failed"); return@launch }
-                            "pending" -> { _receiptState.value = ReceiptState.Pending(order); return@launch }
-                            // pending_payment / processing -> keep polling, the webhook hasn't landed yet
+                            "pending" -> { _receiptState.value = ReceiptState.Pending(order) } // keep polling for the settled status
+                            // pending_payment / processing -> keep polling, fulfillment hasn't landed yet
                         }
                     }
                     is ApiResult.Error -> { /* transient — keep polling */ }
@@ -292,6 +294,28 @@ class GuestViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (_receiptState.value is ReceiptState.Polling) {
                 _receiptState.value = ReceiptState.Failed("We couldn't confirm your payment yet. Check your email/WhatsApp receipt, or contact support with your reference.")
+            }
+        }
+    }
+
+    /** Re-checks stored history entries still marked pending/processing against the server and
+     *  updates the on-device cache to the true settled status — called when Home/History opens
+     *  so a transaction that settled after the guest closed the Receipt screen still corrects
+     *  itself the next time they look. */
+    fun refreshPendingHistory() {
+        val stale = _transactionHistory.value.filter { it.status == "pending" || it.status == "processing" }
+        if (stale.isEmpty()) return
+        viewModelScope.launch {
+            for (receipt in stale) {
+                when (val r = repo.getOrderStatus(receipt.reference)) {
+                    is ApiResult.Success -> {
+                        val st = r.data.status
+                        if (st == "success" || st == "failed") {
+                            saveReceipt(receipt.copy(status = st, token = r.data.token ?: receipt.token))
+                        }
+                    }
+                    is ApiResult.Error -> {} // transient — try again next visit
+                }
             }
         }
     }

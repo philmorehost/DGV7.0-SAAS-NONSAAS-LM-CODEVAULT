@@ -112,7 +112,9 @@ private fun ReceiptCard(order: GuestOrderStatusResponse, viewModel: GuestViewMod
             tokenUnit = order.tokenUnit,
         )
     }
-    LaunchedEffect(receipt.reference) { viewModel.saveReceipt(receipt) }
+    // Keyed on status too: the poll now upgrades Pending -> Success in place, and the history
+    // cache must reflect the final settled status, not the first one shown.
+    LaunchedEffect(receipt.reference, receipt.status) { viewModel.saveReceipt(receipt) }
 
     var showEmailForm by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
@@ -126,7 +128,18 @@ private fun ReceiptCard(order: GuestOrderStatusResponse, viewModel: GuestViewMod
     ) {
         Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = if (statusLabel == "success") CSuccess else PhPrimary, modifier = Modifier.size(56.dp))
         Text("₦${"%,.0f".format(receipt.amountPaid)}", fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, modifier = Modifier.padding(top = 12.dp))
-        Text(if (statusLabel == "success") "Payment Successful" else "Payment Pending", color = CText2, modifier = Modifier.padding(bottom = 16.dp))
+        Text(if (statusLabel == "success") "Payment Successful" else "Payment Pending", color = CText2)
+        pending?.email?.let { guestEmail ->
+            if (statusLabel == "success") {
+                Text(
+                    "📧 A copy of your receipt has been sent to $guestEmail",
+                    fontSize = 11.sp,
+                    color = CSuccess,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+        androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 16.dp))
 
         ReceiptRow("Reference", receipt.reference)
         ReceiptRow("Service", receipt.service.replaceFirstChar(Char::uppercase))

@@ -297,7 +297,7 @@ function guest_update_order($reference, $column_name, $column_value) {
  */
 function guest_run_gateway($mode, $api_gateway_name, array $vars = []) {
     extract($vars);
-    $dir = $mode === 'verify' ? '/func/api-gateway/verify/' : '/func/api-gateway/';
+    $dir = $mode === 'verify' ? '/func/api-gateway/verify/' : ($mode === 'requery' ? '/func/api-gateway/requery/' : '/func/api-gateway/');
     $api_response = null;
     $api_response_description = null;
     $api_response_reference = null;
@@ -359,7 +359,7 @@ function guest_merge_extra_data($reference, array $merge) {
 
 /** Resolves the gateway filename exactly like web/func/*.php: normalized host name, fallback to -localserver.php. */
 function guest_gateway_filename($mode, $type_prefix, $api_base_url) {
-    $dir = $mode === 'verify' ? '/func/api-gateway/verify/' : '/func/api-gateway/';
+    $dir = $mode === 'verify' ? '/func/api-gateway/verify/' : ($mode === 'requery' ? '/func/api-gateway/requery/' : '/func/api-gateway/');
     $normalized = strtolower(trim($api_base_url));
     $candidate = $type_prefix . "-" . str_replace(".", "-", $normalized) . ".php";
     if (file_exists($_SERVER['DOCUMENT_ROOT'] . $dir . $candidate)) {

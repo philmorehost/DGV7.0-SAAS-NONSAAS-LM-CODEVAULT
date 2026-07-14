@@ -6,11 +6,21 @@ import SwiftUI
 struct HistoryView: View {
     let history: [GuestReceipt]
 
+    @State private var selected: GuestReceipt? = nil
+
     init(history: [GuestReceipt] = []) {
         self.history = history
     }
 
     var body: some View {
+        content
+            .sheet(item: $selected) { receipt in
+                ReceiptDetailSheet(receipt: receipt) { selected = nil }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if history.isEmpty {
             VStack(spacing: 8) {
                 Text("Transaction History").font(.system(size: 20, weight: .bold)).padding(.bottom, 40)
@@ -29,6 +39,7 @@ struct HistoryView: View {
                     Text("Transaction History").font(.system(size: 20, weight: .bold)).padding(.vertical, 20)
                     ForEach(history) { receipt in
                         HistoryRow(receipt: receipt)
+                            .onTapGesture { selected = receipt }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -48,7 +59,7 @@ private struct HistoryRow: View {
     private var statusColor: Color {
         switch receipt.status {
         case "success": return PHColor.success
-        case "pending": return Color(hex: 0xF59E0B)
+        case "pending", "processing": return Color(hex: 0xF59E0B)
         default: return PHColor.error
         }
     }
@@ -56,7 +67,7 @@ private struct HistoryRow: View {
     private var statusLabel: String {
         switch receipt.status {
         case "success": return "Successful"
-        case "pending": return "Pending"
+        case "pending", "processing": return "Pending"
         default: return "Failed"
         }
     }

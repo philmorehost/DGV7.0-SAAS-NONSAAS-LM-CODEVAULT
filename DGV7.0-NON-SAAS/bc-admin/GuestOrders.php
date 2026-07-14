@@ -1,5 +1,31 @@
 <?php session_start();
     include("../func/bc-admin-config.php");
+
+    // Manual re-check for a stuck order: "Verify & Process" (pending_payment) re-verifies the
+    // payment with PayHub and fulfills if genuinely paid; "Requery" (pending) asks the provider
+    // for the true final status. Both use the exact same code paths the app's own status poll
+    // drives — this is just a button for support/ops to force one immediately.
+    if (isset($_GET['process']) && !empty(trim(strip_tags($_GET['process'])))) {
+        include_once("../web/guest-api/guest-bootstrap.php");
+        include_once("../web/guest-api/fulfill.php");
+        $process_ref = trim(strip_tags($_GET['process']));
+        $process_order = guest_get_order($process_ref, $get_logged_admin_details['id']);
+        if ($process_order) {
+            if ((int)$process_order['status'] === GUEST_STATUS_PENDING_PAYMENT) {
+                guest_attempt_paid_fulfillment($process_ref);
+            } elseif ((int)$process_order['status'] === GUEST_STATUS_GATEWAY_PENDING) {
+                // Bypass the poll throttle for an explicit admin click.
+                guest_merge_extra_data($process_ref, ['last_requery_at' => 0]);
+                guest_requery_pending_order(guest_get_order($process_ref));
+            }
+            $updated_order = guest_get_order($process_ref);
+            $_SESSION['product_purchase_response'] = "Order $process_ref re-checked. Current status code: " . $updated_order['status'];
+        } else {
+            $_SESSION['product_purchase_response'] = "Order not found.";
+        }
+        header("Location: GuestOrders.php");
+        exit();
+    }
 ?>
 <!DOCTYPE html>
 <head>
@@ -93,6 +119,7 @@
                             <th>Amount</th>
                             <th>Status</th>
                             <th>Description</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -108,10 +135,17 @@
                                 <td class="text-nowrap">&#8358;<?php echo number_format((float)$guest_order["discounted_amount"], 2); ?></td>
                                 <td><span class="badge bg-<?php echo $status_info[1]; ?>"><?php echo $status_info[0]; ?></span></td>
                                 <td style="max-width:280px;"><?php echo htmlspecialchars($guest_order["description"] ?? ''); ?></td>
+                                <td class="text-nowrap">
+                                    <?php if((int)$guest_order["status"] === 0){ ?>
+                                        <a href="GuestOrders.php?process=<?php echo urlencode($guest_order["reference"]); ?>" class="btn btn-sm btn-outline-primary">Verify &amp; Process</a>
+                                    <?php }elseif((int)$guest_order["status"] === 3){ ?>
+                                        <a href="GuestOrders.php?process=<?php echo urlencode($guest_order["reference"]); ?>" class="btn btn-sm btn-outline-warning">Requery</a>
+                                    <?php } ?>
+                                </td>
                             </tr>
                             <?php } ?>
                         <?php }else{ ?>
-                            <tr><td colspan="7" class="text-center py-4">No guest orders found.</td></tr>
+                            <tr><td colspan="8" class="text-center py-4">No guest orders found.</td></tr>
                         <?php } ?>
                     </tbody>
                 </table>

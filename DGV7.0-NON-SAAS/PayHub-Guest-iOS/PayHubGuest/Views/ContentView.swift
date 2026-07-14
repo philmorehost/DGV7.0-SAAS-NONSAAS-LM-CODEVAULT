@@ -52,6 +52,7 @@ struct ContentView: View {
                 }
             case .history:
                 HistoryView(history: viewModel.transactionHistory)
+                    .onAppear { viewModel.refreshPendingHistory() }
             case .support:
                 SupportView(supportInfo: viewModel.supportInfo)
             }
