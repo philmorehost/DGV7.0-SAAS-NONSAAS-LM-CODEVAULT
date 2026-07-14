@@ -3553,14 +3553,6 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
     $err = curl_error($ch);
     curl_close($ch);
 
-    // Diagnostic logging — logs/ is protected (deny from all via logs/.htaccess), so the raw
-    // response (which may include PayHub's own transaction reference under a field name this
-    // codebase hasn't had to read before) is safe to capture here for troubleshooting the
-    // guest checkout reference-mismatch issue. Intentionally verbose; trim once confirmed.
-    $log_entry .= "HTTP: $http_code" . (!empty($err) ? " | cURL Error: $err" : "") . "\n";
-    $log_entry .= "Response: " . substr((string)$result, 0, 4000) . "\n";
-    @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
-
     if ($http_code >= 200 && $http_code < 300) {
         $json = json_decode($result, true);
         $status = strtolower($json['status'] ?? "");
