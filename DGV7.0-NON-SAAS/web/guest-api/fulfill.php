@@ -140,7 +140,15 @@ function guest_attempt_paid_fulfillment($reference) {
     }
     if (!$verified_tx) return;
 
+    // PayHub's verify response returns amounts in kobo (confirmed live: a real ₦197 guest
+    // charge verified with "amount":19700) — the same Naira/Kobo ambiguity processPayhubSuccess()
+    // already documents for the authenticated flow (func/bc-func.php ~3713). Unlike that generic
+    // reconciliation path, a guest order always has a known expected amount to check against, so
+    // just test whether dividing by 100 lands on it rather than guessing from magnitude alone.
     $verified_amount = (float)($verified_tx['amount'] ?? 0);
+    if ($verified_amount > 0 && abs(($verified_amount / 100) - (float)$order['discounted_amount']) < 0.5) {
+        $verified_amount = $verified_amount / 100;
+    }
     if ($verified_amount <= 0 || abs($verified_amount - (float)$order['discounted_amount']) > 0.5) {
         bc_log_security_event('SECURITY', 'guest_status_verify', $reference, "Amount mismatch: quoted {$order['discounted_amount']}, paid $verified_amount");
         return;

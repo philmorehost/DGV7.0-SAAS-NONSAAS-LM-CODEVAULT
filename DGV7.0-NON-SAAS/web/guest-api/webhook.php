@@ -88,7 +88,13 @@ if (!$verified_tx) {
 // Amount sanity check: the verified PayHub amount should match what we quoted the guest.
 // A missing/zero amount in PayHub's own verify response is itself suspicious for a
 // "successful" transaction — fail closed rather than skipping the check.
+// PayHub returns amounts in kobo (confirmed live: a real ₦197 charge verified with
+// "amount":19700) — same ambiguity processPayhubSuccess() documents for the authenticated
+// flow (func/bc-func.php ~3713); test against our own known expected amount instead of guessing.
 $verified_amount = (float)($verified_tx['amount'] ?? 0);
+if ($verified_amount > 0 && abs(($verified_amount / 100) - (float)$order['discounted_amount']) < 0.5) {
+    $verified_amount = $verified_amount / 100;
+}
 if ($verified_amount <= 0 || abs($verified_amount - (float)$order['discounted_amount']) > 0.5) {
     bc_log_security_event('SECURITY', 'guest_webhook', $reference, "Amount mismatch: quoted {$order['discounted_amount']}, paid $verified_amount");
     http_response_code(400);
