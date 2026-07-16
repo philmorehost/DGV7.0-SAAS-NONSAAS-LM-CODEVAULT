@@ -1,0 +1,24 @@
+# EXAM-HUB
+
+## About EXAM-HUB
+EXAM-HUB is a fast, reliable, and secure platform in Nigeria for purchasing educational examination result checker PINs and tokens instantly. 
+
+We provide instant scratch cards and e-pins for major examination bodies in Nigeria, including:
+- WAEC (West African Examinations Council)
+- NECO (National Examinations Council)
+- NABTEB (National Business and Technical Examinations Board)
+- JAMB (Joint Admissions and Matriculation Board)
+
+## Key Features
+- **Instant Delivery**: PINs and tokens are generated and delivered instantly upon successful payment.
+- **Secure Transactions**: Safe and encrypted payment gateways.
+- **API Access**: Developers can integrate our PIN generation services into their own platforms via our secure API.
+- **24/7 Availability**: Automated delivery system that never sleeps.
+
+## Links
+- **Home**: /
+- **Buy PINs Catalog**: /catalog
+- **User Dashboard**: /user/dashboard
+- **Login**: /login
+- **Register**: /register
+- **API Documentation**: /api-docs.php

@@ -1,0 +1,14 @@
+RewriteEngine On
+
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([^\.]+)$ $1.php [NC,L]
+
+# Prevent directory listing
+Options -Indexes
+
+# Security headers (basic)
+Header set X-Content-Type-Options "nosniff"
+Header set X-XSS-Protection "1; mode=block"

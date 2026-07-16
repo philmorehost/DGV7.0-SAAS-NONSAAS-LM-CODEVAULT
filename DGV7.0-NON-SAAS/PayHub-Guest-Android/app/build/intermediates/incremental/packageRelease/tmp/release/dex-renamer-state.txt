@@ -1,0 +1,4 @@
+#Wed Jul 15 19:18:53 WAT 2026
+base.0=C\:\\Users\\User\\Downloads\\DGV7.0 SAAS and NON-SAAS and LM\\DGV7.0-NON-SAAS\\PayHub-Guest-Android\\app\\build\\intermediates\\dex\\release\\minifyReleaseWithR8\\classes.dex
+path.0=classes.dex
+renamed.0=classes.dex

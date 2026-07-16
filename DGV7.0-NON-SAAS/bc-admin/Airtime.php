@@ -64,6 +64,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     include_once("../func/bc-product-actions.php");
@@ -79,10 +80,12 @@
         if ($sentinel_decision === 'BLOCK') {
             $_SESSION['product_purchase_response'] = '🔒 Transaction blocked by AI Security Sentinel. Contact your administrator.';
             header('Location: Airtime.php'); exit();
+            exit;
         }
         if ($sentinel_decision === 'FLAG_FOR_APPROVAL') {
             $_SESSION['product_purchase_response'] = '⏳ This transaction has been flagged for manual review. Please try again shortly.';
             header('Location: Airtime.php'); exit();
+            exit;
         }
     }
     // ─────────────────────────────────────────────────────────────────────────────
@@ -167,6 +170,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
     $csv_price_level_array = [];
@@ -274,19 +278,19 @@
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Prov. %</label>
-                            <input type="number" id="provider-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="provider-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Smart %</label>
-                            <input type="number" id="smart-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="smart-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Agent %</label>
-                            <input type="number" id="agent-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="agent-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">API %</label>
-                            <input type="number" id="api-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="api-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" onclick="fetchVariations();" class="btn btn-primary w-100 fw-bold">Fetch Plans</button>
@@ -513,9 +517,9 @@
                                                         <input name="product-id[]" type="hidden" value="'.$product_smart_details["product_id"].'"/>
                                                         <input name="product-name[]" type="hidden" class="product-name-val" value="'.$product_smart_details["val_4"].'"/>
                                                     </td>
-                                                    <td><input id="'.strtolower($products).'_smart_level" name="smart-price[]" type="number" step="0.1" value="'.$product_smart_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:80px"></td>
-                                                    <td><input id="'.strtolower($products).'_agent_level" name="agent-price[]" type="number" step="0.1" value="'.$product_agent_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:80px"></td>
-                                                    <td><input id="'.strtolower($products).'_api_level" name="api-price[]" type="number" step="0.1" value="'.$product_api_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:80px"></td>
+                                                    <td><input id="'.strtolower($products).'_smart_level" name="smart-price[]" type="number" step="any" value="'.$product_smart_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:80px"></td>
+                                                    <td><input id="'.strtolower($products).'_agent_level" name="agent-price[]" type="number" step="any" value="'.$product_agent_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:80px"></td>
+                                                    <td><input id="'.strtolower($products).'_api_level" name="api-price[]" type="number" step="any" value="'.$product_api_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:80px"></td>
                                                     <td>'.$status_badge.'</td>
                                                     <td class="text-end pe-3">
                                                         <a href="Airtime.php?action='.$action_link.'&product_id='.$product_smart_details["product_id"].'&api_id='.$product_smart_details["api_id"].'" class="btn btn-sm btn-light border '.$action_btn_class.'"><i class="bi bi-power"></i></a>

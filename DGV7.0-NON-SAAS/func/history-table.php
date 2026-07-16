@@ -4,7 +4,7 @@
 
 $is_batch = $is_batch ?? false;
 
-if (mysqli_num_rows($query_result) >= 1) {
+if ($query_result && mysqli_num_rows($query_result) >= 1) {
     $show_actions = ($is_admin && ((isset($is_payment_order) && $is_payment_order) || (isset($is_fund_transfer) && $is_fund_transfer))) || (!$is_admin);
     echo '<div class="card border-0 shadow-sm rounded-4 overflow-hidden mt-3">';
     echo '<div class="table-responsive">';

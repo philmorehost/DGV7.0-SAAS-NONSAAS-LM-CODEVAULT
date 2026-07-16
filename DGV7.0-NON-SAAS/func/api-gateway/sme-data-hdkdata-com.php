@@ -1,21 +1,21 @@
 <?php
- $data_service_provider_alter_code = array("mtn" => "mtn", "airtel" => "airtel", "9mobile" => "9mobile");
+ $data_service_provider_alter_code = array("mtn" => "mtn", "airtel" => "airtel", "glo" => "glo", "9mobile" => "9mobile");
  if(in_array($product_name, array_keys($data_service_provider_alter_code))){
   if($product_name == "mtn"){
    $net_id = "1";
-   $web_data_size_array = array("500mb"=>"309","1gb"=>"328","2gb"=>"8","3gb"=>"44","5gb"=>"279");
+   $web_data_size_array = array("500mb"=>"214","1gb"=>"7","2gb"=>"8","3gb"=>"44","5gb"=>"291","10gb"=>"213");
   }else{
    if($product_name == "airtel"){
     $net_id = "4";
-    $web_data_size_array = array();
+    $web_data_size_array = array("500mb"=>"165","1gb"=>"145","2gb"=>"146","5gb"=>"147","10gb"=>"148");
    }else{
     if($product_name == "glo"){
      $net_id = "2";
-     $web_data_size_array = array();
+     $web_data_size_array = array("1gb"=>"286","2gb"=>"288","3.5gb"=>"289","15gb"=>"290");
     }else{
      if($product_name == "9mobile"){
       $net_id = "3";
-      $web_data_size_array = array();
+      $web_data_size_array = array("500mb"=>"221","1gb"=>"183","2gb"=>"185","3gb"=>"186","5gb"=>"188","10gb"=>"189");
      }
     }
    }
@@ -34,11 +34,19 @@
     "Content-Type: application/json",
    );
    curl_setopt($curl_request, CURLOPT_HTTPHEADER, $curl_http_headers);
-   $curl_postfields_data = json_encode(array("network"=>$net_id,"plan"=>$web_data_size_array[$quantity],"mobile_number"=>$phone_no,"Ported_number"=>true),true);
+   $curl_postfields_data = json_encode(array("network"=>(int)$net_id,"plan"=>(int)$web_data_size_array[$quantity],"mobile_number"=>$phone_no,"Ported_number"=>true));
    curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
    $curl_result = curl_exec($curl_request);
+   error_log("HDK DATA API RAW RESPONSE: " . $curl_result);
    $curl_json_result = json_decode($curl_result, true);
-   curl_close($curl_request);
+
+
+   if(curl_errno($curl_request)){
+    $api_response = "failed";
+    $api_response_text = 1;
+    $api_response_description = "";
+    $api_response_status = 3;
+   }
 
    if(in_array($curl_json_result["Status"],array("successful"))){
     $api_response = "successful";
@@ -59,7 +67,7 @@
    if(!in_array($curl_json_result["Status"],array("successful","pending"))){
     $api_response = "failed";
     $api_response_text = $curl_json_result["Status"];
-    $api_response_description = "Transaction Failed";
+    $api_response_description = "Transaction Failed | ".strtoupper(str_replace(["_","-"]," ",$quantity))." credited to 234".substr($phone_no, "1", "11")." failed";
     $api_response_status = 3;
    }
   }else{
@@ -76,4 +84,5 @@
   $api_response_description = "Service not available";
   $api_response_status = 3;
  }
+curl_close($curl_request);
 ?>

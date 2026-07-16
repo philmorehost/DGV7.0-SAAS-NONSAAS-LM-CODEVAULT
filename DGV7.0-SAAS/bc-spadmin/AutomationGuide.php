@@ -41,7 +41,6 @@ $current_page = "AutomationGuide.php";
                     <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
                         <button class="nav-link active mb-2 text-start" data-bs-toggle="pill" data-bs-target="#tab-cron"><i class="bi bi-clock-history me-2"></i>Cron Jobs</button>
                         <button class="nav-link mb-2 text-start" data-bs-toggle="pill" data-bs-target="#tab-ai"><i class="bi bi-cpu me-2"></i>Cloud AI Setup</button>
-                        <button class="nav-link mb-2 text-start" data-bs-toggle="pill" data-bs-target="#tab-wa"><i class="bi bi-whatsapp me-2"></i>WhatsApp Official</button>
                     </div>
                 </div>
             </div>
@@ -57,7 +56,15 @@ $current_page = "AutomationGuide.php";
                             <p class="text-muted small mb-4">Set these up in your cPanel or VPS crontab to automate the AI engine and monitoring systems.</p>
                             
                             <div class="mb-4">
-                                <h6 class="fw-bold small text-uppercase">1. API Aggregator Monitor (Every 5 mins)</h6>
+                                <h6 class="fw-bold small text-uppercase">1. Bulk Airtime/Data Queue Processor (Every 1 min)</h6>
+                                <div class="code-block">
+                                    <button class="copy-btn" onclick="copyCode(this)">COPY</button>
+                                    <code>* * * * * /usr/bin/php <?php echo $_SERVER['DOCUMENT_ROOT']; ?>/cron/process_bulk_queue.php >> <?php echo dirname($_SERVER['DOCUMENT_ROOT']); ?>/logs/bulk_queue.log 2>&1</code>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <h6 class="fw-bold small text-uppercase">2. API Aggregator Monitor (Every 5 mins)</h6>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyCode(this)">COPY</button>
                                     <code>*/5 * * * * /usr/bin/php <?php echo $_SERVER['DOCUMENT_ROOT']; ?>/cron/aggregator_monitor.php >> <?php echo dirname($_SERVER['DOCUMENT_ROOT']); ?>/logs/agg_mon.log 2>&1</code>
@@ -65,7 +72,7 @@ $current_page = "AutomationGuide.php";
                             </div>
 
                             <div class="mb-4">
-                                <h6 class="fw-bold small text-uppercase">2. AI Daily WhatsApp Briefing (7:00 AM)</h6>
+                                <h6 class="fw-bold small text-uppercase">3. AI Daily Briefing (7:00 AM)</h6>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyCode(this)">COPY</button>
                                     <code>0 7 * * * /usr/bin/php <?php echo $_SERVER['DOCUMENT_ROOT']; ?>/cron/ai_daily_briefing.php >> <?php echo dirname($_SERVER['DOCUMENT_ROOT']); ?>/logs/daily.log 2>&1</code>
@@ -73,7 +80,7 @@ $current_page = "AutomationGuide.php";
                             </div>
 
                             <div class="mb-4">
-                                <h6 class="fw-bold small text-uppercase">3. Dormant User WhatsApp Re-engagement (10:00 AM)</h6>
+                                <h6 class="fw-bold small text-uppercase">4. Dormant User Re-engagement (10:00 AM)</h6>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyCode(this)">COPY</button>
                                     <code>0 10 * * * /usr/bin/php <?php echo $_SERVER['DOCUMENT_ROOT']; ?>/cron/dormant_user_alert.php >> <?php echo dirname($_SERVER['DOCUMENT_ROOT']); ?>/logs/dormant.log 2>&1</code>
@@ -81,51 +88,10 @@ $current_page = "AutomationGuide.php";
                             </div>
 
                             <div class="mb-0">
-                                <h6 class="fw-bold small text-uppercase">4. AI Monthly Platform Audit (1st of month)</h6>
+                                <h6 class="fw-bold small text-uppercase">5. AI Monthly Platform Audit (1st of month)</h6>
                                 <div class="code-block">
                                     <button class="copy-btn" onclick="copyCode(this)">COPY</button>
                                     <code>0 8 1 * * /usr/bin/php <?php echo $_SERVER['DOCUMENT_ROOT']; ?>/cron/ai_monthly_blueprint.php >> <?php echo dirname($_SERVER['DOCUMENT_ROOT']); ?>/logs/audit.log 2>&1</code>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- WhatsApp Official Tab -->
-                <div class="tab-pane fade" id="tab-wa">
-                    <div class="card border-0 rounded-4 shadow-sm">
-                        <div class="card-body p-4">
-                            <h5 class="fw-bold mb-4"><i class="bi bi-whatsapp text-success me-2"></i>Official Meta API Integration</h5>
-                            
-                            <div class="d-flex align-items-start mb-4">
-                                <div class="step-num">1</div>
-                                <div>
-                                    <h6 class="fw-bold">Meta Developer Setup</h6>
-                                    <p class="text-muted small">Create an App on <a href="https://developers.facebook.com/" target="_blank">Meta for Developers</a>, add WhatsApp, and obtain your <b>Phone Number ID</b> & <b>Business ID</b>.</p>
-                                </div>
-                            </div>
-                            
-                            <div class="d-flex align-items-start mb-4">
-                                <div class="step-num">2</div>
-                                <div>
-                                    <h6 class="fw-bold">Generate Permanent Token</h6>
-                                    <p class="text-muted small">In Meta Business Settings -> System Users, generate a new permanent token with <code>whatsapp_business_messaging</code> permissions.</p>
-                                </div>
-                            </div>
-
-                            <div class="d-flex align-items-start mb-4">
-                                <div class="step-num">3</div>
-                                <div>
-                                    <h6 class="fw-bold">Link Credentials</h6>
-                                    <p class="text-muted small">Navigate to the <a href="WhatsAppAIManager.php">WhatsApp Official API</a> module to input and synchronize your Meta credentials.</p>
-                                </div>
-                            </div>
-                            
-                            <div class="d-flex align-items-start mb-4">
-                                <div class="step-num">4</div>
-                                <div>
-                                    <h6 class="fw-bold">Vendor Utilization & Broadcasting</h6>
-                                    <p class="text-muted small">Once configured, vendors can instantly start sending transaction alerts and bulk broadcast to up to <b>200 users</b>.</p>
                                 </div>
                             </div>
                         </div>

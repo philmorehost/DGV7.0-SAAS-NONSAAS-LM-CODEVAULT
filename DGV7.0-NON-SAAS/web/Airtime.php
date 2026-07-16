@@ -10,10 +10,12 @@
             $response_message .= "<br>" . $json_response_decode["bonus_message"];
         }
         $_SESSION["product_purchase_response"] = $response_message;
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
         if (isset($json_response_decode["ref"])) {
             $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
 ?>
@@ -94,7 +96,7 @@
                     </label>
                 </div>
 
-                <button id="proceedBtn" name="buy-airtime" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
+                <button id="proceedBtn" name="buy-airtime" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
                     BUY AIRTIME
                 </button>
 

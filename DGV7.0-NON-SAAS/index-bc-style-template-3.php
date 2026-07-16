@@ -1,6 +1,5 @@
 <?php
 // Initialize variables to be used in the template
-$whatsapp_number  = '2348000000000';
 $site_title       = 'FintechFlow';
 $site_logo        = '';
 $header_image_url = '';
@@ -11,17 +10,6 @@ $custom_footer    = '';
 
 // Check if vendor details are available from index.php
 if (isset($vendor_account_details) && is_array($vendor_account_details)) {
-    // Format the phone number for WhatsApp
-    if (!empty($vendor_account_details['phone_number'])) {
-        $phone = preg_replace('/[^0-9]/', '', $vendor_account_details['phone_number']);
-        if (substr($phone, 0, 1) === '0') {
-            $whatsapp_number = '234' . substr($phone, 1);
-        } elseif (substr($phone, 0, 3) === '234') {
-            $whatsapp_number = $phone;
-        } else {
-            $whatsapp_number = $phone;
-        }
-    }
 
     // Fetch Site Details and optional header image in one query for faster page load
     if (isset($connection_server)) {
@@ -99,7 +87,6 @@ $share_text = urlencode("Check out " . $site_title . " for Digital Payments Made
 $facebook_share = "https://www.facebook.com/sharer/sharer.php?u=" . urlencode($current_url);
 $twitter_share = "https://twitter.com/intent/tweet?url=" . urlencode($current_url) . "&text=" . $share_text;
 $linkedin_share = "https://www.linkedin.com/shareArticle?mini=true&url=" . urlencode($current_url);
-$whatsapp_share = "https://wa.me/?text=" . $share_text . "%20" . urlencode($current_url);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -421,12 +408,6 @@ $whatsapp_share = "https://wa.me/?text=" . $share_text . "%20" . urlencode($curr
                 <ul>
                     <li><a href="/web/APIDocs.php">API Terminal Docs</a></li>
                     <li><a href="/web/APIDocs.php">Webhook Webhook</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h4>Grid Support</h4>
-                <ul>
-                    <li><a href="https://wa.me/<?php echo $whatsapp_number; ?>">Admin Hotline</a></li>
                 </ul>
             </div>
         </div>

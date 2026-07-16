@@ -43,7 +43,7 @@
       <div class="col-12">
 
         <?php
-            $select_user_requeried_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && reference='".trim(strip_tags($_GET["requery"]))."'");
+            $select_user_requeried_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && reference='".trim(strip_tags($_GET["requery"] ?? ''))."'");
             if(mysqli_num_rows($select_user_requeried_transaction_details) == 1){
             	$get_selected_user_requeried_transaction_details = mysqli_fetch_array($select_user_requeried_transaction_details);
             	$get_logged_user_query = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_logged_admin_details["id"]."' && username='".$get_selected_user_requeried_transaction_details["username"]."' LIMIT 1");
@@ -76,7 +76,7 @@
         <div class="card info-card px-5 py-5">
             <div class="row">
                 <form method="get" action="BatchTransactions.php" class="">
-                    <input style="user-select: auto;" name="searchq" type="text" value="<?php echo trim(strip_tags($_GET["searchq"])); ?>" placeholder="Username, Batch number" class="form-control mt-3" />
+                    <input style="user-select: auto;" name="searchq" type="text" value="<?php echo trim(strip_tags($_GET["searchq"] ?? '')); ?>" placeholder="Username, Batch number" class="form-control mt-3" />
                     <button style="user-select: auto;" type="submit" class="btn btn-primary d-inline col-12 col-lg-auto my-2" >
                         <i class="bi bi-search"></i> Search
                     </button>

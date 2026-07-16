@@ -36,7 +36,7 @@ $ver = mysqli_fetch_row(mysqli_query($connection_server, "SELECT VERSION()"));
 test('MySQL Version >= 5.7', version_compare($ver[0], '5.7.0', '>='), $ver[0]);
 
 // Check AI tables exist
-$ai_tables = ['sas_ai_transactions', 'sas_ai_audit_log', 'sas_customer_whitelist', 'sas_whatsapp_gateway', 'sas_rate_limits', 'sas_ai_page_guides'];
+$ai_tables = ['sas_ai_transactions', 'sas_ai_audit_log', 'sas_customer_whitelist', 'sas_rate_limits', 'sas_ai_page_guides'];
 foreach ($ai_tables as $tbl) {
     $q = mysqli_query($connection_server, "SHOW TABLES LIKE '$tbl'");
     test("Table $tbl exists", mysqli_num_rows($q) > 0);
@@ -87,29 +87,6 @@ if (file_exists(__DIR__ . '/../func/bc-ai-engine.php')) {
 
 test('Cloud AI reachable (' . ucfirst($active_prov) . ')', $ai_online, $ai_online ? 'API Responding' : 'NOT REACHABLE — Check API Key');
 test('Active Provider set', $active_prov !== 'N/A', $active_prov);
-
-// ─────────────────────────────────────────────────────────────
-// 5. WHATSAPP BRIDGE
-// ─────────────────────────────────────────────────────────────
-echo "\n[ WHATSAPP GATEWAY ]\n";
-$wa_port = '3001';
-$q = @mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='whatsapp_bridge_port' LIMIT 1");
-if ($q && $row = mysqli_fetch_assoc($q)) $wa_port = $row['option_value'];
-
-$wa_online = false;
-$wa_linked = false;
-try {
-    $ch = curl_init("http://127.0.0.1:$wa_port/status");
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 3]);
-    $raw = curl_exec($ch); curl_close($ch);
-    if ($raw) {
-        $status = json_decode($raw, true);
-        $wa_online = ($status['success'] ?? false);
-        $wa_linked = ($status['online'] ?? false);
-    }
-} catch (Exception $e) {}
-test('WhatsApp bridge running on port ' . $wa_port, $wa_online, $wa_online ? 'Node.js bridge responding' : 'NOT RUNNING — cd vtu_whatsapp_ai && pm2 start index.js');
-test('WhatsApp session linked', $wa_linked, $wa_linked ? ('Phone: +' . ($status['phone'] ?? 'unknown')) : 'Not linked — scan QR in /bc-spadmin/WhatsAppAIManager.php');
 
 // ─────────────────────────────────────────────────────────────
 // 6. MOBILE API ENDPOINTS

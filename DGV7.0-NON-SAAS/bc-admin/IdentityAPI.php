@@ -212,7 +212,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Fee — User (Level 1)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">₦</span>
-                                        <input name="nin_card_fee" type="number" step="0.01" min="0"
+                                        <input name="nin_card_fee" type="number" step="any" min="0"
                                                value="<?php echo $get_logged_admin_details['nin_card_fee']; ?>"
                                                class="form-control form-control-lg bg-light border-0" placeholder="300.00">
                                     </div>
@@ -222,7 +222,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Fee — Agent (Level 2)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">₦</span>
-                                        <input name="nin_card_fee_agent" type="number" step="0.01" min="0"
+                                        <input name="nin_card_fee_agent" type="number" step="any" min="0"
                                                value="<?php echo $get_logged_admin_details['nin_card_fee_agent']; ?>"
                                                class="form-control form-control-lg bg-light border-0" placeholder="250.00">
                                     </div>
@@ -232,7 +232,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Fee — API (Level 3)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">₦</span>
-                                        <input name="nin_card_fee_api" type="number" step="0.01" min="0"
+                                        <input name="nin_card_fee_api" type="number" step="any" min="0"
                                                value="<?php echo $get_logged_admin_details['nin_card_fee_api']; ?>"
                                                class="form-control form-control-lg bg-light border-0" placeholder="200.00">
                                     </div>
@@ -271,7 +271,7 @@
                                     <label class="form-label fw-semibold">Smart (User) Price <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text">₦</span>
-                                        <input name="bvn_verify_fee" type="number" step="0.01" min="0"
+                                        <input name="bvn_verify_fee" type="number" step="any" min="0"
                                                value="<?php echo $get_logged_admin_details['bvn_verify_fee']; ?>"
                                                class="form-control" required>
                                     </div>
@@ -281,7 +281,7 @@
                                     <label class="form-label fw-semibold">Agent Price <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text">₦</span>
-                                        <input name="bvn_verify_fee_agent" type="number" step="0.01" min="0"
+                                        <input name="bvn_verify_fee_agent" type="number" step="any" min="0"
                                                value="<?php echo $get_logged_admin_details['bvn_verify_fee_agent']; ?>"
                                                class="form-control" required>
                                     </div>
@@ -291,7 +291,7 @@
                                     <label class="form-label fw-semibold">API Price <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text">₦</span>
-                                        <input name="bvn_verify_fee_api" type="number" step="0.01" min="0"
+                                        <input name="bvn_verify_fee_api" type="number" step="any" min="0"
                                                value="<?php echo $get_logged_admin_details['bvn_verify_fee_api']; ?>"
                                                class="form-control" required>
                                     </div>

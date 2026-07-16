@@ -1,6 +1,5 @@
 <?php
 // Initialize variables to be used in the template
-$whatsapp_number  = '2348000000000';
 $site_title       = 'FintechFlow';
 $site_logo        = '';
 $header_image_url = '';
@@ -11,18 +10,6 @@ $custom_footer    = '';
 
 // Check if vendor details are available from index.php
 if (isset($vendor_account_details) && is_array($vendor_account_details)) {
-    // Format the phone number for WhatsApp
-    if (!empty($vendor_account_details['phone_number'])) {
-        $phone = preg_replace('/[^0-9]/', '', $vendor_account_details['phone_number']);
-        if (substr($phone, 0, 1) === '0') {
-            $whatsapp_number = '234' . substr($phone, 1);
-        } elseif (substr($phone, 0, 3) === '234') {
-            $whatsapp_number = $phone;
-        } else {
-            $whatsapp_number = $phone;
-        }
-    }
-
     // Fetch Site Details and optional header image in one query for faster page load
     if (isset($connection_server)) {
         $cacheKey = 'vendor_site_style_' . md5((int)$vendor_account_details['id']);
@@ -101,8 +88,8 @@ $share_text = urlencode("Check out " . $site_title . " for Digital Payments Made
 $facebook_share = "https://www.facebook.com/sharer/sharer.php?u=" . urlencode($current_url);
 $twitter_share = "https://twitter.com/intent/tweet?url=" . urlencode($current_url) . "&text=" . $share_text;
 $linkedin_share = "https://www.linkedin.com/shareArticle?mini=true&url=" . urlencode($current_url);
-$whatsapp_share = "https://wa.me/?text=" . $share_text . "%20" . urlencode($current_url);
 $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_url);
+$contact_email = "mailto:" . (($vendor_account_details['email'] ?? '') ?: '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -425,32 +412,6 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
             box-shadow: 0 15px 20px -8px #1e3a8a60;
         }
 
-        /* whatsapp float - softer */
-        .whatsapp-float {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 999;
-            background: #25D366;
-            color: white;
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.4rem;
-            box-shadow: 0 15px 25px -8px #075e54;
-            border: none;
-            transition: 0.2s;
-            text-decoration: none;
-        }
-        .whatsapp-float:hover {
-            background: #20b859;
-            transform: scale(1.05);
-            box-shadow: 0 20px 30px -5px #065e4e;
-        }
-
         /* container */
         .container {
             max-width: 1280px;
@@ -686,7 +647,7 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
             margin-bottom: 16px;
         }
 
-        /* hidden whatsapp updater (not used) */
+        /* hidden owner note (not used) */
         .owner-note {
             display: none;
         }
@@ -941,31 +902,7 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
     <a href="<?php echo $facebook_share; ?>" target="_blank" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
     <a href="<?php echo $twitter_share; ?>" target="_blank" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
     <a href="<?php echo $linkedin_share; ?>" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-    <a href="<?php echo $whatsapp_share; ?>" target="_blank" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
     <a href="<?php echo $email_share; ?>" aria-label="Email"><i class="fa fa-envelope"></i></a>
-</div>
-
-<!-- WHATSAPP FLOATING ICON (same number used in modal) -->
-<a href="https://wa.me/<?php echo $whatsapp_number; ?>" class="whatsapp-float" target="_blank" id="whatsappFloat">
-    <i class="fab fa-whatsapp"></i>
-</a>
-
-<!-- CONTACT MODAL -->
-<div class="modal" id="contactModal">
-    <div class="modal-content">
-        <span class="modal-close" onclick="closeModal()">&times;</span>
-        <h2><i class="fab fa-whatsapp" style="color:#25D366;"></i> Contact us</h2>
-        <p>Fill the form below and we'll reply instantly via WhatsApp.</p>
-        <div class="form-group">
-            <label for="modalName">Your name</label>
-            <input type="text" id="modalName" placeholder="e.g. John Doe">
-        </div>
-        <div class="form-group">
-            <label for="modalMessage">Message</label>
-            <textarea id="modalMessage" placeholder="I need help with..."></textarea>
-        </div>
-        <button class="modal-send" onclick="sendWhatsAppModal()"><i class="fab fa-whatsapp"></i> Send via WhatsApp</button>
-    </div>
 </div>
 
 <!-- ══════════ STICKY HEADER ══════════ -->
@@ -983,7 +920,7 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
         <a href="blog.php" onclick="closeNav()">Blog</a>
         <a href="web/APIDocs.php" onclick="closeNav()">API Docs</a>
         <a href="#about" onclick="closeNav()">About</a>
-        <a href="javascript:void(0)" onclick="openModal(); closeNav();">Contact</a>
+        <a href="<?php echo $contact_email; ?>" onclick="closeNav();">Contact</a>
         <a href="web/Register.php" class="nav-cta" onclick="closeNav()"><i class="fas fa-bolt"></i> Get Started</a>
     </nav>
 </div>
@@ -1238,7 +1175,7 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
         </div>
         <div class="faq-item reveal reveal-delay-2">
             <div class="faq-q" onclick="toggleFAQ(this)">Can I become a reseller / agent?<i class="fas fa-plus"></i></div>
-            <div class="faq-a">Yes! We have a full reseller programme. After registering as a standard user, you can upgrade your account level to <strong>Agent</strong> or <strong>API</strong> to access discounted prices and higher transaction limits. Contact support via WhatsApp to learn more about the upgrade process.</div>
+            <div class="faq-a">Yes! We have a full reseller programme. After registering as a standard user, you can upgrade your account level to <strong>Agent</strong> or <strong>API</strong> to access discounted prices and higher transaction limits. Contact support to learn more about the upgrade process.</div>
         </div>
         <div class="faq-item reveal">
             <div class="faq-q" onclick="toggleFAQ(this)">Is my personal data secure?<i class="fas fa-plus"></i></div>
@@ -1307,7 +1244,6 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
                 <div class="footer-social">
                     <a href="<?php echo $facebook_share; ?>" target="_blank" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
                     <a href="<?php echo $twitter_share; ?>" target="_blank" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
-                    <a href="<?php echo $whatsapp_share; ?>" target="_blank" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
                     <a href="<?php echo $linkedin_share; ?>" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
                 </div>
             </div>
@@ -1384,24 +1320,6 @@ $email_share = "mailto:?subject=" . $share_text . "&body=" . urlencode($current_
     /* ── Mobile nav ── */
     function toggleNav() { document.getElementById('mainNav').classList.toggle('active'); }
     function closeNav()  { document.getElementById('mainNav').classList.remove('active'); }
-
-    /* ── Contact modal ── */
-    let phoneNumber = '<?php echo $whatsapp_number; ?>';
-    function openModal()  { document.getElementById('contactModal').classList.add('active'); }
-    function closeModal() { document.getElementById('contactModal').classList.remove('active'); }
-    function sendWhatsAppModal() {
-        const name    = document.getElementById('modalName').value.trim();
-        const message = document.getElementById('modalMessage').value.trim();
-        if (!name && !message) { alert('Please enter your name and message.'); return; }
-        let text = name && message ? `Hello, my name is ${name}. ${message}` : (name ? `Hello, my name is ${name}. I'd like to get in touch.` : message);
-        window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
-        closeModal();
-    }
-
-    /* ── Close contact modal on backdrop click ── */
-    window.addEventListener('click', (e) => {
-        if (e.target === document.getElementById('contactModal')) closeModal();
-    });
 
     /* ── About accordion ── */
     function toggleAccordion(id) { document.getElementById(id).classList.toggle('active'); }

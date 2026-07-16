@@ -42,7 +42,14 @@ if ($create_vendor_table) {
         "smtp_user" => "VARCHAR(255) DEFAULT NULL",
         "smtp_pass" => "VARCHAR(255) DEFAULT NULL",
         "smtp_port" => "VARCHAR(50) DEFAULT NULL",
-        "smtp_sec" => "VARCHAR(50) DEFAULT NULL"
+        "smtp_sec" => "VARCHAR(50) DEFAULT NULL",
+        "hollatags_username" => "VARCHAR(255) DEFAULT NULL",
+        "hollatags_password" => "VARCHAR(255) DEFAULT NULL",
+        "hollatags_ussd_code" => "VARCHAR(50) DEFAULT NULL",
+        "ussd_activation_fee" => "DECIMAL(10,2) DEFAULT 0.00",
+        "ussd_per_call_charge" => "DECIMAL(10,2) DEFAULT 0.00",
+        "ussd_channel_mode" => "VARCHAR(20) DEFAULT 'Both'",
+        "ussd_access" => "TINYINT(1) NOT NULL DEFAULT 0"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
@@ -1160,7 +1167,21 @@ if ($create_databundle_config_table) {
     if (mysqli_num_rows($check_col) == 0) {
         mysqli_query($connection_server, "ALTER TABLE `sas_databundle_config` ADD COLUMN service_type VARCHAR(50) NOT NULL DEFAULT 'data' AFTER vendor_id");
     }
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_databundle_config` LIKE 'ussd_channel_enabled'");
+    if (mysqli_num_rows($check_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_databundle_config` ADD COLUMN ussd_channel_enabled TINYINT(1) DEFAULT 0");
+    }
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_databundle_config` LIKE 'ussd_code'");
+    if (mysqli_num_rows($check_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_databundle_config` ADD COLUMN ussd_code VARCHAR(50) DEFAULT NULL");
+    }
 }
+
+//Create USSD Activations Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ussd_activations (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL, amount_paid DECIMAL(10,2) DEFAULT 0.00, activated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, status TINYINT(1) DEFAULT 1, INDEX (vendor_id), INDEX (user_id))");
+
+//Create USSD Sessions Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ussd_sessions (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, session_id VARCHAR(100) NOT NULL, msisdn VARCHAR(20) NOT NULL, session_data TEXT, current_step VARCHAR(50) DEFAULT 'start', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX (vendor_id), INDEX (session_id), INDEX (msisdn))");
 
 //Create DataBundleCard Plans Table
 $create_databundle_plans_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_databundle_plans (id INT NOT NULL AUTO_INCREMENT, vendor_id INT UNSIGNED NOT NULL, product_id INT UNSIGNED NOT NULL, service_type VARCHAR(50) NOT NULL DEFAULT 'data', data_type VARCHAR(50) NOT NULL, plan_code VARCHAR(225) NOT NULL, validity_days VARCHAR(50), price VARCHAR(50), status INT UNSIGNED NOT NULL DEFAULT 1, PRIMARY KEY (id))");
@@ -1181,19 +1202,6 @@ $create_float_services_table = mysqli_query($connection_server, "CREATE TABLE IF
 
 //Create Platform Earnings Table
 mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_platform_earnings (id INT NOT NULL AUTO_INCREMENT, vendor_id INT, amount DECIMAL(65,30), source VARCHAR(225), reference VARCHAR(225), date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");
-
-// Create WhatsApp Templates Table
-mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_wa_templates (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    vendor_id INT NOT NULL,
-    template_name VARCHAR(100) NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    language VARCHAR(20) NOT NULL DEFAULT 'en_US',
-    body_text TEXT NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    meta_template_id VARCHAR(100),
-    date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
 
 // --- Gift Card Integration Tables ---
 
@@ -1790,16 +1798,6 @@ mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS `sas_ai_audit_log` 
 )");
 
 
-// ─── WHATSAPP GATEWAY TABLE (Sprint 7 — WhatsApp) ──────────
-mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS `sas_whatsapp_gateway` (
-    `id`            INT AUTO_INCREMENT PRIMARY KEY,
-    `phone_number`  VARCHAR(30)  NOT NULL,
-    `status`        ENUM('offline','connecting','online') DEFAULT 'offline',
-    `session_data`  LONGTEXT DEFAULT NULL,
-    `last_ping`     TIMESTAMP NULL,
-    `created_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)");
-
 // ─── AI TRANSACTIONS TABLE (Sprint 3 — Token Economy) ──────
 mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS `sas_ai_transactions` (
     `id`            BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1912,7 +1910,6 @@ $ai_global_options = [
     'ai_global_enabled'         => '0',
     'ai_default_model'          => 'gemini-1.5-flash',
     'ai_price_per_request'      => '5',
-    'ai_whatsapp_number'        => '',
     'ai_voice_unlock_threshold' => '100',
     'ai_provider'               => 'gemini', 
     'ai_gemini_api_key'         => '',

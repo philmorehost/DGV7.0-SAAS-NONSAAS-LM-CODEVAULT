@@ -6,8 +6,13 @@
         include_once("func/card.php");
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
+        if (isset($json_response_decode["ref"])) {
+            $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
+        }
         //echo '<script>alert("'.$json_response_decode["status"].': '.$json_response_decode["desc"].'");</script>';
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
 ?>
@@ -128,7 +133,7 @@
                     <input style="text-align: center;" id="" name="card-name" type="text" value="" placeholder="Name to show on card" class="form-control form-control-lg" />
                 </div>
 
-                <button id="proceedBtn" name="buy-card" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
+                <button id="proceedBtn" name="buy-card" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
                     BUY CARD
                 </button>
 

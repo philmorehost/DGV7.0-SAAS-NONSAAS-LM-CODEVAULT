@@ -15,7 +15,7 @@
     "nin": "32094647135",
     "status": 1,
     "reg_date": "2026-01-08 22:10:35",
-    "last_login": "2026-05-18 10:13:29",
+    "last_login": "2026-07-02 12:17:05",
     "expiry_date": "2027-01-03",
     "start_date": "2026-01-08",
     "current_billing_id": 2,
@@ -101,5 +101,12 @@
     "selected_addons": null,
     "total_order_amount": "0.00",
     "identity_api_id": null,
-    "trans_email_enabled": 1
+    "trans_email_enabled": 1,
+    "hollatags_username": null,
+    "hollatags_password": null,
+    "hollatags_ussd_code": null,
+    "ussd_activation_fee": "0.00",
+    "ussd_per_call_charge": "0.00",
+    "ussd_channel_mode": "Both",
+    "ussd_access": 0
 }

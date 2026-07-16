@@ -2,6 +2,11 @@
 session_start();
 include("../func/bc-config.php");
 
+if(!isServiceEnabled('vtu_coins')) {
+    header("Location: Dashboard.php");
+    exit();
+}
+
 // Fetch loyalty settings for the vendor
 $vendor_id = $get_logged_user_details["vendor_id"];
 $settings_query = mysqli_query($connection_server, "SELECT * FROM sas_settings WHERE vendor_id = '$vendor_id' AND setting_name IN ('points_conversion_rate', 'min_points_conversion')");

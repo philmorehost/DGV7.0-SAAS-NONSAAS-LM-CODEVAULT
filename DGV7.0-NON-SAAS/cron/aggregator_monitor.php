@@ -5,12 +5,11 @@
  * Purpose: Monitors API provider success rates. If a provider drops below 85%
  *          success rate in the last hour, it flags it inactive and alerts Super Admin.
  *
- * cPanel Cron: */5 * * * * /usr/local/bin/php /home/[user]/public_html/cron/aggregator_monitor.php
+ * cPanel Cron: Every 5 minutes /usr/local/bin/php /home/[user]/public_html/cron/aggregator_monitor.php
  */
 
 define('RUNNING_AS_CRON', true);
 require_once(__DIR__ . '/../func/bc-config.php');
-require_once(__DIR__ . '/../func/bc-whatsapp.php');
 
 if (!$connection_server) exit("No DB connection\n");
 
@@ -57,19 +56,19 @@ while ($prow = mysqli_fetch_assoc($providers_q)) {
     }
 }
 
-// Send WhatsApp alert if any providers are failing
+// Email alert if any providers are failing
 if (!empty($alerts)) {
     $super_admin_q = mysqli_query($connection_server,
-        "SELECT phone_number FROM sas_super_admin LIMIT 1"
+        "SELECT email FROM sas_super_admin LIMIT 1"
     );
     $sa = $super_admin_q ? mysqli_fetch_assoc($super_admin_q) : null;
 
-    if ($sa && !empty($sa['phone_number'])) {
-        $msg = "🚨 *API Provider Alert*\n\n"
-             . "The following providers are performing below 85% success rate in the last hour:\n\n"
-             . implode("\n", $alerts) . "\n\n"
+    if ($sa && !empty($sa['email'])) {
+        $msg = "<b>API Provider Alert</b><br><br>"
+             . "The following providers are performing below 85% success rate in the last hour:<br><br>"
+             . implode("<br>", array_map('htmlspecialchars', $alerts)) . "<br><br>"
              . "Please check your API configurations in the dashboard.";
-        sendWhatsAppAlert($sa['phone_number'], $msg, 'high');
+        sendSuperAdminEmail($sa['email'], "API Provider Alert", $msg);
     }
     echo "Alert sent for " . count($alerts) . " failing providers.\n";
 }

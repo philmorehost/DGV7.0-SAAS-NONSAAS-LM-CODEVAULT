@@ -2,7 +2,6 @@
 // Initialize SEO engine and variables
 include_once(__DIR__ . "/func/bc-seo.php");
 
-$whatsapp_number  = '2348000000000';
 $site_title       = 'FintechFlow';
 $site_logo        = '';
 $header_image_url = '';
@@ -11,18 +10,6 @@ $site_details     = [];
 
 // Check if vendor details are available from index.php
 if (isset($vendor_account_details) && is_array($vendor_account_details)) {
-    // Format the phone number for WhatsApp
-    if (!empty($vendor_account_details['phone_number'])) {
-        $phone = preg_replace('/[^0-9]/', '', $vendor_account_details['phone_number']);
-        if (substr($phone, 0, 1) === '0') {
-            $whatsapp_number = '234' . substr($phone, 1);
-        } elseif (substr($phone, 0, 3) === '234') {
-            $whatsapp_number = $phone;
-        } else {
-            $whatsapp_number = $phone;
-        }
-    }
-
     // Fetch Site Details
     if (isset($connection_server)) {
         $cacheKey = 'vendor_site_style_' . md5((int)$vendor_account_details['id']);
@@ -449,28 +436,6 @@ $share_text = urlencode("Check out " . $site_title . " for automated billing ser
         }
         .about-text p { margin-bottom: 16px; }
 
-        /* ── Premium WhatsApp Float ── */
-        .whatsapp-float {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 999;
-            background: #25D366;
-            color: white;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.1rem;
-            box-shadow: 0 15px 30px -5px rgba(37, 211, 102, 0.5);
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-        .whatsapp-float:hover {
-            transform: scale(1.08) translateY(-3px);
-        }
 
         /* ── Responsive Styling ── */
         @media (max-width: 991px) {
@@ -701,17 +666,12 @@ $share_text = urlencode("Check out " . $site_title . " for automated billing ser
                 <div class="accordion-item">
                     <div class="accordion-header">Is customer support available? <i class="fas fa-plus"></i></div>
                     <div class="accordion-content">
-                        <p>Yes, we have 24/7 dedicated customer service. You can click on the WhatsApp button or reach us via mail for immediate resolutions.</p>
+                        <p>Yes, we have 24/7 dedicated customer service. You can reach us via mail for immediate resolutions.</p>
                     </div>
                 </div>
             </div>
         </div>
     </section>
-
-    <!-- WhatsApp Support Float -->
-    <a href="https://wa.me/<?php echo $whatsapp_number; ?>?text=Hello%20Support,%20I%20have%20an%20inquiry..." target="_blank" class="whatsapp-float">
-        <i class="fab fa-whatsapp"></i>
-    </a>
 
     <!-- Footer -->
     <footer style="background:#090d16; color:var(--gray-text); padding:60px 0; border-top:1px solid var(--border-color);">

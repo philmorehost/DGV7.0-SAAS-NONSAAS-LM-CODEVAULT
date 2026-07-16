@@ -38,6 +38,7 @@ if (isset($_POST["update-key"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 include_once("../func/bc-product-actions.php");
@@ -52,10 +53,12 @@ if (function_exists('ai_sentinel_evaluate') && !empty($get_logged_admin_details[
     if ($sentinel_decision === 'BLOCK') {
         $_SESSION['product_purchase_response'] = '🔒 Transaction blocked by AI Security Sentinel. Contact your administrator.';
         header('Location: Betting.php'); exit();
+        exit;
     }
     if ($sentinel_decision === 'FLAG_FOR_APPROVAL') {
         $_SESSION['product_purchase_response'] = '⏳ This transaction has been flagged for manual review. Please try again shortly.';
         header('Location: Betting.php'); exit();
+        exit;
     }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,6 +123,7 @@ if (isset($_POST["update-price"])) {
     $json_response_decode = json_decode($json_response_encode, true);
     $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 $csv_price_level_array = [];
@@ -237,19 +241,19 @@ $csv_price_level_array[] = "product_name,smart_level,agent_level,api_level";
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Prov. %</label>
-                            <input type="number" id="provider-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="provider-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Smart %</label>
-                            <input type="number" id="smart-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="smart-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Agent %</label>
-                            <input type="number" id="agent-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="agent-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">API %</label>
-                            <input type="number" id="api-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="api-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" onclick="fetchVariations();" class="btn btn-primary w-100 fw-bold">Fetch Plans</button>
@@ -445,6 +449,8 @@ $csv_price_level_array[] = "product_name,smart_level,agent_level,api_level";
                                         $get_item_status_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_betting_status WHERE vendor_id='".$get_logged_admin_details["id"]."' && product_name='$products'"));
                                         $product_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_products WHERE vendor_id='".$get_logged_admin_details["id"]."' && product_name='$products' LIMIT 1"));
 
+                                        if(empty($get_item_status_details) || empty($product_table)) continue;
+
                                         $product_smart_table = mysqli_query($connection_server, "SELECT * FROM sas_smart_parameter_values WHERE vendor_id='".$get_logged_admin_details["id"]."' && api_id='".$get_item_status_details["api_id"]."' && product_id='".$product_table["id"]."'");
                                         $product_agent_table = mysqli_query($connection_server, "SELECT * FROM sas_agent_parameter_values WHERE vendor_id='".$get_logged_admin_details["id"]."' && api_id='".$get_item_status_details["api_id"]."' && product_id='".$product_table["id"]."'");
                                         $product_api_table = mysqli_query($connection_server, "SELECT * FROM sas_api_parameter_values WHERE vendor_id='".$get_logged_admin_details["id"]."' && api_id='".$get_item_status_details["api_id"]."' && product_id='".$product_table["id"]."'");
@@ -460,9 +466,9 @@ $csv_price_level_array[] = "product_name,smart_level,agent_level,api_level";
                                                         <input name="product-id[]" type="hidden" value="'.$product_smart_details["product_id"].'"/>
                                                         <input name="product-name[]" type="hidden" class="product-name-val" value="'.$product_smart_details["val_4"].'"/>
                                                     </td>
-                                                    <td><input id="'.strtolower($products).'_smart_level" name="smart-price[]" type="number" step="0.1" value="'.$product_smart_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:100px"></td>
-                                                    <td><input id="'.strtolower($products).'_agent_level" name="agent-price[]" type="number" step="0.1" value="'.$product_agent_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:100px"></td>
-                                                    <td><input id="'.strtolower($products).'_api_level" name="api-price[]" type="number" step="0.1" value="'.$product_api_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:100px"></td>
+                                                    <td><input id="'.strtolower($products).'_smart_level" name="smart-price[]" type="number" step="any" value="'.$product_smart_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:100px"></td>
+                                                    <td><input id="'.strtolower($products).'_agent_level" name="agent-price[]" type="number" step="any" value="'.$product_agent_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:100px"></td>
+                                                    <td><input id="'.strtolower($products).'_api_level" name="api-price[]" type="number" step="any" value="'.$product_api_details["val_1"].'" class="form-control form-control-sm text-center" style="max-width:100px"></td>
                                                     <td class="text-end pe-3">
                                                         <a href="Betting.php?action=delete&product_id='.$product_smart_details["product_id"].'&api_id='.$product_smart_details["api_id"].'" class="btn btn-sm btn-light border text-danger" onclick="return confirm(\'Delete this biller?\')"><i class="bi bi-trash"></i></a>
                                                     </td>

@@ -217,6 +217,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
 ?>
@@ -303,7 +304,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Withdrawal Fee (NGN)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">₦</span>
-                                        <input name="withdrawal_fee" type="number" step="0.01" value="<?php echo $get_logged_admin_details['withdrawal_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
+                                        <input name="withdrawal_fee" type="number" step="any" value="<?php echo $get_logged_admin_details['withdrawal_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
                                     </div>
                                     <small class="text-muted text-xs">Charge applied to every bank withdrawal.</small>
                                 </div>
@@ -311,7 +312,7 @@
                                     <label class="form-label small fw-bold text-muted text-uppercase">Crypto Swap Fee (%)</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-0">%</span>
-                                        <input name="crypto_swap_fee" type="number" step="0.01" value="<?php echo $get_logged_admin_details['crypto_swap_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
+                                        <input name="crypto_swap_fee" type="number" step="any" value="<?php echo $get_logged_admin_details['crypto_swap_fee']; ?>" class="form-control form-control-lg bg-light border-0" placeholder="0.00" />
                                     </div>
                                     <small class="text-muted text-xs">Charge for swapping Crypto to NGN.</small>
                                 </div>
@@ -495,20 +496,20 @@
                                         <?php else: ?>
                                             <div class="mb-3" <?php if($gateway_name == 'plisio') echo 'style="display:none;"'; ?>>
                                                 <label class="form-label small fw-bold text-muted">PUBLIC KEY</label>
-                                                <input name="public-key[]" type="text" value="<?php echo $get_gateway_details["public_key"]; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name == 'plisio') ? 'Not Required' : 'Enter Public Key'; ?>" />
+                                                <input name="public-key[]" type="text" value="<?php echo $get_gateway_details["public_key"] ?? ''; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name == 'plisio') ? 'Not Required' : 'Enter Public Key'; ?>" />
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label small fw-bold text-muted">SECRET KEY</label>
-                                                <input name="secret-key[]" type="password" value="<?php echo $get_gateway_details["secret_key"]; ?>" class="form-control rounded-3" placeholder="Enter Secret Key" />
+                                                <input name="secret-key[]" type="password" value="<?php echo $get_gateway_details["secret_key"] ?? ''; ?>" class="form-control rounded-3" placeholder="Enter Secret Key" />
                                             </div>
                                             <div class="row g-3 mb-3">
                                                 <div class="col-6" <?php if($gateway_name == 'plisio') echo 'style="display:none;"'; ?>>
                                                     <label class="form-label small fw-bold text-muted"><?php echo ($gateway_name === 'monnify') ? 'CONTRACT CODE' : 'ENCRYPT KEY'; ?></label>
-                                                    <input name="encrypt-key[]" type="text" value="<?php echo $get_gateway_details["encrypt_key"]; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name === 'monnify') ? 'Enter Contract Code' : ($gateway_name == 'plisio' ? 'Not Required' : 'Optional'); ?>" />
+                                                    <input name="encrypt-key[]" type="text" value="<?php echo $get_gateway_details["encrypt_key"] ?? ''; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name === 'monnify') ? 'Enter Contract Code' : ($gateway_name == 'plisio' ? 'Not Required' : 'Optional'); ?>" />
                                                 </div>
                                                 <div class="<?php echo ($gateway_name == 'plisio') ? 'col-12' : 'col-6'; ?>">
                                                     <label class="form-label small fw-bold text-muted">FEE (%)</label>
-                                                    <input name="payment-percent[]" type="number" step="0.001" value="<?php echo $get_gateway_details["percentage"]; ?>" class="form-control rounded-3" placeholder="0.000" />
+                                                    <input name="payment-percent[]" type="number" step="0.001" value="<?php echo $get_gateway_details["percentage"] ?? '0'; ?>" class="form-control rounded-3" placeholder="0.000" />
                                                 </div>
                                             </div>
                                         <?php endif; ?>

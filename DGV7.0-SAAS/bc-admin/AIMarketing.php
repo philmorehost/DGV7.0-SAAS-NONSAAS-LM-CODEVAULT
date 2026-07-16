@@ -19,13 +19,14 @@ if (isset($_POST['set-bg'])) {
     $new_bg = bc_sanitize($_POST['bg_name'] ?? 'midnight');
     mysqli_query($connection_server, "UPDATE sas_vendors SET ai_marketing_bg='$new_bg' WHERE id='$vendor_id'");
     header("Location: AIMarketing.php"); exit();
+    exit;
 }
 
 if (isset($_POST['generate-ad'])) {
     $service = bc_sanitize($_POST['service'] ?? 'Airtime');
     $tone    = bc_sanitize($_POST['tone'] ?? 'Professional');
     $target  = bc_sanitize($_POST['target'] ?? 'Customers');
-    $platform = bc_sanitize($_POST['platform'] ?? 'WhatsApp');
+    $platform = bc_sanitize($_POST['platform'] ?? 'Push Notification');
 
     $token_bal = (int)($get_logged_admin_details['ai_token_balance'] ?? 0);
     $per_tx_cost = (int)($get_logged_admin_details['ai_per_tx_cost'] ?? 2);
@@ -61,6 +62,50 @@ if (isset($_POST['generate-ad'])) {
         $generated_copy = '❌ AI Error: ' . ($result['message'] ?? 'Unable to connect to AI engine.');
     }
     }
+}
+
+if (isset($_POST['send-campaign'])) {
+    $subject = trim($_POST["subject"] ?? '');
+    $body = trim($_POST["body"] ?? ''); 
+    $mailto = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["mailto"] ?? ''))));
+
+    $external_emails = [];
+    if (!empty($_POST['paste_emails'])) {
+        $pasted = preg_split('/[\s,]+/', $_POST['paste_emails'], -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($pasted as $email) {
+            if (filter_var(trim($email), FILTER_VALIDATE_EMAIL)) $external_emails[] = trim($email);
+        }
+    }
+    
+    $external_emails = array_unique($external_emails);
+
+    if (!empty($subject) && !empty($body)) {
+        $success_count = 0;
+        
+        // Internal targets
+        if (!empty($mailto) && $mailto !== 'none') {
+            $res = sendVendorEmailSpecific($mailto, $subject, $body);
+            if ($res == "success") $success_count++;
+        }
+
+        // External targets
+        if (!empty($external_emails)) {
+            foreach ($external_emails as $ext_email) {
+                sendVendorEmail($ext_email, $subject, $body);
+            }
+            $success_count += count($external_emails);
+        }
+
+        if ($success_count > 0) {
+            $_SESSION["product_purchase_response"] = "Campaign Dispatch Successful! (Targets reached: $success_count)";
+        } else {
+            $_SESSION["product_purchase_response"] = "Error: No targets selected or dispatch failed.";
+        }
+    } else {
+        $_SESSION["product_purchase_response"] = "Error: Subject and Marketing Content are required.";
+    }
+    header("Location: AIMarketing.php");
+    exit;
 }
 
 $bg_templates = [
@@ -117,11 +162,13 @@ $bg_templates = [
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Platform</label>
                             <select name="platform" class="form-select rounded-4 p-3 bg-light border-0">
-                                <option>WhatsApp Status</option>
+                                <option>Push Notification</option>
+                                <option>In-App Banner</option>
                                 <option>Facebook Post</option>
                                 <option>Twitter/X Ad</option>
                                 <option>Instagram Reel Script</option>
                                 <option>SMS Marketing</option>
+                                <option>Email Campaign</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -173,9 +220,42 @@ $bg_templates = [
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between mb-3">
                         <h5 class="fw-bold">Ad Copy</h5>
-                        <button class="btn btn-light btn-sm rounded-pill px-3" onclick="navigator.clipboard.writeText(document.getElementById('adText').innerText); alert('Copied!')"><i class="bi bi-clipboard"></i></button>
+                        <button class="btn btn-light btn-sm rounded-pill px-3" onclick="navigator.clipboard.writeText(document.getElementById('adText').value); alert('Copied!')"><i class="bi bi-clipboard"></i></button>
                     </div>
-                    <div class="gen-box" id="adText"><?php echo $generated_copy; ?></div>
+                    
+                    <form method="post" action="">
+                        <div class="mb-4">
+                            <textarea class="gen-box form-control shadow-none" id="adText" name="body" rows="8" style="width: 100%; resize: vertical;"><?php echo htmlspecialchars($generated_copy); ?></textarea>
+                        </div>
+                        
+                        <div class="p-4 bg-light rounded-4 border border-dashed mb-3">
+                            <h6 class="fw-bold text-primary mb-3"><i class="bi bi-send-fill me-2"></i>Campaign Dispatch</h6>
+                            
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Email Subject</label>
+                                <input type="text" name="subject" class="form-control rounded-3 py-2" placeholder="e.g. Exciting Offers Inside!" required>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label small fw-bold">Registered Users</label>
+                                    <select name="mailto" class="form-select rounded-3 py-2">
+                                        <option value="none">-- Do not send to internal users --</option>
+                                        <option value="all">All Users</option>
+                                        <option value="api">API Users Only</option>
+                                        <option value="smart">Smart Users Only</option>
+                                        <option value="agent">Agent Users Only</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label small fw-bold">External Emails (comma separated)</label>
+                                    <textarea name="paste_emails" class="form-control rounded-3" rows="1" placeholder="user1@email.com, user2@email.com"></textarea>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" name="send-campaign" class="btn btn-success w-100 rounded-pill py-3 fw-bold mt-2 shadow-sm"><i class="bi bi-envelope-paper-fill me-2"></i> Launch Email Campaign</button>
+                        </div>
+                    </form>
                 </div>
             </div>
 

@@ -896,7 +896,7 @@ $fmt_count = fmt_count($download_count);
             <div class="feature-icon fi-orange"><i class="fas fa-headset"></i></div>
             <div class="feature-text">
                 <h4>24/7 Support</h4>
-                <p>Our dedicated support team is always available via WhatsApp, live chat and email — round the clock.</p>
+                <p>Our dedicated support team is always available via live chat and email — round the clock.</p>
             </div>
         </div>
         <div class="feature-item">

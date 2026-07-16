@@ -130,7 +130,7 @@
                     <label class="form-check-label small fw-bold text-muted" for="phone-bypass">Bypass Verification</label>
                 </div>
 
-                <button id="proceedBtn" name="send-sms" type="button" data-no-lock class="btn btn-primary btn-lg w-100 shadow-sm py-3 fw-bold rounded-3" style="pointer-events: none; opacity: 0.7;">
+                <button id="proceedBtn" name="send-sms" type="submit" data-no-lock class="btn btn-primary btn-lg w-100 shadow-sm py-3 fw-bold rounded-3" style="pointer-events: none; opacity: 0.7;">
                     SEND BULK SMS
                 </button>
 

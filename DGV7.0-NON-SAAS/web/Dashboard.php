@@ -326,99 +326,159 @@ $is_kyc_compliant = ($get_logged_user_details['kyc_status'] == 2);
         <div class="row g-4">
             <!-- Services Grid -->
             <div class="col-lg-8">
-                <div class="card p-4">
+                <div class="card p-4 border-0 shadow-sm rounded-4">
                     <h5 class="fw-bold mb-4">All Services</h5>
-                    <div class="row row-cols-3 row-cols-md-4 row-cols-xl-5 g-4">
+                    <div class="row row-cols-2 row-cols-sm-3 row-cols-xl-4 g-4 justify-content-center">
                         <?php if(isServiceEnabled('data')): ?>
-                        <div class="col text-center">
-                            <a href="Data.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-data"><i class="bi bi-wifi"></i></div>
-                                <div class="small fw-bold text-dark">Data</div>
+                        <div class="col">
+                            <a href="Data.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(37, 99, 235, 0.1); color: #2563eb;">
+                                        <i class="bi bi-wifi"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Data</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Top-up Data</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('airtime')): ?>
-                        <div class="col text-center">
-                            <a href="Airtime.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-airtime"><i class="bi bi-telephone"></i></div>
-                                <div class="small fw-bold text-dark">Airtime</div>
+                        <div class="col">
+                            <a href="Airtime.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(22, 163, 74, 0.1); color: #16a34a;">
+                                        <i class="bi bi-telephone"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Airtime</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Buy Airtime</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('cable')): ?>
-                        <div class="col text-center">
-                            <a href="Cable.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-cable"><i class="bi bi-tv"></i></div>
-                                <div class="small fw-bold text-dark">Cable</div>
+                        <div class="col">
+                            <a href="Cable.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(147, 51, 234, 0.1); color: #9333ea;">
+                                        <i class="bi bi-tv"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Cable</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">TV Subscriptions</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('electric')): ?>
-                        <div class="col text-center">
-                            <a href="Electric.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-electric"><i class="bi bi-lightbulb"></i></div>
-                                <div class="small fw-bold text-dark">Electric</div>
+                        <div class="col">
+                            <a href="Electric.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(234, 88, 12, 0.1); color: #ea580c;">
+                                        <i class="bi bi-lightbulb"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Electric</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Pay Bills</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
-                        <div class="col text-center">
-                            <a href="ShareFund.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-transfer"><i class="bi bi-send"></i></div>
-                                <div class="small fw-bold text-dark">Transfer</div>
+                        <div class="col">
+                            <a href="ShareFund.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(13, 148, 136, 0.1); color: #0d9488;">
+                                        <i class="bi bi-send"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Transfer</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Send Funds</div>
+                                </div>
                             </a>
                         </div>
                         <?php if(isServiceEnabled('exam')): ?>
-                        <div class="col text-center">
-                            <a href="Exam.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-exam"><i class="bi bi-card-list"></i></div>
-                                <div class="small fw-bold text-dark">Exam</div>
+                        <div class="col">
+                            <a href="Exam.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(219, 39, 119, 0.1); color: #db2777;">
+                                        <i class="bi bi-card-list"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Exam</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Result Pins</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('betting')): ?>
-                        <div class="col text-center">
-                            <a href="Betting.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-betting"><i class="bi bi-tag"></i></div>
-                                <div class="small fw-bold text-dark">Betting</div>
+                        <div class="col">
+                            <a href="Betting.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(220, 38, 38, 0.1); color: #dc2626;">
+                                        <i class="bi bi-tag"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Betting</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Fund Wallets</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('crypto_hub')): ?>
-                        <div class="col text-center">
-                            <a href="CryptoHub.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-crypto"><i class="bi bi-currency-bitcoin"></i></div>
-                                <div class="small fw-bold text-dark">Crypto</div>
+                        <div class="col">
+                            <a href="CryptoHub.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(217, 119, 6, 0.1); color: #d97706;">
+                                        <i class="bi bi-currency-bitcoin"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Crypto</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Trade Assets</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('virtual_card')): ?>
-                        <div class="col text-center">
-                            <a href="VirtualCard.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-vcard"><i class="bi bi-credit-card-2-front"></i></div>
-                                <div class="small fw-bold text-dark">V-Card</div>
+                        <div class="col">
+                            <a href="VirtualCard.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(79, 70, 229, 0.1); color: #4f46e5;">
+                                        <i class="bi bi-credit-card-2-front"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">V-Card</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Dollar Cards</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('gift_card')): ?>
-                        <div class="col text-center">
-                            <a href="GiftCard.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-giftcard"><i class="bi bi-gift"></i></div>
-                                <div class="small fw-bold text-dark">Gift Card</div>
+                        <div class="col">
+                            <a href="GiftCard.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(8, 145, 178, 0.1); color: #0891b2;">
+                                        <i class="bi bi-gift"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Gift Card</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Buy & Trade</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
                         <?php if(isServiceEnabled('data_card')): ?>
-                        <div class="col text-center">
-                            <a href="PrintHub.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-more"><i class="bi bi-printer"></i></div>
-                                <div class="small fw-bold text-dark">Print Hub</div>
+                        <div class="col">
+                            <a href="PrintHub.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(71, 85, 105, 0.1); color: #475569;">
+                                        <i class="bi bi-printer"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">Print Hub</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Data Pins</div>
+                                </div>
                             </a>
                         </div>
                         <?php endif; ?>
-                        <div class="col text-center">
-                            <a href="Transactions.php" class="text-decoration-none">
-                                <div class="service-icon-box icon-more"><i class="bi bi-receipt"></i></div>
-                                <div class="small fw-bold text-dark">History</div>
+                        <div class="col">
+                            <a href="Transactions.php" class="text-decoration-none h-100 d-block">
+                                <div class="card h-100 border border-light shadow-sm rounded-4 p-4 text-center transition-hover" style="background-color: #f8fafc;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 65px; height: 65px; font-size: 1.8rem; background: rgba(101, 163, 13, 0.1); color: #65a30d;">
+                                        <i class="bi bi-receipt"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">History</h6>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Transactions</div>
+                                </div>
                             </a>
                         </div>
                     </div>

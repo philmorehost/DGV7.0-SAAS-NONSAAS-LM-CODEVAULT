@@ -86,10 +86,44 @@ if (!move_uploaded_file($file['tmp_name'], $target_path)) {
     exit();
 }
 
-// 5. Generate Checksum
+// 5. Auto-inject manifest.json if missing from the ZIP
+$zip = new ZipArchive();
+if ($zip->open($target_path) === TRUE) {
+    $has_manifest = false;
+
+    // Check root level and one level deep for manifest.json
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        // Match manifest.json at root or one subfolder deep
+        if ($name === 'manifest.json' || preg_match('#^[^/]+/manifest\.json$#', $name)) {
+            $has_manifest = true;
+            break;
+        }
+    }
+
+    if (!$has_manifest) {
+        // Build and inject a default manifest.json at the ZIP root
+        $manifest = [
+            'version'          => ltrim(strtolower($version_number), 'v'),
+            'tier'             => strtoupper($tier['tier_code']),
+            'changelog'        => $changelog,
+            'files_to_delete'  => [],
+            'database_queries' => []
+        ];
+        $zip->addFromString('manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    }
+
+    $zip->close();
+} else {
+    @unlink($target_path);
+    echo json_encode(['status' => 'error', 'message' => 'Could not open the uploaded ZIP file to validate it.']);
+    exit();
+}
+
+// 6. Generate Checksum (after any manifest injection)
 $checksum = hash_file('sha256', $target_path);
 
-// 6. Update Database
+// 7. Update Database
 try {
     // Check if this version already exists
     $check_stmt = $pdo->prepare("SELECT id FROM script_updates WHERE tier_id = ? AND version_number = ?");

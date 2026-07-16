@@ -1859,6 +1859,15 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                 </div>
                                 <div class="small text-muted mt-1">Run this every 6-12 hours to send low balance alerts (weekly), inactivity reminders (7+ days), and weekly sales reports.</div>
                             </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Sender ID Auto-Sync Cron Path</label>
+                                <div class="input-group">
+                                    <input type="text" value="php <?php echo realpath(__DIR__ . '/../cron/sync_sender_ids.php'); ?>" class="form-control bg-light" readonly />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="small text-muted mt-1">Run this every 1 hour to automatically update the status of pending Sender IDs from PhilmoreSMS.</div>
+                            </div>
                         </div>
                     </div>
 

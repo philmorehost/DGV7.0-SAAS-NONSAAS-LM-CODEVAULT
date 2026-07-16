@@ -19,6 +19,12 @@ if (isset($_GET["batch"])) {
         exit();
 	}
 }
+
+// Fetch USSD settings and status
+$get_vendor_ussd = mysqli_fetch_array(mysqli_query($connection_server, "SELECT ussd_access, ussd_channel_mode FROM sas_vendors WHERE id='" . $get_logged_user_details["vendor_id"] . "' LIMIT 1"));
+$ussd_code = getSuperAdminOption('hollatags_ussd_code', '');
+$ussd_channel_mode = $get_vendor_ussd ? $get_vendor_ussd['ussd_channel_mode'] : 'SMS Only';
+$is_ussd_activated = ($get_vendor_ussd && $get_vendor_ussd['ussd_access'] == 1 && getSuperAdminOption('ussd_access_enabled', '0') == '1');
 ?>
 <!DOCTYPE html>
 <head>
@@ -102,6 +108,16 @@ if (isset($_GET["batch"])) {
                 if ($count > 0) echo '</div>';
                 echo '<div class="card-grid">';
             }
+            
+            $instruction_text = '';
+            if ($ussd_channel_mode == 'USSD Only' && $is_ussd_activated) {
+                $instruction_text = 'DIAL ' . $ussd_code . ' & ENTER PIN';
+            } elseif ($ussd_channel_mode == 'Both' && $is_ussd_activated) {
+                $instruction_text = 'DIAL ' . $ussd_code . ' OR SMS PIN TO ' . $card['sms_number'];
+            } else {
+                $instruction_text = 'SMS PIN TO ' . $card['sms_number'];
+            }
+
             $icon_ext = ($card['service_type'] == 'data' || $card['service_type'] == 'airtime' || $card['service_type'] == 'cable') ? 'png' : 'jpg';
             $label = strtoupper($card['plan_name']);
             if ($card['validity'] > 0) $label .= ' ('.$card['validity'].' Days)';
@@ -117,7 +133,7 @@ if (isset($_GET["batch"])) {
                     <div class="epin">'.$card['epin'].'</div>
                         <div class="sn">Price: N'.number_format($show_price).' | S/N: '.$card['serial_number'].'</div>
                     <div class="instruction">
-                        SMS PIN TO '.$card['sms_number'].'
+                        '.$instruction_text.'
                     </div>';
             if(!empty($biz_name)){
                 echo '<div class="brand-name">'.$biz_name.'</div>';

@@ -65,6 +65,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     include_once("../func/bc-product-actions.php");
@@ -155,6 +156,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["upload-product"])){
@@ -201,6 +203,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
     $csv_price_level_array = [];
@@ -444,6 +447,8 @@
                                         $get_item_status_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_rechargecard_status WHERE vendor_id='".$get_logged_admin_details["id"]."' && product_name='$products'"));
                                         $product_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_products WHERE vendor_id='".$get_logged_admin_details["id"]."' && product_name='$products' LIMIT 1"));
 
+                                        if(empty($get_item_status_details) || empty($product_table)) continue;
+
                                         $product_smart_table = mysqli_query($connection_server, "SELECT * FROM sas_smart_parameter_values WHERE vendor_id='".$get_logged_admin_details["id"]."' && api_id='".$get_item_status_details["api_id"]."' && product_id='".$product_table["id"]."'");
                                         $product_agent_table = mysqli_query($connection_server, "SELECT * FROM sas_agent_parameter_values WHERE vendor_id='".$get_logged_admin_details["id"]."' && api_id='".$get_item_status_details["api_id"]."' && product_id='".$product_table["id"]."'");
                                         $product_api_table = mysqli_query($connection_server, "SELECT * FROM sas_api_parameter_values WHERE vendor_id='".$get_logged_admin_details["id"]."' && api_id='".$get_item_status_details["api_id"]."' && product_id='".$product_table["id"]."'");
@@ -461,9 +466,9 @@
                                                         <input name="product-id[]" type="hidden" value="'.$product_smart_details["product_id"].'"/>
                                                         <input name="product-code-1[]" type="hidden" value="'.$product_smart_details["val_1"].'"/>
                                                     </td>
-                                                    <td><input id="'.strtolower($products).'_rechargecard_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_smart_level" name="smart-price[]" type="number" step="0.01" value="'.$product_smart_details["val_2"].'" class="form-control form-control-sm text-center shadow-none border-0 bg-light" style="max-width:90px"></td>
-                                                    <td><input id="'.strtolower($products).'_rechargecard_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_agent_level" name="agent-price[]" type="number" step="0.01" value="'.$product_agent_details["val_2"].'" class="form-control form-control-sm text-center shadow-none border-0 bg-light" style="max-width:90px"></td>
-                                                    <td><input id="'.strtolower($products).'_rechargecard_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_api_level" name="api-price[]" type="number" step="0.01" value="'.$product_api_details["val_2"].'" class="form-control form-control-sm text-center shadow-none border-0 bg-light" style="max-width:90px"></td>
+                                                    <td><input id="'.strtolower($products).'_rechargecard_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_smart_level" name="smart-price[]" type="number" step="any" value="'.$product_smart_details["val_2"].'" class="form-control form-control-sm text-center shadow-none border-0 bg-light" style="max-width:90px"></td>
+                                                    <td><input id="'.strtolower($products).'_rechargecard_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_agent_level" name="agent-price[]" type="number" step="any" value="'.$product_agent_details["val_2"].'" class="form-control form-control-sm text-center shadow-none border-0 bg-light" style="max-width:90px"></td>
+                                                    <td><input id="'.strtolower($products).'_rechargecard_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_api_level" name="api-price[]" type="number" step="any" value="'.$product_api_details["val_2"].'" class="form-control form-control-sm text-center shadow-none border-0 bg-light" style="max-width:90px"></td>
                                                     <td>'.$status_badge.'</td>
                                                     <td class="text-end pe-3">
                                                         <div class="btn-group btn-group-sm">

@@ -10,10 +10,12 @@
             $response_message .= "<br>" . $json_response_decode["bonus_message"];
         }
         $_SESSION["product_purchase_response"] = $response_message;
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
         if (isset($json_response_decode["ref"])) {
             $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
 ?>
@@ -101,13 +103,27 @@
                         $acc_level_table_name = $account_level_table_name_arrays[$get_logged_user_details["account_level"]] ?? "sas_smart_parameter_values";
                         $vid = $get_logged_user_details["vendor_id"];
 
-                        // Optimized Single Query to fetch all active data plans
-                        $plans_sql = "SELECT v.*, p.product_name, a.api_type
-                            FROM $acc_level_table_name v
-                            JOIN sas_products p ON v.product_id = p.id AND v.vendor_id = p.vendor_id
-                            JOIN sas_apis a ON v.api_id = a.id AND v.vendor_id = a.vendor_id
-                            WHERE v.vendor_id = '$vid' AND v.status = 1 AND p.status = 1 AND a.status = 1
-                            AND a.api_type IN ('shared-data', 'sme-data', 'cg-data', 'dd-data')";
+                        // Only list plans belonging to the api_id each product's status table currently
+                        // designates as active. Without this, a second enabled sas_apis row of the same
+                        // type (e.g. a leftover provider never fully cleared) makes duplicate-looking plans
+                        // show up here whose purchase-time lookup (web/func/data.php) can never resolve,
+                        // since that lookup is pinned to the status table's single active api_id.
+                        $data_type_status_tables = array(
+                            "shared-data" => "sas_shared_data_status",
+                            "sme-data"    => "sas_sme_data_status",
+                            "cg-data"     => "sas_cg_data_status",
+                            "dd-data"     => "sas_dd_data_status",
+                        );
+                        $plans_sql_parts = array();
+                        foreach ($data_type_status_tables as $dtype => $status_table) {
+                            $plans_sql_parts[] = "SELECT v.*, p.product_name, a.api_type
+                                FROM $acc_level_table_name v
+                                JOIN sas_products p ON v.product_id = p.id AND v.vendor_id = p.vendor_id
+                                JOIN sas_apis a ON v.api_id = a.id AND v.vendor_id = a.vendor_id
+                                JOIN $status_table st ON st.vendor_id = v.vendor_id AND st.product_name = p.product_name AND st.api_id = v.api_id AND st.status = 1
+                                WHERE v.vendor_id = '$vid' AND v.status = 1 AND p.status = 1 AND a.status = 1 AND a.api_type = '$dtype'";
+                        }
+                        $plans_sql = implode(" UNION ALL ", $plans_sql_parts);
 
                         $plans_query = mysqli_query($connection_server, $plans_sql);
                         if ($plans_query) {
@@ -135,7 +151,7 @@
                     </label>
                 </div>
 
-                <button id="proceedBtn" name="buy-data" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
+                <button id="proceedBtn" name="buy-data" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
                     BUY DATA
                 </button>
 

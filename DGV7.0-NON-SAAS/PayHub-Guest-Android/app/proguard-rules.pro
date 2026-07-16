@@ -34,3 +34,31 @@
 # specific to Kotlin coroutine endpoints (every method in GuestApiService.kt). Official Retrofit
 # R8 rule: https://github.com/square/retrofit/blob/master/retrofit/src/main/resources/META-INF/proguard/retrofit2.pro
 -keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
+
+# ─── CRITICAL FIX: Preserve generic type signatures on Retrofit interface methods ──────────────
+# R8 strips the generic method signatures (Response<AirtimeCatalogResponse>, etc.) from the
+# Retrofit service interface at the bytecode level. Retrofit reads these signatures at RUNTIME
+# using reflection to know how to deserialize the response body. Without them you get:
+#   "Response must include generic type (e.g., Response<String>) for method getAirtimeCatalog"
+# This was the root cause of all VTU services failing in the release build while debug worked fine.
+# The `-keepclasseswithmembers` above only keeps classes with annotated methods; the rule below
+# explicitly preserves the generic-signature metadata on every method of every Retrofit interface.
+-keep,allowobfuscation,allowshrinking interface * {
+    @retrofit2.http.GET <methods>;
+    @retrofit2.http.POST <methods>;
+    @retrofit2.http.PUT <methods>;
+    @retrofit2.http.PATCH <methods>;
+    @retrofit2.http.DELETE <methods>;
+    @retrofit2.http.HEAD <methods>;
+    @retrofit2.http.OPTIONS <methods>;
+    @retrofit2.http.HTTP <methods>;
+}
+
+# Keep the Response wrapper's generic type parameter so R8 cannot collapse/simplify it.
+-keep,allowobfuscation,allowshrinking class retrofit2.Response { *; }
+
+# Kotlin Metadata: R8 uses this to restore some generic info, but keeping it explicitly
+# ensures suspend functions' Continuation<T> generics are not erased.
+-keepattributes RuntimeVisibleAnnotations
+-keepattributes RuntimeVisibleParameterAnnotations
+-keepattributes RuntimeVisibleTypeAnnotations

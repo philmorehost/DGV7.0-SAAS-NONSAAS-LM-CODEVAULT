@@ -274,7 +274,7 @@ If you distribute a single APK for all vendors:
       "currency_symbol": "₦",
       "support": {
         "email": "support@domain.com",
-        "whatsapp": "2348012345678",
+        "phone": "2348012345678",
         "address": "123 Main St"
       }
     }

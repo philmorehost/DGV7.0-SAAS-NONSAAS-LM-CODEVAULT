@@ -49,6 +49,11 @@ $recent_updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; border: none; transition: all 0.3s ease; font-size: 0.875rem; }
         .btn-primary { background: #3b82f6; color: white; }
         .btn-primary:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+        .btn-outline-danger { background: transparent; border: 1px solid #ef4444; color: #ef4444; }
+        .btn-outline-danger:hover { background: #ef4444; color: white; }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.75rem; border-radius: 6px; }
         .btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; box-shadow: none; }
         
         .progress-container { display: none; margin-top: 1.5rem; }
@@ -114,9 +119,20 @@ $recent_updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <label>Update ZIP File</label>
                         <input type="file" name="update_zip" accept=".zip" class="form-control" required style="padding: 0.5rem 1rem;">
                         <small style="color: #64748b; margin-top: 0.5rem; display: block;">Max Upload Size: <?= ini_get('upload_max_filesize') ?></small>
+                        <div style="margin-top: 0.75rem; padding: 0.75rem 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 0.8rem; color: #166534;">
+                            <strong>✅ Auto-Manifest:</strong> If your ZIP does not include a <code>manifest.json</code>, one will be automatically generated from the version number and changelog above.<br>
+                            <strong>📦 Recommended ZIP structure:</strong>
+                            <pre style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #1e293b; background: #f8fafc; padding: 0.5rem; border-radius: 4px;">update.zip
+├── manifest.json        ← auto-generated if missing
+└── files/              ← your updated PHP/CSS/JS files
+    ├── func/
+    │   └── bc-func.php
+    └── bc-admin/
+        └── SomePage.php</pre>
+                        </div>
                     </div>
 
-                    <button type="submit" id="submitBtn" class="btn btn-primary">Upload & Publish Update</button>
+                    <button type="submit" id="submitBtn" class="btn btn-primary">Upload &amp; Publish Update</button>
 
                     <div class="progress-container" id="progressContainer">
                         <div class="status-message" id="statusMessage">Uploading...</div>
@@ -129,8 +145,9 @@ $recent_updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
 
         <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h3>Recent Updates</h3>
+                <button type="button" id="cleanupBtn" class="btn btn-outline-danger btn-sm" onclick="cleanupOldUpdates()">🧹 Clean Up Old Updates</button>
             </div>
             <div class="card-body" style="padding: 0;">
                 <table>
@@ -140,11 +157,12 @@ $recent_updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <th>Version</th>
                             <th>File Path</th>
                             <th>Date Published</th>
+                            <th style="text-align: right; padding-right: 2rem;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if(empty($recent_updates)): ?>
-                            <tr><td colspan="4" style="text-align: center;">No updates published yet.</td></tr>
+                            <tr><td colspan="5" style="text-align: center;">No updates published yet.</td></tr>
                         <?php else: ?>
                             <?php foreach($recent_updates as $u): ?>
                             <tr>
@@ -152,6 +170,9 @@ $recent_updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><strong>v<?= htmlspecialchars($u['version_number']) ?></strong></td>
                                 <td><code style="font-size: 0.75rem; color: #94a3b8;"><?= htmlspecialchars($u['zip_path']) ?></code></td>
                                 <td><?= date('M d, Y H:i', strtotime($u['release_date'])) ?></td>
+                                <td style="text-align: right; padding-right: 2rem;">
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteUpdate(<?= $u['id'] ?>, '<?= htmlspecialchars($u['version_number']) ?>')">Delete</button>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -228,6 +249,65 @@ $recent_updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         xhr.send(formData);
     });
+
+    function deleteUpdate(id, version) {
+        if (!confirm('Are you sure you want to delete update version ' + version + '? This will physically delete the update ZIP file from the server and remove its record in the database.')) {
+            return;
+        }
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'ajax_delete_update.php', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        
+        xhr.onload = function() {
+            try {
+                const res = JSON.parse(xhr.responseText);
+                if (res.status === 'success') {
+                    alert(res.message);
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + res.message);
+                }
+            } catch(e) {
+                alert('A server error occurred. Check PHP error logs.');
+            }
+        };
+        
+        xhr.send('action=delete_single&update_id=' + id);
+    }
+    
+    function cleanupOldUpdates() {
+        if (!confirm('Are you sure you want to clean up old updates? This will delete all physical update ZIP files and database records of older versions, keeping only the latest version for each script tier.')) {
+            return;
+        }
+        
+        const cleanupBtn = document.getElementById('cleanupBtn');
+        cleanupBtn.disabled = true;
+        cleanupBtn.textContent = 'Cleaning...';
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'ajax_delete_update.php', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        
+        xhr.onload = function() {
+            cleanupBtn.disabled = false;
+            cleanupBtn.textContent = '🧹 Clean Up Old Updates';
+            
+            try {
+                const res = JSON.parse(xhr.responseText);
+                if (res.status === 'success') {
+                    alert(res.message);
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + res.message);
+                }
+            } catch(e) {
+                alert('A server error occurred. Check PHP error logs.');
+            }
+        };
+        
+        xhr.send('action=cleanup_old');
+    }
     </script>
 </body>
 </html>

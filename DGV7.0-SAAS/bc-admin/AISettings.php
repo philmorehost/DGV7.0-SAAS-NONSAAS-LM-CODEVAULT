@@ -28,14 +28,12 @@ if (isset($_POST['request-ai-activation'])) {
             mysqli_query($connection_server, "UPDATE sas_vendors SET ai_request_status='pending', ai_pending_cost='$cost', ai_pending_tokens='$tokens' WHERE id='$esc_vid'");
             
             // Notify Super Admin
-            $sa_email = "admin@" . explode(':', $_SERVER['HTTP_HOST'])[0]; // Fallback
             $site_name = $get_all_super_admin_site_details['site_title'];
             $msg = "New AI Feature activation request from: " . $get_logged_admin_details['company_name'] . "\nPackage: " . number_format($tokens) . " tokens\nAmount: ₦" . number_format($cost, 2);
-            
-            // WhatsApp Alert
-            $sa_wa = getSuperAdminOption('ai_whatsapp_number', '');
-            if(!empty($sa_wa)) sendWhatsAppAlert($sa_wa, "🤖 *AI Activation Request*\n\n" . $msg, 'admin_alert');
-            
+
+            require_once(__DIR__ . "/../func/bc-security.php");
+            bc_trigger_high_alert("AI_ACTIVATION_REQUEST", $msg);
+
             $_SESSION['product_purchase_response'] = "✅ Request submitted! Super Admin has been notified for approval.";
         } else {
             $_SESSION['product_purchase_response'] = "❌ Transaction failed. Please try again.";
@@ -187,7 +185,7 @@ $v_blocked_count = ($blocked_q && $row_b = mysqli_fetch_assoc($blocked_q)) ? $ro
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>AI Control Center | <?php echo $get_all_super_admin_site_details["site_title"]; ?></title>
+    <title>AI Control Center | <?php echo $get_all_super_admin_site_details["site_title"] ?? 'Vendor Dashboard'; ?></title>
     <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
     <link href="../assets-2/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="../assets-2/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
@@ -398,7 +396,7 @@ $v_blocked_count = ($blocked_q && $row_b = mysqli_fetch_assoc($blocked_q)) ? $ro
                                 <label class="form-label small fw-bold">Your Retail Price (per 1k tokens)</label>
                                 <div class="input-group">
                                     <span class="input-group-text border-0 bg-light">₦</span>
-                                    <input type="number" name="ai_user_token_price" class="form-control form-control-lg border-0 bg-light" value="<?php echo $get_logged_admin_details['ai_user_token_price'] ?? 150.00; ?>" step="0.01">
+                                    <input type="number" name="ai_user_token_price" class="form-control form-control-lg border-0 bg-light" value="<?php echo $get_logged_admin_details['ai_user_token_price'] ?? 150.00; ?>" step="any">
                                 </div>
                                 <small class="text-muted">You pay ₦<?php echo number_format($price_1k, 2); ?>. Recommended retail: ₦150+</small>
                             </div>

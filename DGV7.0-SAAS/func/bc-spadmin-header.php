@@ -275,9 +275,9 @@ if (!isset($get_all_super_admin_site_details) || empty($get_all_super_admin_site
       </li>
 
       <li class="nav-item">
-        <a class="nav-link <?php echo ($current_page == 'WhatsAppAIManager.php') ? 'active_item' : 'collapsed'; ?>" href="<?php echo $web_http_host; ?>/bc-spadmin/WhatsAppAIManager.php">
-          <i class="bi bi-whatsapp"></i>
-          <span>WhatsApp Official API</span> 
+        <a class="nav-link <?php echo ($current_page == 'USSDAccessFee.php') ? 'active_item' : 'collapsed'; ?>" href="<?php echo $web_http_host; ?>/bc-spadmin/USSDAccessFee.php">
+          <i class="bi bi-phone-fill"></i>
+          <span>USSD Channel Access</span> 
         </a>
       </li>
 

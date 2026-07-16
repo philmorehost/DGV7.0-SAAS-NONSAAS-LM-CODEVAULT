@@ -2,6 +2,10 @@
 //header("Content-Type", "application/json");
 include_once(__DIR__ . "/func/bc-connect.php");
 
+if (!$connection_server) {
+    exit;
+}
+
 //Select Vendor Table
 $vendor_id = resolveVendorID();
 $select_vendor_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vendor_id' AND status=1 LIMIT 1"));

@@ -111,8 +111,48 @@
         }else{
             $_SESSION["product_purchase_response"] = "Invalid plan selected.";
         }
-        header("Location: DataBundleCard.php");
+        header("Location: DataBundleCard.php?type=$service_type");
         exit();
+    }
+
+    if(isset($_POST["activate-ussd-channel"])){
+        $get_vendor_ussd = mysqli_fetch_array(mysqli_query($connection_server, "SELECT hollatags_ussd_code, ussd_activation_fee FROM sas_vendors WHERE id='".$get_logged_user_details["vendor_id"]."' LIMIT 1"));
+        $fee = $get_vendor_ussd ? (float)$get_vendor_ussd['ussd_activation_fee'] : 0.00;
+        
+        if (userBalance(1) >= $fee) {
+            $ref = "USSD-ACT-" . substr(str_shuffle("12345678901234567890"), 0, 15);
+            $desc = "USSD Redemption Channel One-time Activation Fee";
+            
+            // Debit user
+            $debit = chargeUser("debit", $ref, "USSD Activation", $ref, "", $fee, $fee, $desc, "WEB", $_SERVER["HTTP_HOST"], 1);
+            if ($debit === "success") {
+                mysqli_query($connection_server, "INSERT INTO sas_ussd_activations (vendor_id, user_id, amount_paid, status) VALUES ('".$get_logged_user_details["vendor_id"]."', '".$get_logged_user_details["id"]."', '$fee', 1)");
+                $_SESSION["product_purchase_response"] = "USSD Redemption Channel activated successfully!";
+            } else {
+                $_SESSION["product_purchase_response"] = "Activation failed. Please try again.";
+            }
+        } else {
+            $_SESSION["product_purchase_response"] = "Insufficient balance to pay USSD activation fee of N" . number_format($fee, 2);
+        }
+        header("Location: DataBundleCard.php?type=$service_type");
+        exit();
+    }
+
+    // Fetch USSD settings and status
+    $get_vendor_ussd = mysqli_fetch_array(mysqli_query($connection_server, "SELECT hollatags_ussd_code, ussd_activation_fee, ussd_channel_mode FROM sas_vendors WHERE id='".$get_logged_user_details["vendor_id"]."' LIMIT 1"));
+    $ussd_code = $get_vendor_ussd ? $get_vendor_ussd['hollatags_ussd_code'] : '';
+    $ussd_fee = $get_vendor_ussd ? (float)$get_vendor_ussd['ussd_activation_fee'] : 0.00;
+    $ussd_channel_mode = $get_vendor_ussd ? $get_vendor_ussd['ussd_channel_mode'] : 'SMS Bridge Only';
+
+    $is_ussd_activated = false;
+    if (!empty($ussd_code) && $ussd_channel_mode !== 'SMS Bridge Only') {
+        $check_activation = mysqli_query($connection_server, "SELECT status FROM sas_ussd_activations WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' AND user_id='".$get_logged_user_details["id"]."' LIMIT 1");
+        if ($check_activation && mysqli_num_rows($check_activation) > 0) {
+            $act_row = mysqli_fetch_assoc($check_activation);
+            if ($act_row['status'] == 1 || $act_row['status'] == 'active') {
+                $is_ussd_activated = true;
+            }
+        }
     }
 ?>
 <!DOCTYPE html>
@@ -146,7 +186,7 @@
     <section class="section dashboard">
       <?php include("../func/service-header.php"); ?>
 
-      <div class="row justify-content-center">
+      <div class="row">
         <div class="col-lg-8">
           <div class="mb-3 d-flex justify-content-between align-items-center">
             <h5 class="fw-bold m-0">Print <?php echo ucwords($service_type); ?> Cards</h5>
@@ -290,7 +330,45 @@
                     GENERATE EPINs
                 </button>
             </form>
+          </div>
         </div>
+        
+        <?php if (!empty($ussd_code) && $ussd_channel_mode !== 'SMS Bridge Only'): ?>
+        <div class="col-lg-4">
+          <div class="card shadow-sm border-0 p-4 text-center">
+            <div class="d-flex align-items-center justify-content-center mb-3">
+              <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
+                <i class="bi bi-phone-vibrate fs-3"></i>
+              </div>
+            </div>
+            <h5 class="fw-bold mb-2">USSD Card Redemption</h5>
+            <p class="text-muted small mb-4">
+              Dial code directly from any mobile phone to instantly redeem your cards. No app or internet connection required.
+            </p>
+            
+            <?php if ($is_ussd_activated): ?>
+              <div class="bg-success bg-opacity-10 text-success rounded-3 p-3 mb-3 border border-success border-opacity-25">
+                <div class="small fw-bold text-uppercase tracking-wider mb-1">Status: Active</div>
+                <div class="fs-4 fw-bold font-monospace"><?php echo htmlspecialchars($ussd_code); ?></div>
+                <div class="small text-muted mt-1">Shortcode for card redemption</div>
+              </div>
+              <p class="text-muted small mb-0">Dial the code above and enter card EPIN when prompted.</p>
+            <?php else: ?>
+              <div class="bg-warning bg-opacity-10 text-warning-emphasis rounded-3 p-3 mb-4 border border-warning border-opacity-25">
+                <div class="small fw-bold text-uppercase tracking-wider mb-1">Status: Inactive</div>
+                <div class="small">Activation Fee: <strong>₦<?php echo number_format($ussd_fee, 2); ?></strong></div>
+              </div>
+              
+              <form method="post" action="">
+                <button type="submit" name="activate-ussd-channel" class="btn btn-primary w-100 py-2.5 rounded-3 fw-semibold shadow-sm">
+                  ACTIVATE USSD CHANNEL
+                </button>
+              </form>
+              <p class="text-muted small mt-3 mb-0">Fee is charged once from your wallet balance.</p>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php endif; ?>
       </div>
     </section>
 

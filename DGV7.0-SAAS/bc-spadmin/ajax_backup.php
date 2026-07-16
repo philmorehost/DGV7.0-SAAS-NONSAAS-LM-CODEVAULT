@@ -53,61 +53,65 @@ try {
     }
 
     // ---------------------------------------------------------
-    // STEP A: DATABASE BACKUP (Pure PHP)
+    // STEP A: DATABASE BACKUP (Pure PHP, memory-safe streaming)
     // ---------------------------------------------------------
-    $sql_dump = "-- System Backup: {$timestamp}\n";
-    $sql_dump .= "-- Database: {$mySqlDBName}\n\n";
-    
-    // Disable foreign keys checks during restore to avoid constraint errors
-    $sql_dump .= "SET FOREIGN_KEY_CHECKS=0;\n\n";
+    $db_backup_path = BACKUP_DIR . "/db_backup_{$timestamp}.sql";
+    $fh = fopen($db_backup_path, 'w');
+    if (!$fh) {
+        throw new Exception("Failed to open database backup SQL file for writing.");
+    }
+
+    fwrite($fh, "-- System Backup: {$timestamp}\n");
+    fwrite($fh, "-- Database: {$mySqlDBName}\n\n");
+    fwrite($fh, "SET FOREIGN_KEY_CHECKS=0;\n\n");
 
     // Get all tables
-    $tables = [];
     $result = mysqli_query($connection_server, "SHOW TABLES");
     if (!$result) {
+        fclose($fh);
         throw new Exception("Failed to query database tables: " . mysqli_error($connection_server));
     }
+
+    $tables = [];
     while ($row = mysqli_fetch_row($result)) {
         $tables[] = $row[0];
     }
+    mysqli_free_result($result);
 
     foreach ($tables as $table) {
-        $sql_dump .= "DROP TABLE IF EXISTS `$table`;\n";
-        
+        fwrite($fh, "DROP TABLE IF EXISTS `$table`;\n");
+
         $create_res = mysqli_query($connection_server, "SHOW CREATE TABLE `$table`");
         if ($create_res) {
             $row2 = mysqli_fetch_row($create_res);
-            $sql_dump .= $row2[1] . ";\n\n";
+            fwrite($fh, $row2[1] . ";\n\n");
+            mysqli_free_result($create_res);
         }
-        
-        $data_res = mysqli_query($connection_server, "SELECT * FROM `$table`");
+
+        // Stream data row-by-row without loading entire table into memory
+        $data_res = mysqli_query($connection_server, "SELECT * FROM `$table`", MYSQLI_USE_RESULT);
         if ($data_res) {
             $num_columns = mysqli_num_fields($data_res);
             while ($row = mysqli_fetch_row($data_res)) {
-                $sql_dump .= "INSERT INTO `$table` VALUES(";
+                $values = [];
                 for ($j = 0; $j < $num_columns; $j++) {
                     if (isset($row[$j])) {
-                        $escaped_val = mysqli_real_escape_string($connection_server, $row[$j]);
-                        $sql_dump .= '"' . $escaped_val . '"';
+                        $values[] = '"' . mysqli_real_escape_string($connection_server, $row[$j]) . '"';
                     } else {
-                        $sql_dump .= 'NULL';
-                    }
-                    if ($j < ($num_columns - 1)) {
-                        $sql_dump .= ',';
+                        $values[] = 'NULL';
                     }
                 }
-                $sql_dump .= ");\n";
+                fwrite($fh, "INSERT INTO `$table` VALUES(" . implode(',', $values) . ");\n");
+                // Free row memory explicitly
+                unset($row, $values);
             }
-            $sql_dump .= "\n\n";
+            mysqli_free_result($data_res);
+            fwrite($fh, "\n\n");
         }
     }
-    
-    $sql_dump .= "SET FOREIGN_KEY_CHECKS=1;\n";
 
-    $db_backup_path = BACKUP_DIR . "/db_backup_{$timestamp}.sql";
-    if (file_put_contents($db_backup_path, $sql_dump) === false) {
-        throw new Exception("Failed to write database backup SQL file.");
-    }
+    fwrite($fh, "SET FOREIGN_KEY_CHECKS=1;\n");
+    fclose($fh);
 
     // ---------------------------------------------------------
     // STEP B: FILE BACKUP (Using ZipArchive)
@@ -129,8 +133,43 @@ try {
                 // Normalise separators
                 $norm_rel = str_replace('\\', '/', $relative_path);
                 
-                // Exclude the backups folder and the temp update folder
-                if (strpos($norm_rel, 'backups/') === 0 || strpos($norm_rel, 'tmp_update/') === 0) {
+                // Exclude folders that are not part of the web application deployment or are too large
+                $norm_rel_lower = strtolower($norm_rel);
+                $exclude_prefixes = [
+                    'backups/',
+                    'tmp_update/',
+                    'dg7-android/',
+                    'dg7-ios/',
+                    'dg6-android/',
+                    'dg6-ios/',
+                    'mzeevtu/',
+                    'mzeevtu-android/',
+                    'mzeevtu-ios/',
+                    'payhub-android/',
+                    'payhub-ios/',
+                    'uploaded-image/',
+                    'downloads/',
+                    'logs/',
+                    'scratch/',
+                    'tests/',
+                    '.git/',
+                    '.github/'
+                ];
+                
+                $should_exclude = false;
+                foreach ($exclude_prefixes as $prefix) {
+                    if (strpos($norm_rel_lower, $prefix) === 0) {
+                        $should_exclude = true;
+                        break;
+                    }
+                }
+                
+                // Also exclude any zip archives to avoid zipping nested massive backups
+                if (strtolower(pathinfo($norm_rel_lower, PATHINFO_EXTENSION)) === 'zip') {
+                    $should_exclude = true;
+                }
+                
+                if ($should_exclude) {
                     continue;
                 }
                 

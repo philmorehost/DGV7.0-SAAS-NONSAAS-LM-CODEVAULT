@@ -5,8 +5,10 @@
     	$redirecturl = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["redirecturl"])));
 		if(!empty(trim($redirecturl)) && file_exists("..".$redirecturl)){
 			header("Location: ".$redirecturl);
+			exit;
 		}else{
 			header("Location: /bc-admin/Dashboard.php");
+			exit;
 		}
         exit();
 	}

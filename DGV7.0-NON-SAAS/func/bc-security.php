@@ -486,31 +486,28 @@ function bc_calculate_user_trust_score(string $username): int {
 }
 
 /**
- * Trigger a High-Alert WhatsApp notification for the Super Admin.
+ * Trigger a High-Alert email notification for the Super Admin.
  */
 function bc_trigger_high_alert(string $event, string $detail): void {
     global $connection_server;
-    
-    // Get admin phone
-    $q = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='admin_phone' LIMIT 1");
+
+    // Get admin email
+    $q = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='admin_email' LIMIT 1");
     $row = mysqli_fetch_assoc($q);
-    $phone = $row['option_value'] ?? '';
+    $email = $row['option_value'] ?? '';
 
-    if (empty($phone)) return;
+    if (empty($email)) return;
 
-    $msg = "🚨 *HIGH ALERT: $event*\n\n"
-         . "Detail: $detail\n"
-         . "Time: " . date('H:i:s') . "\n"
-         . "Action: Please review in admin panel.";
+    $subject = "High Alert: $event";
+    $body = "<b>Event:</b> $event<br><b>Detail:</b> $detail<br><b>Time:</b> " . date('H:i:s') . "<br><br>Please review in the admin panel.";
 
-    include_once(__DIR__ . "/bc-whatsapp.php");
-    sendWhatsAppAlert($phone, $msg, 'high');
+    sendSuperAdminEmail($email, $subject, $body);
 }
 
 /**
  * Checks for spending anomalies by comparing current amount to user history.
- * If anomalous, triggers a High-Alert WhatsApp.
- * 
+ * If anomalous, triggers a High-Alert notification.
+ *
  * @param string $username
  * @param float  $amount
  * @return bool True if anomalous (High Risk)

@@ -19,6 +19,22 @@ if (isset($_GET["batch"])) {
         exit();
 	}
 }
+
+// Fetch USSD settings and status
+$get_vendor_ussd = mysqli_fetch_array(mysqli_query($connection_server, "SELECT hollatags_ussd_code, ussd_channel_mode FROM sas_vendors WHERE id='" . $get_logged_user_details["vendor_id"] . "' LIMIT 1"));
+$ussd_code = $get_vendor_ussd ? $get_vendor_ussd['hollatags_ussd_code'] : '';
+$ussd_channel_mode = $get_vendor_ussd ? $get_vendor_ussd['ussd_channel_mode'] : 'SMS Bridge Only';
+
+$is_ussd_activated = false;
+if (!empty($ussd_code) && $ussd_channel_mode !== 'SMS Bridge Only') {
+    $check_activation = mysqli_query($connection_server, "SELECT status FROM sas_ussd_activations WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' AND user_id='" . $get_logged_user_details["id"] . "' LIMIT 1");
+    if ($check_activation && mysqli_num_rows($check_activation) > 0) {
+        $act_row = mysqli_fetch_assoc($check_activation);
+        if ($act_row['status'] == 1 || $act_row['status'] == 'active') {
+            $is_ussd_activated = true;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <head>
@@ -94,6 +110,16 @@ if (isset($_GET["batch"])) {
                 if ($count > 0) echo '</div>';
                 echo '<div class="card-grid">';
             }
+            
+            $instruction_text = '';
+            if ($ussd_channel_mode == 'USSD Only' && $is_ussd_activated) {
+                $instruction_text = 'DIAL ' . $ussd_code . ' & ENTER PIN';
+            } elseif ($ussd_channel_mode == 'Both' && $is_ussd_activated) {
+                $instruction_text = 'DIAL ' . $ussd_code . ' OR SMS PIN TO ' . $card['sms_number'];
+            } else {
+                $instruction_text = 'SMS PIN TO ' . $card['sms_number'];
+            }
+
             $icon_ext = ($card['service_type'] == 'data' || $card['service_type'] == 'airtime' || $card['service_type'] == 'cable') ? 'png' : 'jpg';
             $label = strtoupper($card['plan_name']);
             if ($card['validity'] > 0) $label .= ' ('.$card['validity'].' Days)';
@@ -113,7 +139,7 @@ if (isset($_GET["batch"])) {
                     <div class="epin">'.$card['epin'].'</div>
                     <div class="sn">Price: ₦'.$display_price.' | S/N: '.$card['serial_number'].'</div>
                     <div class="instruction">
-                        SMS PIN TO '.$card['sms_number'].'
+                        '.$instruction_text.'
                     </div>
                   </div>';
             $count++;

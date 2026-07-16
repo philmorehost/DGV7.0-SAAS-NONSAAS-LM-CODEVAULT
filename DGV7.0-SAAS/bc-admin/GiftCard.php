@@ -230,7 +230,7 @@ $gc_conversion_spread = mysqli_fetch_assoc($q_spread)['setting_value'] ?? '0.00'
                                 <label class="form-label small fw-bold text-muted text-uppercase">Default Vendor Markup (%)</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-0">%</span>
-                                    <input name="default_giftcard_markup" type="number" step="0.01" value="<?php echo $get_logged_admin_details['default_giftcard_markup'] ?? 0; ?>" class="form-control rounded-3" placeholder="0.00" />
+                                    <input name="default_giftcard_markup" type="number" step="any" value="<?php echo $get_logged_admin_details['default_giftcard_markup'] ?? 0; ?>" class="form-control rounded-3" placeholder="0.00" />
                                 </div>
                                 <small class="text-muted text-xs">Your profit margin. This will be automatically applied to every new gift card you install and can be synced to all active ones.</small>
                             </div>
@@ -239,7 +239,7 @@ $gc_conversion_spread = mysqli_fetch_assoc($q_spread)['setting_value'] ?? '0.00'
                                 <label class="form-label small fw-bold text-muted text-uppercase">Processing Fee (%)</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-0">%</span>
-                                    <input name="giftcard_fee" type="number" step="0.01" value="<?php echo $get_logged_admin_details['giftcard_fee_percent'] ?? 0; ?>" class="form-control rounded-3" placeholder="0.00" />
+                                    <input name="giftcard_fee" type="number" step="any" value="<?php echo $get_logged_admin_details['giftcard_fee_percent'] ?? 0; ?>" class="form-control rounded-3" placeholder="0.00" />
                                 </div>
                                 <small class="text-muted text-xs">A transactional processing fee applied separately at checkout (optional).</small>
                             </div>
@@ -248,7 +248,7 @@ $gc_conversion_spread = mysqli_fetch_assoc($q_spread)['setting_value'] ?? '0.00'
                                 <label class="form-label small fw-bold text-muted text-uppercase">Exchange Rate Spread (NGN)</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-0">₦</span>
-                                    <input name="gc_conversion_spread" type="number" min="0" max="100" step="0.01" value="<?php echo $gc_conversion_spread; ?>" class="form-control rounded-3" placeholder="0.00" />
+                                    <input name="gc_conversion_spread" type="number" min="0" max="100" step="any" value="<?php echo $gc_conversion_spread; ?>" class="form-control rounded-3" placeholder="0.00" />
                                 </div>
                                 <small class="text-muted text-xs">Added to the live conversion rate (e.g., ₦50 spread makes ₦1300/$ become ₦1350/$).</small>
                             </div>
@@ -358,7 +358,7 @@ $gc_conversion_spread = mysqli_fetch_assoc($q_spread)['setting_value'] ?? '0.00'
                                                 <option value="<?php echo $c_row['country_code']; ?>"><?php echo $c_row['country_code']; ?></option>
                                             <?php endwhile; ?>
                                         </select>
-                                        <input type="number" id="bulkMarkupInput" class="form-control" placeholder="Bulk Fee %" step="0.1">
+                                        <input type="number" id="bulkMarkupInput" class="form-control" placeholder="Bulk Fee %" step="any">
                                         <button class="btn btn-warning fw-bold" type="button" id="btnBulkUpdateMarkup">Update All</button>
                                     </div>
                             </div>
@@ -401,7 +401,7 @@ $gc_conversion_spread = mysqli_fetch_assoc($q_spread)['setting_value'] ?? '0.00'
                                                 </td>
                                                     <td>
                                                         <div class="input-group input-group-sm" style="width: 140px;">
-                                                            <input type="number" step="0.1" value="<?php echo $r['vendor_markup']; ?>" class="form-control markup-input" data-id="<?php echo $r['reloadly_product_id']; ?>">
+                                                            <input type="number" step="any" value="<?php echo $r['vendor_markup']; ?>" class="form-control markup-input" data-id="<?php echo $r['reloadly_product_id']; ?>">
                                                             <button class="btn btn-outline-success btn-update-markup" type="button"><i class="bi bi-check-lg"></i></button>
                                                         </div>
                                                         <small class="text-muted text-xs">Profit margin added to each individual gift card product.</small>

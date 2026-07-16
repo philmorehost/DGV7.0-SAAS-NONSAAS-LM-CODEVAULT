@@ -18,6 +18,29 @@ if (isset($GLOBALS['bc_integrity_fail']) && $GLOBALS['bc_integrity_fail'] === tr
         $code = trim($_POST['action_activate_code']);
         if (!empty($code)) {
             bc_write_activation($code);
+            // Persist to the database too, not just the func/bc-activation.php file. That file
+            // (and func/cache/bc-core.cache) gets wiped whenever the site's files are redeployed
+            // (e.g. re-uploading func/ via cPanel File Manager), and bc_verify_integrity() falls
+            // back to the DB's license_key when the file is unreadable. Without this, a stale/old
+            // DB value gets validated instead of the code just re-entered here, making a genuinely
+            // valid key appear "invalid" after every deployment.
+            if (isset($connection_server) && $connection_server) {
+                $current_domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $current_domain_esc = mysqli_real_escape_string($connection_server, $current_domain);
+                $code_esc = mysqli_real_escape_string($connection_server, $code);
+                mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_key', '$code_esc') ON DUPLICATE KEY UPDATE option_value='$code_esc'");
+                mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_domain', '$current_domain_esc') ON DUPLICATE KEY UPDATE option_value='$current_domain_esc'");
+            }
+            // Force a fresh remote check instead of possibly reading a stale FAILED verdict cached
+            // from an earlier attempt (e.g. from before the DB persistence fix above existed, or from
+            // a transient DB-connection blip). Without this, a still-valid 6-hour-old negative cache
+            // entry short-circuits bc_verify_integrity() before it ever re-contacts the license server
+            // — this was the exact cause of "works on reload but not on the first try": the failure
+            // branch below clears this same cache file, so only the *next* attempt got a fresh check.
+            $cache_file = __DIR__ . '/cache/bc-core.cache';
+            if (file_exists($cache_file)) {
+                @unlink($cache_file);
+            }
             $GLOBALS['bc_integrity_checked'] = false;
             if (bc_verify_integrity()) {
                 header("Location: " . $_SERVER['REQUEST_URI']);

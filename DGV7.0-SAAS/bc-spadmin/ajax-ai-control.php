@@ -17,8 +17,7 @@ if ($action === 'status') {
     $ai = ai_engine();
     echo json_encode([
         'ai_up' => $ai->isAiOnline(),
-        'provider' => getSuperAdminOption('ai_provider', 'gemini'),
-        'whatsapp_up' => isWhatsAppGatewayOnline()
+        'provider' => getSuperAdminOption('ai_provider', 'gemini')
     ]);
     exit();
 }

@@ -69,5 +69,5 @@ if ($vendor_account_details) {
 }
 
 // Pass both vendor data and any error message to the template
-include($css_style_template_location);
+include(__DIR__ . "/" . $css_style_template_location);
 ?>

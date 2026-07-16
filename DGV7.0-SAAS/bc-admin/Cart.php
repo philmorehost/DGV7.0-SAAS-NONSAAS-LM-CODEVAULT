@@ -35,7 +35,7 @@
 							$count_new_cart_items_amount += $get_active_cart_details["price"];
 							$api_type_cart_name .= strtolower(str_replace(" ","-",trim($api_type))). " ";
 							$api_type_cart_name_price .= $get_active_cart_details["price"]. " ";
-							$api_type_cart_name_website .= strtolower($api_website). " ";
+							$api_type_cart_name_website .= strtolower(trim($api_website)). " ";
 
 						}else{
 							//Unknown Item_id
@@ -145,8 +145,10 @@
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
 		if($marketplace_redirect == false){
         	header("Location: ".$_SERVER["REQUEST_URI"]);
+        	exit;
 		}else{
 			header("Location: /bc-admin/MarketPlace.php");
+			exit;
 		}
     }
 ?>

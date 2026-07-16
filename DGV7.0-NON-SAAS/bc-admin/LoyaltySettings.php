@@ -2,10 +2,30 @@
 session_start();
 include("../func/bc-admin-config.php");
 
+// Migration: Create table if not exists
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_loyalty_bonus_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT NOT NULL UNIQUE,
+    day_1_bonus INT DEFAULT 0,
+    day_2_bonus INT DEFAULT 0,
+    day_3_bonus INT DEFAULT 0,
+    day_4_bonus INT DEFAULT 0,
+    day_5_bonus INT DEFAULT 0,
+    day_6_bonus INT DEFAULT 0,
+    day_7_bonus INT DEFAULT 0,
+    first_purchase_bonus INT DEFAULT 0
+)");
+
+// Migration: Add first_purchase_bonus column if missing
+$check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_loyalty_bonus_settings` LIKE 'first_purchase_bonus'");
+if ($check_col && mysqli_num_rows($check_col) == 0) {
+    mysqli_query($connection_server, "ALTER TABLE sas_loyalty_bonus_settings ADD COLUMN first_purchase_bonus INT DEFAULT 0");
+}
+
 // Ensure row exists first
 $vendor_id = $get_logged_admin_details["id"];
 $check_exists = mysqli_query($connection_server, "SELECT id FROM sas_loyalty_bonus_settings WHERE vendor_id = '$vendor_id'");
-if (mysqli_num_rows($check_exists) == 0) {
+if ($check_exists && mysqli_num_rows($check_exists) == 0) {
     mysqli_query($connection_server, "INSERT INTO sas_loyalty_bonus_settings (vendor_id) VALUES ('$vendor_id')");
 }
 
@@ -143,7 +163,7 @@ $min_points_conversion = $settings['min_points_conversion'] ?? 100;
                             <div class="col-md-6">
                                 <label for="conversion_rate" class="form-label small fw-bold text-muted text-uppercase">Conversion Rate</label>
                                 <div class="input-group input-group-lg">
-                                    <input type="number" step="0.01" class="form-control rounded-3" id="conversion_rate" name="conversion_rate" value="<?php echo $points_conversion_rate; ?>" required>
+                                    <input type="number" step="any" class="form-control rounded-3" id="conversion_rate" name="conversion_rate" value="<?php echo $points_conversion_rate; ?>" required>
                                     <span class="input-group-text bg-light small">Pts/₦</span>
                                 </div>
                                 <p class="small text-muted mt-2">Number of points required for ₦1.00</p>

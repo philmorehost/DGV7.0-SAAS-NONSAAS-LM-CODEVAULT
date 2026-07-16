@@ -24,10 +24,6 @@ if (mysqli_num_rows($check_user) == 1) {
     $q = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='$vendor_id' AND username='$username' AND batch_number='$batch_number'");
 
     $transactions = [];
-    $successful = 0;
-    $failed = 0;
-    $pending = 0;
-
     while ($row = mysqli_fetch_assoc($q)) {
         $transactions[] = [
             "reference" => $row['reference'],
@@ -36,20 +32,22 @@ if (mysqli_num_rows($check_user) == 1) {
             "status" => tranStatus($row['status']),
             "desc" => $row['description']
         ];
-        if ($row['status'] == 1) $successful++;
-        elseif ($row['status'] == 3) $failed++;
-        else $pending++;
     }
+
+    // Live progress: includes queue-side pending/processing items not yet in sas_transactions
+    $progress = bc_get_bulk_batch_progress($connection_server, $vendor_id, $username, $batch_number);
 
     echo json_encode([
         "status" => "success",
         "batch_number" => $batch_number,
+        "batch_status" => $progress["status"], // pending|processing|completed
         "summary" => [
-            "total" => count($transactions),
-            "successful" => $successful,
-            "failed" => $failed,
-            "pending" => $pending
+            "total" => $progress["total"],
+            "successful" => $progress["successful"],
+            "failed" => $progress["failed"],
+            "pending" => $progress["pending"]
         ],
+        "ai_diagnosis" => $progress["ai_diagnosis"],
         "transactions" => $transactions
     ]);
 

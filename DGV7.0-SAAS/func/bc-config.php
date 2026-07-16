@@ -384,13 +384,17 @@ if ($connection_server) {
 					// Master KYC Toggle Check (Super Admin Global OR Vendor Local)
 					$master_force_kyc = isKYCEnforced($vendor_id);
 
-					// Optimization: KYC check combined (Branch DG6.7: Session cached)
-					if (!isset($_SESSION['kyc_data_cache']) || !isset($_SESSION['kyc_data_vid']) || $_SESSION['kyc_data_vid'] != $vendor_id) {
+					// Optimization: KYC check combined (Branch DG6.7: Session cached with 30s TTL and configuration page bypass)
+					$current_uri = explode("?", trim($_SERVER["REQUEST_URI"] ?? ""))[0];
+					$is_config_page = in_array($current_uri, ["/web/AccountSettings.php", "/web/KYCVerification.php", "/web/SecurityQuest.php"]);
+
+					if ($is_config_page || !isset($_SESSION['kyc_data_cache']) || !isset($_SESSION['kyc_data_vid']) || $_SESSION['kyc_data_vid'] != $vendor_id || !isset($_SESSION['kyc_data_time']) || (time() - $_SESSION['kyc_data_time'] > 30)) {
 						$kyc_data = [];
 						$kyc_res = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vendor_id'");
 						while($krow = mysqli_fetch_assoc($kyc_res)) $kyc_data[$krow['verification_name']] = (int)$krow['status'];
 						$_SESSION['kyc_data_cache'] = $kyc_data;
 						$_SESSION['kyc_data_vid'] = $vendor_id;
+						$_SESSION['kyc_data_time'] = time();
 					} else {
 						$kyc_data = $_SESSION['kyc_data_cache'];
 					}
@@ -403,7 +407,7 @@ if ($connection_server) {
 						if($needs_bvn) $fields[] = "BVN";
 						if($needs_nin) $fields[] = "NIN";
 						$_SESSION["product_purchase_response"] = "Dear " . ucwords($get_logged_user_details["firstname"]) . ", please provide your " . implode(" and ", $fields) . " securely to comply with regulations.";
-						if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/web/AccountSettings.php", "/web/Fund.php", "/web/SubmitPayment.php", "/web/PaymentOrders.php", "/web/KYCVerification.php", "/web/AISuite.php", "/web/AI-Assistant.php"))) {
+						if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/web/AccountSettings.php", "/web/Fund.php", "/web/SubmitPayment.php", "/web/PaymentOrders.php", "/web/KYCVerification.php", "/web/AISuite.php", "/web/AI-Assistant.php", "/web/SecurityQuest.php"))) {
 							header("Location: /web/AccountSettings.php");
 							exit();
 						}
@@ -474,7 +478,7 @@ if ($connection_server) {
 
 								if ($config_user_total_funding < $min_funding) {
 									$_SESSION["product_purchase_response"] = "Dear " . ucwords($get_logged_user_details["firstname"]) . ", kindly fund your wallet with minimum of N" . number_format($min_funding - $config_user_total_funding) . " to unlock features.";
-									if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/web/Fund.php", "/web/SubmitPayment.php", "/web/PaymentOrders.php", "/web/Dashboard.php", "/web/AISuite.php", "/web/AI-Assistant.php"))) {
+									if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/web/Fund.php", "/web/SubmitPayment.php", "/web/PaymentOrders.php", "/web/Dashboard.php", "/web/AISuite.php", "/web/AI-Assistant.php", "/web/SecurityQuest.php"))) {
 										header("Location: /web/Fund.php");
 										exit();
 									}

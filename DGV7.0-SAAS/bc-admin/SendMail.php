@@ -149,57 +149,22 @@ if (isset($_POST["send-mail"])) {
     <link href="../assets-2/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
     <link href="../assets-2/css/style.css" rel="stylesheet">
 
-    <!-- GrapesJS -->
-    <link href="https://unpkg.com/grapesjs/dist/css/grapes.min.css" rel="stylesheet">
-    <script src="https://unpkg.com/grapesjs"></script>
-    <script src="https://unpkg.com/grapesjs-preset-newsletter"></script>
-
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <style>
         .marketing-card {
             border: none;
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.08);
             background: #fff;
-            height: calc(100vh - 180px);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .marketing-card .card-body {
-            flex: 1;
-            overflow: hidden;
-        }
-        #gjs {
-            border: 1px solid #ddd;
-            overflow: hidden;
-            height: 100% !important;
-        }
-        .placeholder-btn {
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 11px;
-            padding: 5px 8px;
-        }
-        .placeholder-btn:hover {
-            transform: scale(1.05);
-            background: #eef2ff !important;
-        }
-        .app-sidebar {
-            background: #f8fafc;
-            border-right: 1px solid #e2e8f0;
             padding: 20px;
-            overflow-y: auto;
-            height: 100%;
         }
-        .gjs-cv-canvas {
-            width: 100%;
-            height: 100%;
-            top: 0;
+        #editor-container {
+            height: 300px;
+            border-radius: 0 0 10px 10px;
         }
-        .main-content-area {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
+        .ql-toolbar {
+            border-radius: 10px 10px 0 0;
+            background: #f8fafc;
         }
     </style>
 </head>
@@ -221,82 +186,61 @@ if (isset($_POST["send-mail"])) {
         <div class="col-lg-12">
             <div class="marketing-card">
                 <div class="card-body p-0">
-                    <div class="row g-0 h-100">
-                        <!-- Left Controls -->
-                        <div class="col-md-3 app-sidebar">
-                            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-megaphone me-2"></i>Campaign Settings</h5>
-
-                            <form id="mainForm" method="post" enctype="multipart/form-data">
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase">Email Subject</label>
-                                    <input name="subject" id="subject" type="text" class="form-control rounded-3" placeholder="e.g. System Update v2.0" required />
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase">Target Audience</label>
-                                    <select name="mailto" id="mailto" class="form-select rounded-3">
-                                        <option value="">No internal target (External only)</option>
-                                        <option value="all">All Users</option>
-                                        <option value="a">Active Users Only</option>
-                                        <option value="b">Blocked Accounts</option>
-                                        <option value="d">Deleted Accounts</option>
-                                        <option value="bd">Blocked & Deleted</option>
-                                    </select>
-                                </div>
-
-                                <hr class="my-3 opacity-50">
-
-                                <h6 class="fw-bold mb-3 small text-muted text-uppercase">External Marketing</h6>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold"><i class="bi bi-file-earmark-arrow-up me-1"></i> Bulk Upload (.csv, .txt)</label>
-                                    <input type="file" name="email_file" class="form-control form-control-sm rounded-3" accept=".csv,.txt">
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold"><i class="bi bi-clipboard-plus me-1"></i> Paste Emails</label>
-                                    <textarea name="paste_emails" class="form-control rounded-3" rows="2" placeholder="Separate by comma or newline"></textarea>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase mb-2">Personalization Tags</label>
-                                    <div class="d-flex flex-wrap gap-1">
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{firstname}')">{firstname}</span>
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{lastname}')">{lastname}</span>
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{email}')">{email}</span>
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{phone}')">{phone}</span>
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{address}')">{address}</span>
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{username}')">{username}</span>
-                                        <span class="badge bg-light text-primary border placeholder-btn" onclick="insertPlaceholder('{balance}')">{balance}</span>
-                                    </div>
-                                </div>
-
-                                <textarea name="body" id="body_html" hidden></textarea>
-                                <input type="hidden" name="body_json" id="body_json">
-
-                                <div class="d-grid gap-2 mt-4">
-                                    <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="saveDraft()">
-                                        <i class="bi bi-save me-2"></i>Save Draft
-                                    </button>
-                                    <button name="send-mail" type="submit" class="btn btn-primary fw-bold shadow">
-                                        <i class="bi bi-send-fill me-2"></i>Dispatch Campaign
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-
-                        <!-- Right Builder -->
-                        <div class="col-md-9 main-content-area">
-                            <div class="d-flex justify-content-between align-items-center p-3 border-bottom bg-white">
-                                <h4 class="fw-bold mb-0">Visual Email Builder</h4>
-                                <button type="button" class="btn btn-light btn-sm text-danger fw-bold" onclick="if(confirm('Clear all content?')) editor.setComponents('')">
-                                    <i class="bi bi-trash me-1"></i> Clear Canvas
-                                </button>
-                            </div>
-                            <div id="gjs"></div>
-                        </div>
+                    <div class="row">
+        <div class="col-md-12">
+            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-megaphone me-2"></i>Send Email</h5>
+            <form id="mainForm" method="post" enctype="multipart/form-data">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold text-muted text-uppercase">Email Subject</label>
+                        <input name="subject" id="subject" type="text" class="form-control" placeholder="e.g. System Update v2.0" required />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold text-muted text-uppercase">Target Audience</label>
+                        <select name="mailto" id="mailto" class="form-select">
+                            <option value="">No internal target (External only)</option>
+                            <option value="all">All Users</option>
+                            <option value="a">Active Users Only</option>
+                            <option value="b">Blocked Accounts</option>
+                            <option value="d">Deleted Accounts</option>
+                            <option value="bd">Blocked & Deleted</option>
+                            <option value="Select User">Select User</option>
+                        </select>
                     </div>
                 </div>
+
+                <div id="select_user_div" class="mb-3" style="display:none;">
+                    <label class="form-label fw-bold text-muted text-uppercase">Select Users (comma separated emails)</label>
+                    <input name="paste_emails" id="paste_emails" type="text" class="form-control" placeholder="user1@email.com, user2@email.com" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted text-uppercase">Upload CSV (Optional)</label>
+                    <input type="file" name="email_file" class="form-control form-control-sm" accept=".csv,.txt" />
+                    <div class="form-text" style="font-size: 11px;">Upload a CSV file containing email addresses (one per line).</div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold text-muted text-uppercase">Message Content</label>
+                    <div class="mb-2 small text-muted">
+                        <strong>Supported Tags:</strong> <code>{firstname}</code>, <code>{lastname}</code>, <code>{email}</code>, <code>{phone}</code>, <code>{address}</code>, <code>{website}</code>
+                    </div>
+                    <div id="editor-container"></div>
+                    <textarea name="body" id="body_html" style="display:none;"></textarea>
+                    <input type="hidden" name="body_json" id="body_json" />
+                </div>
+
+                <div class="mb-3 d-flex gap-2">
+                    <button type="submit" name="send-mail" class="btn btn-primary fw-bold px-4 py-2 rounded-pill shadow-sm">
+                        <i class="bi bi-send-fill me-2"></i> Send Campaign
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary fw-bold px-4 py-2 rounded-pill" onclick="saveDraft(event)">
+                        <i class="bi bi-save me-2"></i> Save Draft
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
             </div>
         </div>
       </div>
@@ -304,75 +248,66 @@ if (isset($_POST["send-mail"])) {
 
     <?php include("../func/bc-admin-footer.php"); ?>
 
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     <script>
-        let editor;
+        var quill = new Quill('#editor-container', {
+            theme: 'snow',
+            placeholder: 'Write your email content here...',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'color': [] }, { 'background': [] }],
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                    ['link', 'image'],
+                    ['clean']
+                ]
+            }
+        });
 
-        window.onload = () => {
-            editor = grapesjs.init({
-                container: '#gjs',
-                fromElement: false,
-                height: '100%',
-                width: 'auto',
-                storageManager: false,
-                plugins: ['grapesjs-preset-newsletter'],
-                pluginsOpts: {
-                    'grapesjs-preset-newsletter': {
-                        modalTitleImport: 'Import template',
+        document.getElementById('mailto').addEventListener('change', function() {
+            if (this.value === 'Select User') {
+                document.getElementById('select_user_div').style.display = 'block';
+            } else {
+                document.getElementById('select_user_div').style.display = 'none';
+            }
+        });
+
+        fetch('?action=load_draft')
+            .then(res => res.json())
+            .then(data => {
+                if (data.body_html) {
+                    quill.root.innerHTML = data.body_html;
+                    document.getElementById('subject').value = data.subject || '';
+                    document.getElementById('mailto').value = data.mailto || 'all';
+                    if (data.mailto === 'Select User') {
+                        document.getElementById('select_user_div').style.display = 'block';
                     }
-                },
-                assetManager: {
-                    upload: '?action=upload_asset',
-                    params: { vid: '<?php echo $vid; ?>' }
-                },
-                canvas: {
-                    styles: [
-                        'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css',
-                        'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css'
-                    ]
                 }
             });
 
-            // Load draft automatically if exists
-            fetch('?action=load_draft')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.body_json) {
-                        editor.setComponents(JSON.parse(data.body_json));
-                        document.getElementById('subject').value = data.subject;
-                        document.getElementById('mailto').value = data.mailto;
-                    }
-                });
-
-            // Sync HTML to hidden textarea before submit
-            document.getElementById('mainForm').onsubmit = (e) => {
-                document.getElementById('body_html').value = editor.runCommand('gjs-get-inlined-html');
-                document.getElementById('body_json').value = JSON.stringify(editor.getComponents());
-            };
+        document.getElementById('mainForm').onsubmit = function() {
+            document.getElementById('body_html').value = quill.root.innerHTML;
+            document.getElementById('body_json').value = JSON.stringify(quill.getContents());
+            return true;
         };
 
-        function insertPlaceholder(tag) {
-            const selected = editor.getSelected();
-            if (selected && selected.is('text')) {
-                selected.append(tag);
-            } else {
-                alert('Please select a text block first to insert a placeholder.');
-            }
-        }
-
-        function saveDraft() {
-            const data = {
-                subject: document.getElementById('subject').value,
-                mailto: document.getElementById('mailto').value,
-                body_html: editor.runCommand('gjs-get-inlined-html'),
-                body_json: JSON.stringify(editor.getComponents())
-            };
+        function saveDraft(event) {
+            const btn = event.currentTarget;
+            btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Saving...';
 
             fetch('?action=save_draft', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            }).then(res => res.json()).then(res => {
-                if(res.status == 'success') alert('Draft saved successfully!');
+                body: JSON.stringify({
+                    subject: document.getElementById('subject').value,
+                    mailto: document.getElementById('mailto').value,
+                    body_html: quill.root.innerHTML,
+                    body_json: JSON.stringify(quill.getContents())
+                }),
+                headers: { 'Content-Type': 'application/json' }
+            }).then(() => {
+                btn.innerHTML = '<i class="bi bi-check me-2"></i> Saved';
+                setTimeout(() => btn.innerHTML = '<i class="bi bi-save me-2"></i> Save Draft', 2000);
             });
         }
     </script>

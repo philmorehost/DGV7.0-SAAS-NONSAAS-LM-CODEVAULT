@@ -1,7 +1,15 @@
 <?php
 // execute_update.php
+
+// Buffer ALL output immediately — bc-spadmin-config.php is a full page router
+// that may emit headers/HTML before we can output JSON.
+ob_start();
+ini_set('display_errors', 0);
+error_reporting(0);
+
 session_start();
 if (!isset($_SESSION["spadmin_session"])) {
+    ob_end_clean();
     http_response_code(403);
     die(json_encode(['status' => 'error', 'message' => 'Unauthorized Access']));
 }
@@ -11,6 +19,8 @@ set_time_limit(0);
 ini_set('memory_limit', '512M');
 
 require_once("../func/bc-spadmin-config.php");
+// Discard any HTML/redirect output from the config include
+ob_clean();
 
 define('ROOT_DIR', dirname(__DIR__)); // SAAS root directory
 define('TEMP_DIR', ROOT_DIR . '/tmp_update');
@@ -23,20 +33,25 @@ $backup_zip = $_POST['backup_zip'] ?? null;
 $backup_sql = $_POST['backup_sql'] ?? null;
 
 // Helper functions for directory copy and clean up
-function recursive_copy($src, $dst) {
+function recursive_move($src, $dst) {
     if (!is_dir($src)) return;
     $dir = opendir($src);
     @mkdir($dst, 0755, true);
     while (false !== ($file = readdir($dir))) {
         if (($file !== '.') && ($file !== '..')) {
             if (is_dir($src . '/' . $file)) {
-                recursive_copy($src . '/' . $file, $dst . '/' . $file);
+                recursive_move($src . '/' . $file, $dst . '/' . $file);
             } else {
-                copy($src . '/' . $file, $dst . '/' . $file);
+                // Ensure target is removed before rename for Windows compatibility
+                if (file_exists($dst . '/' . $file)) {
+                    @unlink($dst . '/' . $file);
+                }
+                rename($src . '/' . $file, $dst . '/' . $file);
             }
         }
     }
     closedir($dir);
+    @rmdir($src); // Clean up empty directories as we go
 }
 
 function cleanup_temp_files() {
@@ -112,6 +127,13 @@ try {
 
     $zip = new ZipArchive;
     if ($zip->open(ZIP_FILE) === TRUE) {
+        // Write ZIP contents to a log file for debugging
+        $zip_files_log = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $zip_files_log[] = $zip->getNameIndex($i);
+        }
+        file_put_contents('zip_contents.log', implode("\n", $zip_files_log));
+
         if (is_dir(STAGING_DIR)) {
             remove_directory(STAGING_DIR);
         }
@@ -122,9 +144,25 @@ try {
         throw new Exception("Failed to open or extract the update ZIP file.");
     }
 
+    $staging_dir_actual = STAGING_DIR;
     $manifest_path = STAGING_DIR . '/manifest.json';
     if (!file_exists($manifest_path)) {
-        throw new Exception("Update manifest file (manifest.json) is missing from the package.");
+        // Look for manifest.json in immediate subdirectories (e.g. if the folder was zipped instead of its contents)
+        $subdirs = glob(STAGING_DIR . '/*', GLOB_ONLYDIR);
+        $found = false;
+        if (!empty($subdirs)) {
+            foreach ($subdirs as $subdir) {
+                if (file_exists($subdir . '/manifest.json')) {
+                    $staging_dir_actual = $subdir;
+                    $manifest_path = $subdir . '/manifest.json';
+                    $found = true;
+                    break;
+                }
+            }
+        }
+        if (!$found) {
+            throw new Exception("Update manifest file (manifest.json) is missing from the package.");
+        }
     }
     
     $manifest = json_decode(file_get_contents($manifest_path), true);
@@ -149,9 +187,26 @@ try {
     // ---------------------------------------------------------
     // 3. COPY NEW FILES TO LIVE ROOT
     // ---------------------------------------------------------
-    $source_files = STAGING_DIR . '/files';
+    $source_files = $staging_dir_actual . '/files';
     if (is_dir($source_files)) {
-        recursive_copy($source_files, ROOT_DIR);
+        recursive_move($source_files, ROOT_DIR);
+    } else {
+        // Fallback: If no "files" folder exists, assume the staging directory itself contains the update files.
+        // We must exclude the manifest and other update metadata.
+        $dir = opendir($staging_dir_actual);
+        while (false !== ($file = readdir($dir))) {
+            if ($file !== '.' && $file !== '..' && $file !== 'manifest.json' && $file !== 'update.sql') {
+                $src_path = $staging_dir_actual . '/' . $file;
+                $dst_path = ROOT_DIR . '/' . $file;
+                if (is_dir($src_path)) {
+                    recursive_move($src_path, $dst_path);
+                } else {
+                    if (file_exists($dst_path)) @unlink($dst_path);
+                    rename($src_path, $dst_path);
+                }
+            }
+        }
+        closedir($dir);
     }
 
     // ---------------------------------------------------------
@@ -205,6 +260,7 @@ try {
     // Clean up temporary files on success
     cleanup_temp_files();
 
+    ob_end_clean();
     echo json_encode([
         'status' => 'success',
         'message' => 'System successfully updated to version ' . $new_version
@@ -220,6 +276,7 @@ try {
     
     cleanup_temp_files();
 
+    ob_end_clean();
     if ($rollback_status === true) {
         echo json_encode([
             'status' => 'error',

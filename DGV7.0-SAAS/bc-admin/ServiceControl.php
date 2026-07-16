@@ -37,7 +37,9 @@ $services = [
     'crypto_hub' => 'Crypto Service',
     'nin_card' => 'Digital NIN Slip',
     'bvn_verify' => 'BVN Verification',
-    'virtual_bank_display' => 'Virtual Bank Button (Off by Default)'
+    'virtual_bank_display' => 'Virtual Bank Button (Off by Default)',
+    'ai_suite' => 'AI Business Suite',
+    'vtu_coins' => 'VTU Coins & Loyalty Program'
 ];
 
 $gateways = [

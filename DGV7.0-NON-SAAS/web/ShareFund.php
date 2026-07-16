@@ -174,7 +174,7 @@
                     <p class="text-center small text-muted mt-2">Enter your 4-digit transaction PIN to authorize this transfer.</p>
                 </div>
 
-                <button id="proceedBtn" name="share-fund" type="button" class="btn btn-primary btn-lg w-100 shadow-sm py-3 fw-bold rounded-3" style="pointer-events: none; opacity: 0.7;">
+                <button id="proceedBtn" name="share-fund" type="submit" class="btn btn-primary btn-lg w-100 shadow-sm py-3 fw-bold rounded-3" style="pointer-events: none; opacity: 0.7;">
                     TRANSFER NOW
                 </button>
 

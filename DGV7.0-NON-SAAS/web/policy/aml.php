@@ -56,6 +56,6 @@ include_once '_header.php';
 <p>Users found to be in breach of this policy — including providing false identity documents or conducting structured transactions — will have their accounts immediately suspended, funds frozen pending investigation, and the matter reported to relevant law enforcement and regulatory authorities.</p>
 
 <h2>10. Contact</h2>
-<p>For compliance-related enquiries, contact our compliance team via the WhatsApp support button or live chat on our homepage.</p>
+<p>For compliance-related enquiries, contact our compliance team via the live chat on our homepage.</p>
 
 <?php include_once '_footer.php'; ?>

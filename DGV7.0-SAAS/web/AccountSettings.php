@@ -238,7 +238,7 @@ if (isset($_POST["buy-user-ai-tokens"])) {
     
     // Get vendor's token price for users
     $v_q = mysqli_query($connection_server, "SELECT ai_user_token_price, ai_status FROM sas_vendors WHERE id='$vid'");
-    $v_data = mysqli_fetch_assoc($v_q);
+    $v_data = ($v_q && $v_q !== false) ? mysqli_fetch_assoc($v_q) : null;
     $price_per_1k = (float)($v_data['ai_user_token_price'] ?? 150.00);
     $cost = ($token_amount / 1000) * $price_per_1k;
 
@@ -283,16 +283,16 @@ if (isset($_POST["buy-user-ai-tokens"])) {
     $tx_count = ($tx_count_q && $row_c = mysqli_fetch_assoc($tx_count_q)) ? (int)$row_c['c'] : 0;
     
     $v_q = mysqli_query($connection_server, "SELECT voice_tx_threshold, ai_user_token_price, ai_status FROM sas_vendors WHERE id='".$get_logged_user_details["vendor_id"]."'");
-    $v_data = mysqli_fetch_assoc($v_q);
+    $v_data = ($v_q && $v_q !== false) ? mysqli_fetch_assoc($v_q) : null;
     
     $v_limit = $v_data['voice_tx_threshold'] ?? 50;
     $v_limit = max(1, (int)$v_limit);
     $user_token_price = (float)($v_data['ai_user_token_price'] ?? 150.00);
     $ai_system_on = (int)($v_data['ai_status'] ?? 0);
     
-    $ai_voice_status = (int)$get_logged_user_details['ai_voice_status'];
+    $ai_voice_status = (int)($get_logged_user_details['ai_voice_status'] ?? 0);
     $progress = min(100, ($tx_count / $v_limit) * 100);
-    $user_tokens = (int)$get_logged_user_details['ai_token_balance'];
+    $user_tokens = (int)($get_logged_user_details['ai_token_balance'] ?? 0);
 ?>
   <link href="https://fonts.gstatic.com" rel="preconnect">
   <link

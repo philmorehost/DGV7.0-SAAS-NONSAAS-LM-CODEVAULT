@@ -10,8 +10,7 @@ if (!$select_vendor_table) {
 }
 
 $vendor_name = $select_vendor_table["firstname"] . " " . $select_vendor_table["lastname"];
-$support_phone = $select_vendor_table["phone_number"];
-$wa_phone = (substr($support_phone, 0, 1) == '0') ? "234" . substr($support_phone, 1) : $support_phone;
+$support_email = $select_vendor_table["email"];
 
 ?>
 <!DOCTYPE html>
@@ -38,8 +37,8 @@ $wa_phone = (substr($support_phone, 0, 1) == '0') ? "234" . substr($support_phon
         <p class="text-muted mb-4">This website is currently inactive. If you are the owner, please login to your admin panel to renew your subscription. If you are a user, please contact the administrator for assistance.</p>
 
         <div class="d-grid gap-2">
-            <a href="https://wa.me/<?php echo $wa_phone; ?>" target="_blank" class="btn btn-primary btn-lg rounded-pill shadow-sm">
-                <i class="bi bi-whatsapp me-2"></i>Contact Admin
+            <a href="mailto:<?php echo htmlspecialchars($support_email); ?>" class="btn btn-primary btn-lg rounded-pill shadow-sm">
+                <i class="bi bi-envelope-fill me-2"></i>Contact Admin
             </a>
             <a href="/bc-admin/Login.php" class="btn btn-outline-secondary btn-sm rounded-pill mt-3 border-0">Admin Login</a>
         </div>

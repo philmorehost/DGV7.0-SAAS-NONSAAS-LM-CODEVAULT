@@ -58,8 +58,8 @@ if (isset($_GET['action']) && isset($_GET['uid'])) {
                             </thead>
                             <tbody>
                                 <?php
-                                $get_pending_kyc = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$vid' AND kyc_status=1 ORDER BY date DESC");
-                                if (mysqli_num_rows($get_pending_kyc) > 0):
+                                $get_pending_kyc = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$vid' AND kyc_status=1 ORDER BY reg_date DESC");
+                                if ($get_pending_kyc && mysqli_num_rows($get_pending_kyc) > 0):
                                     while ($user = mysqli_fetch_assoc($get_pending_kyc)):
                                 ?>
                                 <tr>
@@ -71,7 +71,7 @@ if (isset($_GET['action']) && isset($_GET['uid'])) {
                                         <?php echo !empty($user['bvn']) ? 'BVN' : (!empty($user['nin']) ? 'NIN' : 'Media Only'); ?>
                                     </td>
                                     <td><?php echo $user['bvn'] ?: $user['nin'] ?: 'N/A'; ?></td>
-                                    <td><?php echo date('M d, Y', strtotime($user['date'])); ?></td>
+                                    <td><?php echo date('M d, Y', strtotime($user['reg_date'])); ?></td>
                                     <td class="text-center">
                                         <a href="KYCManagement.php?action=approve&uid=<?php echo $user['id']; ?>" class="btn btn-success btn-sm rounded-pill px-3 me-2">Approve</a>
                                         <a href="KYCManagement.php?action=reject&uid=<?php echo $user['id']; ?>" class="btn btn-danger btn-sm rounded-pill px-3">Reject</a>

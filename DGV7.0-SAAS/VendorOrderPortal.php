@@ -23,6 +23,20 @@ $platform_url = !empty($vendor['app_base_url']) ? $vendor['app_base_url'] : $ven
 // Handle Renewal & Domain Actions
 $renewal_response = null;
 
+if (isset($_POST['tmp_login'])) {
+    $expiry_days = (int)getSuperAdminOption('tmp_url_expiry_days', '3');
+    $reg_time = strtotime($vendor['reg_date']);
+    $current_time = time();
+    if (($current_time - $reg_time) > ($expiry_days * 86400)) {
+        $renewal_response = "<div class='alert alert-danger fw-bold'>Temporary Access has expired.</div>";
+    } else {
+        $_SESSION['tmp_vendor_override'] = $vendor['id'];
+        $_SESSION['admin_session'] = $vendor['email'];
+        header("Location: /bc-admin/Dashboard.php");
+        die();
+    }
+}
+
 if (isset($_POST['domain_action'])) {
     $action = $_POST['domain_action'];
     $v_id = $vendor['id'];
@@ -400,10 +414,41 @@ $package_download_link = $has_package_dl ? getOrCreateDownloadToken($vendor['id'
                 <?php endif; ?>
 
                 <div class="row g-4">
+            <!-- Temporary Access Card -->
+            <div class="col-12 mb-2">
+                <div class="card border-0 shadow-sm rounded-4" style="background: linear-gradient(135deg, #0d6efd, #0dcaf0); color: white;">
+                    <div class="card-body p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+                        <div>
+                            <h4 class="fw-bold mb-1"><i class="bi bi-rocket-takeoff me-2"></i> Temporary Admin Access</h4>
+                            <p class="mb-0 opacity-75 small">While your domain <strong><?php echo $vendor['website_url']; ?></strong> propagates, configure your platform here.</p>
+                        </div>
+                        <?php
+                            $expiry_days = (int)getSuperAdminOption('tmp_url_expiry_days', '3');
+                            $reg_time = strtotime($vendor['reg_date']);
+                            $current_time = time();
+                            $days_left = ceil((($reg_time + ($expiry_days * 86400)) - $current_time) / 86400);
+                        ?>
+                        <?php if($days_left > 0): ?>
+                        <form method="post" class="m-0">
+                            <button name="tmp_login" type="submit" class="btn btn-light text-primary fw-bold px-4 py-2 rounded-pill shadow-sm">
+                                Open Dashboard <i class="bi bi-arrow-right-short ms-1"></i>
+                            </button>
+                            <div class="text-white-50 small mt-1 text-end">Expires in <?php echo $days_left; ?> days</div>
+                        </form>
+                        <?php else: ?>
+                        <div class="bg-white bg-opacity-25 px-4 py-2 rounded-pill fw-bold border border-light">
+                            <i class="bi bi-clock-history me-2"></i> Temporary Access Expired
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
                     <!-- Vendor Profile Section -->
                     <div class="col-12">
                         <div class="glass-card p-4 animate__animated animate__fadeInUp" style="animation-delay: 0.1s;">
                             <div class="row g-4">
+
                                 <div class="col-md-4">
                                     <span class="label-modern">Business Identity</span>
                                     <div class="d-flex align-items-center">
@@ -446,6 +491,7 @@ $package_download_link = $has_package_dl ? getOrCreateDownloadToken($vendor['id'
                             </div>
                             
                             <div class="row g-4">
+
                                 <div class="col-md-3 col-6">
                                     <span class="label-modern">Active Tier</span>
                                     <div class="fw-bold fs-5"><?php echo htmlspecialchars($vendor['package_name'] ?? 'N/A'); ?></div>
@@ -513,6 +559,7 @@ $package_download_link = $has_package_dl ? getOrCreateDownloadToken($vendor['id'
                             </div>
 
                             <div class="row g-4">
+
                                 <?php if ($has_package_dl): ?>
                                 <div class="col-12">
                                     <div class="download-item p-4 border-primary border-opacity-20 bg-primary bg-opacity-5 shadow-sm">

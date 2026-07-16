@@ -7,7 +7,7 @@ $product_type_array = array("all", "airtime", "sme-data", "cg-data", "dd-data", 
 <head>
     <title>Sales Calculator | <?php echo $get_all_super_admin_site_details["site_title"]; ?></title>
     <meta charset="UTF-8" />
-    <meta name="description" content="<?php echo substr($get_all_site_details["site_desc"], 0, 160); ?>" />
+    <meta name="description" content="<?php echo substr($get_all_super_admin_site_details["site_desc"] ?? '', 0, 160); ?>" />
     <meta http-equiv="Content-Type" content="text/html; " />
     <meta name="theme-color" content="black" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -114,9 +114,9 @@ $product_type_array = array("all", "airtime", "sme-data", "cg-data", "dd-data", 
 
             $betting_array = array("product_name" => "Betting", "amount" => 0, "amount_paid" => 0, "qty" => 0);
 
-            $product_type = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_GET["type"]))));
-            $starting_date = strtotime(mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_GET["starts"])))) . " 00:00:00");
-            $ending_date = strtotime(mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_GET["ends"])))) . " 23:59:59");
+            $product_type = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_GET["type"] ?? ''))));
+            $starting_date = strtotime(mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_GET["starts"] ?? '')))) . " 00:00:00");
+            $ending_date = strtotime(mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_GET["ends"] ?? '')))) . " 23:59:59");
 
             if (($starting_date !== false) && ($ending_date !== false) && ($starting_date < $ending_date)) {
                 $transaction_calculator_reference_array = array();

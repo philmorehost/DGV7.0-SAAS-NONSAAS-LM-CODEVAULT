@@ -116,6 +116,14 @@
                     		$refined_nin = "";
                     	}
 
+                        // cPanel Domain Update Logic
+                        $old_website_url = $get_vendor_details['website_url'];
+                        if ($old_website_url != $website_url) {
+                            include_once(__DIR__ . "/../func/cpanel-func.php");
+                            cpanel_remove_addon_domain($old_website_url);
+                            cpanel_add_addon_domain($website_url);
+                        }
+
                         mysqli_query($connection_server, "UPDATE sas_vendors SET firstname='$first', lastname='$last', home_address='$address', bank_code='$refined_bank_code', account_number='$refined_account_number', bvn='$refined_bvn', nin='$refined_nin', email='$email', phone_number='$phone', website_url='$website_url', force_security_pin='$force_pin', force_2fa='$force_2fa', force_google_sso='$force_google', google_client_id='$google_client_id', crypto_withdrawal_approval='$crypto_approval', approve_withdrawal='$approve_withdrawal', withdrawal_fee='$withdrawal_fee', crypto_swap_fee='$crypto_swap_fee', daily_payout_limit='$daily_payout_limit', min_withdrawal_amount='$min_with', max_withdrawal_amount='$max_with', trans_email_enabled='$trans_email' WHERE id='".$vendor_id_number."'");
                         // Email Beginning
                         $log_template_encoded_text_array = array("{firstname}" => $first, "{lastname}" => $last, "{email}" => $email, "{phone}" => $phone, "{address}" => $address, "{website}" => $website_url);

@@ -32,7 +32,6 @@ if ($select_vendor_table) {
 		if (($get_logged_user_details["api_status"] == 1 || $purchase_method == "app") && $get_logged_user_details["status"] == 1) {
 
 			$_SESSION["user_session"] = $get_logged_user_details["username"];
-            $batch_number = substr(str_shuffle("12345678901234567890"), 0, 6);
 
             if (isset($get_api_post_info["is_fulfillment"]) && $get_api_post_info["is_fulfillment"] == true) {
                 $purchase_method = "api_fulfillment";
@@ -41,24 +40,26 @@ if ($select_vendor_table) {
             // Handle Bulk
             $phone_input = $get_api_post_info["phone_number"] ?? $get_api_post_info["phone_no"] ?? "";
             $phone_array = array_unique(array_filter(explode(",", $phone_input)));
+            $fixed_network = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($get_api_post_info["network"] ?? ""))));
+            $fixed_type = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($get_api_post_info["type"] ?? $get_api_post_info["data_type"] ?? ""))));
+            $fixed_quantity = mysqli_real_escape_string($connection_server, trim(strip_tags($get_api_post_info["quantity"] ?? $get_api_post_info["plan_code"] ?? "")));
 
             if (count($phone_array) > 1) {
-                $processed = 0;
+                $queue_items = array();
                 foreach ($phone_array as $each_phone) {
-                    $u_id = $get_logged_user_details['id'];
-                    $s_check = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT status FROM sas_users WHERE id='$u_id' LIMIT 1"));
-                    if ($s_check['status'] != 1) break;
-
-                    $get_api_post_info["phone_number"] = $each_phone;
-                    include("../func/data.php");
-                    if (isset($reference)) alterTransaction($reference, "batch_number", $batch_number);
-                    $processed++;
+                    $queue_items[] = array(
+                        "phone"    => sanitize_phone_number(trim(strip_tags($each_phone))),
+                        "isp"      => $fixed_network,
+                        "type"     => $fixed_type,
+                        "quantity" => $fixed_quantity,
+                    );
                 }
+                $enqueue_result = bc_enqueue_bulk_batch($connection_server, $get_logged_user_details["vendor_id"], $get_logged_user_details["username"], $get_logged_user_details["id"], $fixed_type, $purchase_method, $queue_items);
                 $api_json_response_encode = json_encode([
-                    "status" => "success",
-                    "desc" => "Bulk Data request received and is being processed.",
-                    "batch_number" => $batch_number,
-                    "count" => $processed
+                    "status" => "queued",
+                    "desc" => "Bulk Data request received and queued for background processing.",
+                    "batch_number" => $enqueue_result["batch_number"],
+                    "count" => $enqueue_result["total"]
                 ]);
             } else {
                 include_once("../func/data.php");

@@ -4,35 +4,77 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 
+
 <?php if (isset($_SESSION["product_purchase_response"])): ?>
 <script>
   (function() {
     <?php
       $msg = $_SESSION["product_purchase_response"];
-      $type = "success";
-      if(stripos($msg, 'Error') !== false || stripos($msg, 'reached the maximum') !== false || stripos($msg, 'Limit Reached') !== false || stripos($msg, 'failed') !== false || stripos($msg, 'Insufficient') !== false || stripos($msg, 'suspension') !== false || stripos($msg, 'suspended') !== false) {
-          $type = "error";
-      }
+      $status = $_SESSION["product_purchase_status"] ?? null;
       $last_ref = $_SESSION["last_transaction_ref"] ?? null;
+
+      $type = "success";
+      if ($status === "failed" || stripos($msg, 'Error') !== false || stripos($msg, 'reached the maximum') !== false || stripos($msg, 'Limit Reached') !== false || stripos($msg, 'failed') !== false || stripos($msg, 'Insufficient') !== false || stripos($msg, 'suspension') !== false || stripos($msg, 'suspended') !== false) {
+          $type = "error";
+      } elseif ($status === "pending" || stripos($msg, 'pending') !== false || stripos($msg, 'processed') !== false) {
+          $type = "warning";
+      }
     ?>
     const msg = <?php echo json_encode($msg); ?>;
     const type = <?php echo json_encode($type); ?>;
     const ref = <?php echo json_encode($last_ref); ?>;
 
     if (typeof Swal !== 'undefined') {
+        let iconHtml = '';
+        let titleHtml = '';
+        let btnClass = 'btn btn-primary w-100 py-2.5 rounded-3 fw-bold';
+        let btnText = 'OK';
+        
+        if (type === 'success') {
+            iconHtml = '<div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle" style="width: 80px; height: 80px; background-color: #d1e7dd; color: #0f5132;"><i class="bi bi-check-circle-fill fs-1 animate__animated animate__bounceIn"></i></div>';
+            titleHtml = '<h3 class="fw-bold mb-2 text-success" style="font-family: \'Poppins\', sans-serif; font-size: 22px;">Successful!</h3>';
+            if (ref) {
+                btnText = 'View Receipt';
+                btnClass = 'btn btn-success w-100 py-2.5 rounded-3 fw-bold';
+            }
+        } else if (type === 'warning') {
+            iconHtml = '<div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle" style="width: 80px; height: 80px; background-color: #fff3cd; color: #664d03;"><i class="bi bi-clock-history fs-1 animate__animated animate__pulse animate__infinite"></i></div>';
+            titleHtml = '<h3 class="fw-bold mb-2 text-warning" style="font-family: \'Poppins\', sans-serif; font-size: 22px;">Pending</h3>';
+            btnText = 'OK';
+            btnClass = 'btn btn-warning text-white w-100 py-2.5 rounded-3 fw-bold';
+        } else {
+            iconHtml = '<div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle" style="width: 80px; height: 80px; background-color: #f8d7da; color: #842029;"><i class="bi bi-x-circle-fill fs-1 animate__animated animate__shakeX"></i></div>';
+            titleHtml = '<h3 class="fw-bold mb-2 text-danger" style="font-family: \'Poppins\', sans-serif; font-size: 22px;">Failed</h3>';
+            btnText = 'Close';
+            btnClass = 'btn btn-danger w-100 py-2.5 rounded-3 fw-bold';
+        }
+
+        const htmlContent = `
+            <div class="text-center p-2" style="font-family: 'Open Sans', sans-serif;">
+                ${iconHtml}
+                ${titleHtml}
+                <div class="p-3 bg-light rounded-3 mb-3 border border-light-subtle text-secondary small" style="word-break: break-word; line-height: 1.5;">
+                    ${msg}
+                </div>
+                ${ref ? `<div class="mb-2"><span class="badge bg-secondary-subtle text-secondary px-3 py-2 fw-semibold" style="font-size: 11px;">Ref: ${ref}</span></div>` : ''}
+            </div>
+        `;
+
         Swal.fire({
-            title: (type === "error" ? "Alert!" : "Message!"),
-            html: msg,
-            icon: type,
-            confirmButtonColor: 'var(--primary-color)',
-            confirmButtonText: (ref && type === 'success' ? 'View Receipt' : 'OK')
+            html: htmlContent,
+            showConfirmButton: true,
+            confirmButtonText: btnText,
+            customClass: {
+                confirmButton: btnClass,
+                popup: 'rounded-4 border-0 shadow'
+            },
+            buttonsStyling: false
         }).then((result) => {
             if (ref && type === 'success' && typeof showTransactionDetails === 'function') {
                 showTransactionDetails(ref);
             }
         });
     } else {
-        // Safe, clean browser fallback if CDN is blocked, offline, or slow
         alert((type === "error" ? "Alert: " : "Message: ") + msg.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, ""));
         if (ref && type === 'success' && typeof showTransactionDetails === 'function') {
             showTransactionDetails(ref);
@@ -42,6 +84,7 @@
 </script>
 <?php 
     unset($_SESSION["product_purchase_response"]); 
+    unset($_SESSION["product_purchase_status"]);
     unset($_SESSION["last_transaction_ref"]);
 ?>
 <?php endif; ?>

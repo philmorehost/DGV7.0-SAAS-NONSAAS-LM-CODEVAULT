@@ -2,54 +2,35 @@
 include("../func/bc-config.php");
 
 if (isset($_POST["buy-airtime"])) {
-    $batch_number = substr(str_shuffle("123456789012345678901234567890"), 0, 6);
-    $purchase_method = "web";
     //Ilterate Bulk Phone
     $bulk_phone_no = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["bulk-phone-number"])));
     $bulk_phone_no = array_filter(explode(",", trim($bulk_phone_no)));
     $bulk_phone_no = array_unique($bulk_phone_no);
 
     $all_isps = $_POST["isp"];
-    $vid = $get_logged_user_details["vendor_id"];
-    $user_id = $get_logged_user_details["id"];
+    $amount = mysqli_real_escape_string($connection_server, preg_replace("/[^0-9.]+/", "", trim(strip_tags($_POST["amount"] ?? ""))));
+    $multi_carrier = count(array_filter(explode(",", trim($all_isps)))) > 1;
 
+    $queue_items = array();
     foreach ($bulk_phone_no as $each_phone_number) {
-        // Re-check user status to stop immediately if blocked by previous iteration
-        $status_check = mysqli_fetch_array(mysqli_query($connection_server, "SELECT status FROM sas_users WHERE id='$user_id' LIMIT 1"));
-        if ($status_check["status"] != 1) {
-            $_SESSION["product_purchase_response"] = "BULK STOPPED: Your account has been suspended due to security policy violations.";
-            break;
-        }
-
-        $_POST["phone-number"] = $each_phone_number;
-        if (count(array_filter(explode(",", trim($all_isps)))) > 1) {
-            $_POST["isp"] = identifyISP($each_phone_number);
-        } else {
-            $_POST["isp"] = $all_isps;
-        }
-
-        include("func/airtime.php");
-        if (isset($reference)) alterTransaction($reference, "batch_number", $batch_number);
-
-        $json_response_decode = json_decode($json_response_encode ?? "{}", true);
-        if (($json_response_decode["status"] ?? "") == "failed" && strpos(($json_response_decode["desc"] ?? ""), "ABUSE LIMIT") !== false) {
-             // If one hit the abuse limit, the user is already blocked in func.php, so we stop here.
-             $_SESSION["product_purchase_response"] = "BULK STOPPED: " . $json_response_decode["desc"];
-             break;
-        }
+        $queue_items[] = array(
+            "phone"  => sanitize_phone_number(trim(strip_tags($each_phone_number))),
+            "isp"    => $multi_carrier ? identifyISP($each_phone_number) : $all_isps,
+            "amount" => $amount,
+        );
     }
 
-    $select_batch_transaction = mysqli_query($connection_server, "SELECT batch_number FROM sas_bulk_product_purchase WHERE batch_number = '$batch_number'");
-    if (mysqli_num_rows($select_batch_transaction) == 0) {
-        //RECORD BATCH PURCHASE DETAILS
-        $batch_product_name = "airtime";
-        $batch_sql = "INSERT INTO sas_bulk_product_purchase (vendor_id, username, product_name, batch_number) VALUES ('".$get_logged_user_details["vendor_id"]."', '".$get_logged_user_details["username"]."', '$batch_product_name', '$batch_number')";
-        // Prepare the statement
-        mysqli_query($connection_server, $batch_sql);
+    if (!empty($queue_items)) {
+        $enqueue_result = bc_enqueue_bulk_batch($connection_server, $get_logged_user_details["vendor_id"], $get_logged_user_details["username"], $get_logged_user_details["id"], "airtime", "WEB", $queue_items);
+        $_SESSION["product_purchase_response"] = "Your bulk airtime order (Batch #" . $enqueue_result["batch_number"] . ", " . $enqueue_result["total"] . " numbers) has been queued and is processing in the background. Check the Batch Details page for live progress — you don't need to keep this page open.";
+        $_SESSION["product_purchase_status"] = "success";
+    } else {
+        $_SESSION["product_purchase_response"] = "No valid phone numbers submitted.";
+        $_SESSION["product_purchase_status"] = "failed";
     }
 
-    $_SESSION["product_purchase_response"] = "AIRTIME PROCESSED, CHECK BULK BATCH PAGE FOR BATCH: " . $batch_number;
     header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
 ?>
@@ -139,7 +120,7 @@ if (isset($_POST["buy-airtime"])) {
                     <label class="form-check-label small fw-bold text-muted" for="phone-bypass">Bypass Phone Verification</label>
                 </div>
 
-                <button id="proceedBtn" name="buy-airtime" type="button" class="btn btn-secondary btn-lg w-100 shadow-sm py-3 fw-bold rounded-3" style="pointer-events: none;">
+                <button id="proceedBtn" name="buy-airtime" type="submit" class="btn btn-secondary btn-lg w-100 shadow-sm py-3 fw-bold rounded-3" style="pointer-events: none;">
                     PROCESS BULK AIRTIME
                 </button>
 

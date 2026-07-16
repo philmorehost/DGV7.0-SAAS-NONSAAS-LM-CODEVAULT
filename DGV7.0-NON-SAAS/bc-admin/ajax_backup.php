@@ -129,8 +129,43 @@ try {
                 // Normalise separators
                 $norm_rel = str_replace('\\', '/', $relative_path);
                 
-                // Exclude the backups folder and the temp update folder
-                if (strpos($norm_rel, 'backups/') === 0 || strpos($norm_rel, 'tmp_update/') === 0) {
+                // Exclude folders that are not part of the web application deployment or are too large
+                $norm_rel_lower = strtolower($norm_rel);
+                $exclude_prefixes = [
+                    'backups/',
+                    'tmp_update/',
+                    'dg7-android/',
+                    'dg7-ios/',
+                    'dg6-android/',
+                    'dg6-ios/',
+                    'mzeevtu/',
+                    'mzeevtu-android/',
+                    'mzeevtu-ios/',
+                    'payhub-android/',
+                    'payhub-ios/',
+                    'uploaded-image/',
+                    'downloads/',
+                    'logs/',
+                    'scratch/',
+                    'tests/',
+                    '.git/',
+                    '.github/'
+                ];
+                
+                $should_exclude = false;
+                foreach ($exclude_prefixes as $prefix) {
+                    if (strpos($norm_rel_lower, $prefix) === 0) {
+                        $should_exclude = true;
+                        break;
+                    }
+                }
+                
+                // Also exclude any zip archives to avoid zipping nested massive backups
+                if (strtolower(pathinfo($norm_rel_lower, PATHINFO_EXTENSION)) === 'zip') {
+                    $should_exclude = true;
+                }
+                
+                if ($should_exclude) {
                     continue;
                 }
                 

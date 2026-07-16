@@ -175,6 +175,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: /bc-admin/Users.php");
+        exit;
     }
 
     if(isset($_POST["permanent-delete-user"])){
@@ -250,6 +251,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: /bc-admin/Users.php");
+        exit;
     }
 
     if(isset($_GET["account-log"])){
@@ -285,6 +287,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: /bc-admin/Users.php");
+        exit;
     }
     
 ?>

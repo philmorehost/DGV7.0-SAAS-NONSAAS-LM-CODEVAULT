@@ -1,6 +1,6 @@
-# DGV6.90 — Cloud AI & WhatsApp Bridge Deployment Guide
+# DGV7.0 — Cloud AI & Background Jobs Deployment Guide
 
-This guide provides the complete technical steps to activate the platform's intelligence layer and automated WhatsApp notification system.
+This guide provides the complete technical steps to activate the platform's intelligence layer and background automation jobs.
 
 ---
 
@@ -10,9 +10,10 @@ Copy these into your cPanel or VPS crontab. Replace `YOUR_USERNAME` with your ac
 
 | Frequency | File | Purpose |
 |---|---|---|
+| `* * * * *` | `cron/process_bulk_queue.php` | Process queued bulk airtime/data batches in the background |
 | `*/5 * * * *` | `cron/aggregator_monitor.php` | Monitor API provider success rates |
-| `0 7 * * *` | `cron/ai_daily_briefing.php` | AI Daily WhatsApp briefing to vendors |
-| `0 10 * * *` | `cron/dormant_user_alert.php` | Re-engage inactive users via WhatsApp |
+| `0 7 * * *` | `cron/ai_daily_briefing.php` | AI Daily briefing emailed to vendors |
+| `0 10 * * *` | `cron/dormant_user_alert.php` | Re-engage inactive users via email |
 | `0 8 1 * *` | `cron/ai_monthly_blueprint.php` | Monthly full platform AI Audit |
 
 ---
@@ -21,6 +22,12 @@ Copy these into your cPanel or VPS crontab. Replace `YOUR_USERNAME` with your ac
 
 1. Log into your **cPanel** → **Advanced** → **Cron Jobs**.
 2. For each job, select the frequency and paste the command below:
+
+### Bulk Airtime/Data Queue Processor (Every 1 minute)
+```bash
+* * * * * /usr/bin/php /home/YOUR_USERNAME/public_html/cron/process_bulk_queue.php >> /home/YOUR_USERNAME/logs/bulk_queue.log 2>&1
+```
+This is what allows bulk airtime/data batches to finish crediting recipients even if the customer's browser closes or their network drops mid-submission. The exact path for your install is also shown in **bc-admin → Account Settings → Developer Tools**.
 
 ### API Monitoring (Every 5 minutes)
 ```bash
@@ -44,32 +51,7 @@ Copy these into your cPanel or VPS crontab. Replace `YOUR_USERNAME` with your ac
 
 ---
 
-## 💬 Step 2: WhatsApp Node.js Bridge
-
-The WhatsApp bridge allows the platform to send automated messages via your own WhatsApp account.
-
-### Prerequisites
-- **Server**: VPS recommended (Shared hosting usually blocks Node.js ports).
-- **Node.js**: Version 18 or higher.
-- **PM2**: `npm install -g pm2` (Process manager).
-
-### Deployment
-```bash
-# 1. Enter the bridge folder
-cd /home/YOUR_USERNAME/public_html/vtu_whatsapp_ai
-
-# 2. Install library dependencies
-npm install
-
-# 3. Start the process with persistence
-pm2 start index.js --name vtu-wa
-pm2 save
-pm2 startup
-```
-
----
-
-## 🧠 Step 3: Cloud AI Activation
+## 🧠 Step 2: Cloud AI Activation
 
 The platform uses high-performance Cloud AI. No local software installation is required.
 
@@ -82,7 +64,7 @@ The platform uses high-performance Cloud AI. No local software installation is r
 
 ---
 
-## 🧪 Step 4: System Validation
+## 🧪 Step 3: System Validation
 
 Once setup is complete, run the integration test via SSH to verify all connections:
 

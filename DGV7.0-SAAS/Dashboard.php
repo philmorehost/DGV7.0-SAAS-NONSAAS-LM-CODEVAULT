@@ -312,13 +312,324 @@ if ((!empty($select_vendor_table["bank_code"]) && is_numeric($select_vendor_tabl
     }
   </style>
 
+	<style>
+    /* Glossy Light Fintech Theme */
+    body {
+        background-color: #f8fafc;
+        color: #1e293b;
+        font-family: 'Inter', 'Poppins', sans-serif;
+    }
+    .pagetitle h1 {
+        color: #0f172a;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+    .breadcrumb-item a { color: #2563eb; }
+
+    .card {
+        background: #ffffff !important;
+        border: 1px solid rgba(0, 0, 0, 0.05) !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
+        border-radius: 1.25rem;
+    }
+    .card-title, h5, h6 { color: #0f172a !important; }
+
+    /* Wallet Hero Section */
+    .wallet-hero, .balance-hero {
+        background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%); border-left: 5px solid <?php echo $vendor_primary_color ?? "#2563eb"; ?>;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
+        color: #0f172a;
+        padding: 2rem;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255, 255, 255, 1);
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+    .wallet-hero::before, .balance-hero::before {
+        content: '';
+        position: absolute;
+        top: -50%; right: -50%;
+        width: 100%; height: 100%;
+        background: radial-gradient(circle, rgba(37,99,235,0.05) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .balance-title {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #64748b;
+    }
+    .balance-amount {
+        font-size: 3rem;
+        font-weight: 800;
+        letter-spacing: -1px;
+        color: #0f172a;
+        text-shadow: none;
+    }
+    
+    .wallet-metrics {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 1.5rem;
+        border-top: 1px solid rgba(0,0,0,0.05);
+        padding-top: 1.5rem;
+    }
+    .metric-item {
+        text-align: center;
+        flex: 1;
+    }
+    .metric-item h6 {
+        font-size: 0.8rem;
+        color: #64748b;
+        margin-bottom: 0.2rem;
+        text-transform: uppercase;
+    }
+    .metric-item h5 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #0f172a;
+        margin-bottom: 0;
+    }
+
+    /* Quick Actions */
+    .quick-actions {
+        display: flex;
+        justify-content: space-between;
+        margin: 2rem 0;
+        gap: 1rem;
+    }
+    .action-btn, .quick-action-btn {
+        flex: 1;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 16px;
+        padding: 1.5rem 0.5rem;
+        text-align: center;
+        color: #1e293b;
+        text-decoration: none;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 70px;
+    }
+    .action-btn:hover, .quick-action-btn:hover {
+        background: #f8fafc;
+        border-color: rgba(37, 99, 235, 0.2);
+        transform: translateY(-5px);
+        color: #2563eb;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+    }
+    .action-btn .icon-circle {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #eff6ff, #dbeafe);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 0.8rem;
+        font-size: 1.2rem;
+        color: #2563eb;
+        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.1);
+    }
+    .action-btn span {
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .quick-action-btn i { font-size: 1.25rem; margin-bottom: 5px; color: #2563eb; }
+
+    /* Services Grid */
+    .service-card {
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 16px;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-decoration: none;
+        color: #1e293b;
+        transition: all 0.3s ease;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    }
+    .service-card:hover {
+        background: #ffffff;
+        border-color: rgba(37, 99, 235, 0.2);
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0,0,0,0.08);
+    }
+    .service-card .service-icon {
+        width: 45px;
+        height: 45px;
+        border-radius: 12px;
+        background: #eff6ff;
+        color: #2563eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        margin-right: 1rem;
+    }
+    .service-card h5 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+
+    .service-icon-box {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 0.75rem;
+        font-size: 1.5rem;
+        background: #eff6ff;
+        color: #2563eb;
+    }
+    
+    /* Specific icons */
+    .icon-data { color: #3b82f6; background: #eff6ff; }
+    .icon-airtime { color: #ef4444; background: #fef2f2; }
+    .icon-cable { color: #db2777; background: #fdf2f7; }
+    .icon-electric { color: #f59e0b; background: #fffbeb; }
+    .icon-transfer { color: #287bff; background: #eef2ff; }
+    .icon-exam { color: #8b5cf6; background: #f5f3ff; }
+    .icon-betting { color: #f97316; background: #fff7ed; }
+    .icon-crypto { color: #f59e0b; background: #fff7ed; }
+    .icon-vcard { color: #3b82f6; background: #eef2ff; }
+    .icon-giftcard { color: #db2777; background: #fdf2f7; }
+    .icon-nin { color: #8b5cf6; background: #f5f3ff; }
+    .icon-bvn { color: #3b82f6; background: #eef2ff; }
+    .icon-more { color: #64748b; background: #f8fafc; }
+
+    /* Modern Glassmorphism Service Cards (NON-SAAS) */
+    .service-quick-card {
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        border-radius: 1.5rem;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+        height: 100%;
+        color: #1e293b;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    }
+    .service-quick-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0,0,0,0.08);
+        border-color: rgba(37, 99, 235, 0.2);
+    }
+    .service-quick-card h6 { color: #0f172a !important; }
+
+    /* Auto Funding Cards */
+    .auto-funding-container {
+        display: flex;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding: 1rem 0 2rem;
+        gap: 1.5rem;
+    }
+    .auto-funding-container::-webkit-scrollbar {
+        height: 6px;
+    }
+    .auto-funding-container::-webkit-scrollbar-track {
+        background: rgba(0,0,0,0.05);
+        border-radius: 4px;
+    }
+    .auto-funding-container::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.15);
+        border-radius: 4px;
+    }
+    .bank-card {
+        flex: 0 0 320px;
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 16px;
+        padding: 1.5rem;
+        position: relative;
+        overflow: hidden;
+        white-space: normal;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+    .bank-card::after {
+        content: '';
+        position: absolute;
+        top: 0; right: 0;
+        width: 150px; height: 150px;
+        background: radial-gradient(circle, rgba(37,99,235,0.05) 0%, transparent 60%);
+        border-radius: 50%;
+        transform: translate(30%, -30%);
+    }
+    .bank-card .bank-name {
+        color: #64748b;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.5rem;
+    }
+    .bank-card .account-number {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        letter-spacing: 2px;
+        margin-bottom: 1rem;
+        font-family: 'Courier New', Courier, monospace;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .bank-card .account-name {
+        color: #1e293b;
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    .bank-card .fee {
+        position: absolute;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        font-size: 0.8rem;
+        color: #64748b;
+        text-align: right;
+    }
+    .copy-btn {
+        cursor: pointer;
+        color: #2563eb;
+        background: #eff6ff;
+        padding: 5px;
+        border-radius: 6px;
+        transition: background 0.2s;
+    }
+    .copy-btn:hover { background: #dbeafe; }
+
+    .stats-label { font-size: 0.875rem; color: #64748b; font-weight: 500; }
+    .stats-value { font-size: 1.25rem; font-weight: 700; color: #0f172a; word-break: break-all; }
+
+    @media (max-width: 767px) {
+        .balance-amount { font-size: 2rem; }
+        .balance-hero, .wallet-hero { padding: 1.25rem; }
+        .pagetitle { display: none; }
+        .quick-action-btn, .action-btn { font-size: 0.65rem; padding: 0.4rem; }
+    }
+    
+    /* Text overrides for light mode */
+    .text-dark { color: #0f172a !important; }
+    .text-muted { color: #64748b !important; }
+	</style>
+
 </head>
 
 <body>
 	<?php include("../func/bc-header.php"); ?>
 	
-	<div class="pagetitle">
-      <h1>DASHBOARD</h1>
+		<div class="pagetitle">
+      <h1>OVERVIEW</h1>
       <nav>
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="#">Home</a></li>
@@ -329,333 +640,75 @@ if ((!empty($select_vendor_table["bank_code"]) && is_numeric($select_vendor_tabl
 
     <section class="section dashboard">
       <div class="row">
-
-        <!-- Account Type Card -->
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="card info-card card-blue shadow">
-                <div class="card-body">
-                    <h5 class="card-title"><?php echo $get_logged_user_details["username"]; ?> <span>| Account Type</span></h5>
-                    <div class="d-flex align-items-center">
-                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                            <i class="bi bi-person-badge"></i>
-                        </div>
-                        <div class="ps-3">
-                            <h6><?php echo accountLevel($get_logged_user_details["account_level"]); ?></h6>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- End Account Type Card -->
-
-        <!-- Balance Card -->
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="card info-card card-red shadow">
-                <div class="card-body">
-                    <h5 class="card-title">Balance <span>| Current</span></h5>
-                    <div class="d-flex align-items-center">
-                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                            <i class="bi bi-wallet2"></i>
-                        </div>
-                        <div class="ps-3">
-                            <h6>₦<?php echo toDecimal($get_logged_user_details["balance"], "2"); ?></h6>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- End Balance Card -->
-
-        <!-- Total Deposit Card -->
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="card info-card card-green shadow">
-                <div class="card-body">
-                    <h5 class="card-title">Deposit <span>| Total</span></h5>
-                    <div class="d-flex align-items-center">
-                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                            <i class="bi bi-cash-stack"></i>
-                        </div>
-                        <div class="ps-3">
-                            <h6>₦<?php
-                                $all_user_credit_transaction = 0;
-            							$get_all_user_credit_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && username='" . $get_logged_user_details["username"] . "' && (type_alternative LIKE '%credit%' OR type_alternative LIKE '%received%' OR type_alternative LIKE '%commission%')");
-            							if (mysqli_num_rows($get_all_user_credit_transaction_details) >= 1) {
-            								while ($transaction_record = mysqli_fetch_assoc($get_all_user_credit_transaction_details)) {
-            									$all_user_credit_transaction += $transaction_record["discounted_amount"];
-            								}
-            							}
-            							echo toDecimal($all_user_credit_transaction, 2);
-            						?>
-                        </h6>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- End Total Deposit Card -->
-
-        <!-- Total Spent Card -->
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="card info-card card-yellow shadow">
-                <div class="card-body">
-                    <h5 class="card-title">Spent <span>| Total</span></h5>
-                    <div class="d-flex align-items-center">
-                        <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                            <i class="bi bi-cart-x"></i>
-                        </div>
-                        <div class="ps-3">
-                            <h6>₦<?php
-                                $all_user_debit_transaction = 0;
-              							$get_all_user_debit_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && username='" . $get_logged_user_details["username"] . "' && (type_alternative NOT LIKE '%credit%' && type_alternative NOT LIKE '%refund%' && type_alternative NOT LIKE '%received%' && type_alternative NOT LIKE '%commission%' && status NOT LIKE '%3%')");
-              							if (mysqli_num_rows($get_all_user_debit_transaction_details) >= 1) {
-              								while ($transaction_record = mysqli_fetch_assoc($get_all_user_debit_transaction_details)) {
-              									$all_user_debit_transaction += $transaction_record["discounted_amount"];
-              								}
-              							}
-              							echo toDecimal($all_user_debit_transaction, 2);
-              					  ?>
-                        </h6>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- End Total Spent Card -->
-
-    </div>
         
-        <!-- Row -->
-        <div class="row">
-          <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="Fund.php" class=""><h5 class="card-title">Wallet Funding</h5></a>
-              </div>
-          </div>
-          <!-- Col End -->
-          
-           <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="ShareFund.php" class=""><h5 class="card-title">Fund Transfer</h5></a>
-              </div>
-          </div>
-          <!-- Col End -->
-          
-           <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="SubmitPayment.php" class=""><h5 class="card-title">Submit Payment</h5></a>
-              </div>
-          </div>
-          <!-- Col End -->
-          
-           <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="Transactions.php" class=""><h5 class="card-title">Transactions</h5></a>
-              </div>
-          </div>
-          <!-- Col End -->
-        </div>  
-          <!-- Row End -->
-        
-        <!-- Row -->
-        <div class="row">
-          <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="Data.php" class="">
-                  <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-wifi"></i>  
-                  </div>
-                  <h5 class="card-title">Buy Data</h5>
-                </a>
-              </div>
-          </div>
-          <!-- Col End -->
-          
-           <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="Airtime.php" class="">
-                  <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                    <i class="bi bi-telephone"></i>  
-                  </div>
-                  <h5 class="card-title">Buy Airtime</h5>
-                </a>
-              </div>
-          </div>
-          <!-- Col End -->
-          
-           <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="Cable.php" class="">
-                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                  <i class="bi bi-tv"></i>  
+        <!-- Wallet Hero Section (Combining all 4 metrics into one premium card) -->
+        <div class="col-12 mb-4">
+            <div class="wallet-hero">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="balance-title">Current Balance</span>
+                    <span class="badge bg-primary px-3 py-2 rounded-pill"><?php echo accountLevel($get_logged_user_details["account_level"]); ?></span>
                 </div>
-                <h5 class="card-title">Cable Tv</h5>
-              </a>
-              </div>
-          </div>
-          <!-- Col End -->
-          
-           <!-- Col -->
-          <div class="col-6 col-lg-3">
-            <div class="card info-card sales-card p-3 align-items-center">
-              <a href="Electric.php" class="">
-                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
-                  <i class="bi bi-lightbulb"></i>  
-                </div>
-                <h5 class="card-title">Electric</h5>
-              </a>
-              </div>
-          </div>
-          <!-- Col End -->
-        </div>  
-          <!-- Row End -->
-          
-         
-        <!-- Row for Auto Funding -->
-        <?php if(isServiceEnabled('virtual_bank_display')): ?>
-        <div class="row">
-            <div class="col-12">
-                <div class="card info-card sales-card p-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Auto Funding</h5>
-                        <?php
-                        $virtual_banks_html = "";
-                        $banks_list = getUserVirtualBank();
-                        if(is_array($banks_list)) {
-                            foreach ($banks_list as $bank_accounts_json) {
-                                $bank_accounts_json = json_decode($bank_accounts_json, true);
-                                $bname_up = strtoupper($bank_accounts_json["bank_name"]);
-                                if (in_array($bank_accounts_json["bank_code"], $virtual_bank_code_arr) || strpos($bname_up, "WEMA") !== false || strpos($bname_up, "GLOBUS") !== false || strpos($bname_up, "VFD") !== false || strpos($bname_up, "PROVIDUS") !== false || strpos($bname_up, "TITAN") !== false || strpos($bname_up, "STERLING") !== false) {
-                                    $virtual_banks_html .=
-                                        '<div class="bank-card bg-white p-2">
-                                            <div style="" class="bg-success d-inline-block rounded-2 rounded-bottom-0 col-12 px-2 py-2 mt-0">
-                                                <h5 class="text-white">' . strtoupper($bank_accounts_json["account_name"]) . '</h5>
-                                            </div>
-                                            <div style="" class="bg-light d-flex rounded-2 rounded-top-0 col-12 px-2 py-1 mt-0 justify-content-center justify-content-between">
-                                                <div class="row">
-                                                    <div style="user-select: auto;" class="d-inline-block text-success h5 mt-2">' . strtoupper($bank_accounts_json["bank_name"]) . '</div><br>
-                                                    <div style="user-select: auto;" class="d-inline-block text-success h3 mt-1">' . $bank_accounts_json["account_number"] . ' <span onclick="copyText(`Account number copied successfully`,`' . $bank_accounts_json["account_number"] . '`);" class="p-1 card-icon rounded-circle"><i title="Copy Account Number" class="bi bi-copy h3 text-success" ></i></span></div>
-                                                </div>
-                                                <div class="row">
-                                                    <div style="user-select: auto;" class="col-12 d-inline-block text-success h5 mt-2 text-end">Charges<br/><h2>#50</h2></div>
-                                                </div>
-                                            </div>
-                                            <div style="user-select: auto;" class="col-12 d-inline-block text-success fw-bold text-end mt-1 text-decoration-underline"><a href="#autofunding" onclick="moreAutoBanks();">View More</a></div>
-                                        </div>';
-                                }
-                            }
-                        }
+                <div class="balance-amount">₦<?php echo toDecimal($get_logged_user_details["balance"], "2"); ?></div>
+                
 
-                        if (!empty($virtual_banks_html)) {
-                            echo '<div class="auto-funding-container">' . $virtual_banks_html . '</div>';
-                        }
-                        ?><br>
-                        <?php
-                        echo $virtual_account_vaccount_err;
-                        ?>
-                        <script>
-                            let autoBanks = `<?php
-                                $all_banks_html_2 = "";
-                                $banks_list_2 = getUserVirtualBank();
-                                if(is_array($banks_list_2)) {
-                                    foreach ($banks_list_2 as $bj) {
-                                        $bj = json_decode($bj, true);
-                                        $all_banks_html_2 .= "<div class='text-start mb-3 pb-2 border-bottom'>";
-                                        $all_banks_html_2 .= "<div class='small text-muted'>".strtoupper($bj['bank_name'])."</div>";
-                                        $all_banks_html_2 .= "<div class='fw-bold fs-5'>".$bj['account_number']."</div>";
-                                        $all_banks_html_2 .= "<div class='small text-success'>".strtoupper($bj['account_name'])."</div>";
-                                        $all_banks_html_2 .= "</div>";
-                                    }
-                                }
-                                echo $all_banks_html_2 ?: "No virtual accounts generated yet.";
-                            ?>`;
-                            function moreAutoBanks(){
-                                Swal.fire({
-                                    title: 'All Virtual Accounts',
-                                    html: '<div style="max-height: 400px; overflow-y: auto;">' + autoBanks + '</div>',
-                                    icon: 'info',
-                                    confirmButtonText: 'Close'
-                                });
-                            }
-                        </script>
-                    </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions Row -->
+        <div class="col-12 mb-4">
+            <h5 class="text-muted fw-bold mb-3" style="font-size: 0.9rem; letter-spacing: 1px;">QUICK ACTIONS</h5>
+            <div class="quick-actions flex-wrap flex-md-nowrap">
+                <a href="Fund.php" class="action-btn">
+                    <div class="icon-circle" style="background: #eef2ff; color: #287bff; box-shadow: 0 4px 10px rgba(40,123,255,0.1);"><i class="bi bi-wallet2"></i></div>
+                    <span>Fund Wallet</span>
+                </a>
+                <a href="ShareFund.php" class="action-btn">
+                    <div class="icon-circle" style="background: #fdf2f7; color: #db2777; box-shadow: 0 4px 10px rgba(219,39,119,0.1);"><i class="bi bi-send"></i></div>
+                    <span>Transfer</span>
+                </a>
+                <a href="SubmitPayment.php" class="action-btn">
+                    <div class="icon-circle" style="background: #fffbeb; color: #f59e0b; box-shadow: 0 4px 10px rgba(245,158,11,0.1);"><i class="bi bi-receipt"></i></div>
+                    <span>Pay Bill</span>
+                </a>
+                <a href="Transactions.php" class="action-btn">
+                    <div class="icon-circle" style="background: #f5f3ff; color: #8b5cf6; box-shadow: 0 4px 10px rgba(139,92,246,0.1);"><i class="bi bi-clock-history"></i></div>
+                    <span>History</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Services Grid -->
+        <div class="col-12 mb-4">
+            <h5 class="text-muted fw-bold mb-3" style="font-size: 0.9rem; letter-spacing: 1px;">SERVICES</h5>
+            <div class="row">
+                <div class="col-6 col-md-3">
+                    <a href="Data.php" class="service-card flex-column text-center px-2 py-4">
+                        <div class="service-icon mb-3 me-0"><i class="bi bi-wifi"></i></div>
+                        <h5>Buy Data</h5>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a href="Airtime.php" class="service-card flex-column text-center px-2 py-4">
+                        <div class="service-icon mb-3 me-0"><i class="bi bi-telephone"></i></div>
+                        <h5>Buy Airtime</h5>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a href="Cable.php" class="service-card flex-column text-center px-2 py-4">
+                        <div class="service-icon mb-3 me-0"><i class="bi bi-tv"></i></div>
+                        <h5>Cable TV</h5>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a href="Electric.php" class="service-card flex-column text-center px-2 py-4">
+                        <div class="service-icon mb-3 me-0"><i class="bi bi-lightbulb"></i></div>
+                        <h5>Electricity</h5>
+                    </a>
                 </div>
             </div>
         </div>
-        <?php endif; ?>
-        <!-- End Row for Auto Funding -->
-        <!-- End Row for Auto Funding -->
-
-        <!-- Row for Upgrade and Refer -->
-        <div class="row">
-          <!-- Upgrade Account Card -->
-          <div class="col-lg-6 mb-4">
-            <div class="card info-card sales-card p-3 h-100">
-                  <div class="card-body">
-                    <h5 class="card-title">UPGRADE ACCOUNT</h5>
-                    <form method="post" action="">
-                			<select name="upgrade-type" class="form-select" required>
-                			<option value="" default hidden selected>Choose Account Level</option>
-                			<?php
-                			if (!empty($get_logged_user_details["account_level"])) {
-                				$account_level_upgrade_array = array(1 => "smart", 2 => "agent");
-                				foreach ($account_level_upgrade_array as $index => $account_levels) {
-                					if ($index > $get_logged_user_details["account_level"]) {
-                						$get_upgrade_price = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_user_upgrade_price WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && account_type='" . $index . "' LIMIT 1"));
-                						echo '<option value="' . $account_levels . '">' . accountLevel($index) . ' @ N' . toDecimal($get_upgrade_price["price"], 2) . '</option>';
-                					}
-                				}
-                			}
-                			?>
-                			</select><br />
-                			<button name="upgrade-user" type="submit" class="btn btn-success col-12">
-                				Proceed
-                			</button>
-                		</form>
-                  </div>
-              </div>
-          </div>
-          <!-- End Upgrade Account Card -->
-          
-          <!-- Refer Card -->
-          <div class="col-lg-6 mb-4">
-            <div class="card info-card sales-card p-3 align-items-center justify-content-center h-100">
-                <div class="card-body text-center">
-                    <h5 class="card-title">Refer and Earn Big!</h5>
-                    <p>Copy your referral link and share it to earn commissions.</p>
-                    <button class="btn btn-primary rounded-pill mt-2" onclick="copyReferLink();" title="Click To Copy">
-                        <i class="bi bi-link-45deg"></i> Copy Link
-                    </button>
-                </div>
-            </div>
-            <script>
-                let ReferLink = '<?php echo $web_http_host . "/web/Register.php?referral=" . $get_logged_user_details["username"]; ?>';
-                const copyReferLink = async () => {
-                    try {
-                        await navigator.clipboard.writeText(ReferLink);
-                        alert('Referral link copied to clipboard!');
-                    } catch (err) {
-                        alert('Failed to copy link: ' + err);
-                    }
-                }
-            </script>
-          </div>
-          <!-- End Refer Card -->
-        </div>  
-        <!-- End Row for Upgrade and Refer -->
-          
-
         
-  
-      </div>
-    </section>
-	<?php
-	?>
-	<?php include("../func/short-trans.php"); ?>
-	<?php include("../func/bc-footer.php"); ?>
+        <!-- Row for Auto Funding -->
 
-</body>
 
-</html>
+

@@ -46,7 +46,6 @@
             break;
     }
     
-<?php
     // AI Assistant Shortcut removed from service pages to keep service UI clean.
 ?>
 

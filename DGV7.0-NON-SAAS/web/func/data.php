@@ -7,7 +7,7 @@ if (in_array($purchase_method, $purchase_method_array)) {
         $phone_no = sanitize_phone_number(trim(strip_tags($_POST["phone-number"])));
         $phone_no = mysqli_real_escape_string($connection_server, $phone_no);
         $type = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["type"]))));
-        $quantity = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["quantity"])));
+        $quantity = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["quantity"]))));
 
     }
 
@@ -16,7 +16,9 @@ if (in_array($purchase_method, $purchase_method_array)) {
         $phone_no = sanitize_phone_number(trim(strip_tags($get_api_post_info["phone_number"] ?? $get_api_post_info["phone_no"] ?? "")));
         $phone_no = mysqli_real_escape_string($connection_server, $phone_no);
         $type = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($get_api_post_info["type"] ?? $get_api_post_info["data_type"] ?? ""))));
-        $quantity = mysqli_real_escape_string($connection_server, trim(strip_tags($get_api_post_info["quantity"] ?? $get_api_post_info["plan_code"] ?? "")));
+        // NOTE: quantity is now lowercased like isp/type — API callers sending "1GB" instead of
+        // "1gb" previously failed val_1/gateway-key lookups silently since those are case-sensitive.
+        $quantity = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($get_api_post_info["quantity"] ?? $get_api_post_info["plan_code"] ?? ""))));
     }
     //$discounted_amount = $amount;
     $type_alternative = ucwords($isp . " " . str_replace(["-", "_"], " ", $type));
@@ -70,9 +72,16 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                                             $debit_user = "success";
                                                         }
                                                         if ($debit_user === "success") {
-                                                            $api_gateway_name_file_exists = $type . "-" . str_replace(".", "-", $api_detail["api_base_url"]) . ".php";
+                                                            // Normalize before building the filename: the stored api_base_url is admin-entered
+                                                            // (MarketPlace.php "Add Custom API Gateway" form) and isn't guaranteed to be
+                                                            // trimmed or lowercased. A stray space or mismatched case here silently falls through
+                                                            // to the generic "-localserver.php" gateway instead of the real provider's file,
+                                                            // which was observed live: an API key that worked when called directly against
+                                                            // hdkdata.com failed every time when routed through this platform.
+                                                            $normalized_api_base_url = strtolower(trim($api_detail["api_base_url"]));
+                                                            $api_gateway_name_file_exists = $type . "-" . str_replace(".", "-", $normalized_api_base_url) . ".php";
                                                             if (file_exists($_SERVER['DOCUMENT_ROOT'] . "/func/api-gateway/" . $api_gateway_name_file_exists)) {
-                                                                $api_gateway_name = $type . "-" . str_replace(".", "-", $api_detail["api_base_url"]) . ".php";
+                                                                $api_gateway_name = $api_gateway_name_file_exists;
                                                             } else {
                                                                 $api_gateway_name = $type . "-localserver.php";
                                                             }

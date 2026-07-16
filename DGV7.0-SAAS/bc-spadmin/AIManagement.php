@@ -1,7 +1,6 @@
 <?php session_start();
 include("../func/bc-spadmin-config.php");
 include_once("../func/bc-ai-engine.php");
-include_once("../func/bc-whatsapp.php");
 
 // Force clear cache on load to ensure we see latest settings
 if (isset($_SESSION)) {
@@ -162,7 +161,6 @@ $groq_key     = getSuperAdminOption('ai_groq_api_key', '');
 
 $ai = ai_engine();
 $ai_up = $ai->isAiOnline();
-$wa_online = isWhatsAppGatewayOnline();
 
 $model_catalog = [];
 if ($ai_provider === 'gemini') {
@@ -258,11 +256,6 @@ $blocked_count = ($blocked_q && $row_b = mysqli_fetch_assoc($blocked_q)) ? $row_
                     <span class="fw-bold small">Active Provider: <?php echo ucfirst($ai_provider); ?></span>
                     <span class="status-dot <?php echo $ai_up ? 'dot-green' : 'dot-red'; ?> me-2"></span>
                     <span class="small <?php echo $ai_up ? 'text-success' : 'text-danger'; ?>"><?php echo $ai_up ? 'Online' : 'Offline'; ?></span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center py-2 mb-3">
-                    <span class="fw-bold small">WhatsApp Gateway</span>
-                    <span class="status-dot <?php echo $wa_online ? 'dot-green' : 'dot-red'; ?> me-2"></span>
-                    <span class="small <?php echo $wa_online ? 'text-success' : 'text-danger'; ?>"><?php echo $wa_online ? 'Online' : 'Offline'; ?></span>
                 </div>
                 <form method="post">
                     <input type="hidden" name="ai_global_enabled" value="<?php echo $ai_global ? 0 : 1; ?>">

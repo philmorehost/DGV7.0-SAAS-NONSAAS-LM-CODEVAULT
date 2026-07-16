@@ -164,7 +164,7 @@ $v_blocked_count = ($blocked_q && $row_b = mysqli_fetch_assoc($blocked_q)) ? $ro
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>AI Control Center | <?php echo $get_all_super_admin_site_details["site_title"]; ?></title>
+    <title>AI Control Center | <?php echo $get_all_super_admin_site_details["site_title"] ?? 'Vendor Dashboard'; ?></title>
     <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
     <link href="../assets-2/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="../assets-2/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
@@ -416,7 +416,7 @@ $v_blocked_count = ($blocked_q && $row_b = mysqli_fetch_assoc($blocked_q)) ? $ro
                                 <label class="form-label small fw-bold">Your Retail Price (per 1k tokens)</label>
                                 <div class="input-group">
                                     <span class="input-group-text border-0 bg-light">₦</span>
-                                    <input type="number" name="ai_user_token_price" class="form-control border-0 bg-light" value="<?php echo $get_logged_admin_details['ai_user_token_price'] ?? 50.00; ?>" step="0.01">
+                                    <input type="number" name="ai_user_token_price" class="form-control border-0 bg-light" value="<?php echo $get_logged_admin_details['ai_user_token_price'] ?? 50.00; ?>" step="any">
                                 </div>
                                 <small class="text-muted">Pure profit when your users use AI services.</small>
                             </div>

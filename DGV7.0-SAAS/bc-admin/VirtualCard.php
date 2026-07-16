@@ -133,7 +133,7 @@ $conversion_spread_val = $vc_settings['vc_conversion_spread'] ?? '0.00';
                             <label class="form-label small fw-bold text-muted">Issuance Profit (USD)</label>
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
-                                <input name="vc_issuance_profit_usd" type="number" step="0.01" class="form-control" value="<?php echo $issuance_profit_val; ?>">
+                                <input name="vc_issuance_profit_usd" type="number" step="any" class="form-control" value="<?php echo $issuance_profit_val; ?>">
                             </div>
                             <small class="text-xs text-muted">Added to the provider's cost.</small>
                         </div>
@@ -141,7 +141,7 @@ $conversion_spread_val = $vc_settings['vc_conversion_spread'] ?? '0.00';
                             <label class="form-label small fw-bold text-muted">Funding Fee (%)</label>
                             <div class="input-group">
                                 <span class="input-group-text">%</span>
-                                <input name="vc_funding_profit_percent" type="number" step="0.01" class="form-control" value="<?php echo $funding_profit_val; ?>">
+                                <input name="vc_funding_profit_percent" type="number" step="any" class="form-control" value="<?php echo $funding_profit_val; ?>">
                             </div>
                             <small class="text-xs text-muted">Percentage profit on every top-up.</small>
                         </div>
@@ -149,7 +149,7 @@ $conversion_spread_val = $vc_settings['vc_conversion_spread'] ?? '0.00';
                             <label class="form-label small fw-bold text-muted">Exchange Rate Spread (NGN)</label>
                             <div class="input-group">
                                 <span class="input-group-text">₦</span>
-                                <input name="vc_conversion_spread" type="number" min="0" max="100" step="0.01" class="form-control" value="<?php echo $conversion_spread_val; ?>">
+                                <input name="vc_conversion_spread" type="number" min="0" max="100" step="any" class="form-control" value="<?php echo $conversion_spread_val; ?>">
                             </div>
                             <small class="text-xs text-muted">This amount is added to the live conversion rate per $1. For example, if the live rate is ₦1300 and you set this to 50, the user will be charged ₦1350/$. This helps cover the gap between official and market rates.</small>
                         </div>

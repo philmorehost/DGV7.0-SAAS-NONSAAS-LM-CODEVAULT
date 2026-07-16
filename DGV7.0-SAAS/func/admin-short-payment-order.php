@@ -4,7 +4,7 @@
 <div class="card info-card px-5 py-5">
     <div class="col-12">
         <form method="get" action="SelfPaymentOrders.php">
-            <input style="user-select: auto;" name="searchq" type="text" value="<?php echo trim(strip_tags($_GET["searchq"])); ?>" placeholder="Reference No e.t.c" class="form-control" required/>
+            <input style="user-select: auto;" name="searchq" type="text" value="<?php echo isset($_GET["searchq"]) ? trim(strip_tags($_GET["searchq"])) : ''; ?>" placeholder="Reference No e.t.c" class="form-control" required/>
             <button style="user-select: auto;" type="submit" class="btn btn-primary d-inline col-12 col-lg-auto my-2" >
                 <i class="bi bi-search"></i> Search
             </button>
@@ -20,9 +20,10 @@
             </thead>
             <tbody>
             <?php
+                $countTransaction = 0;
                 if(mysqli_num_rows($get_user_transaction_details) >= 1){
                     while($user_transaction = mysqli_fetch_assoc($get_user_transaction_details)){
-                        $transaction_type = ucwords($user_transaction["type_alternative"]);
+                        $transaction_type = isset($user_transaction["type_alternative"]) ? ucwords($user_transaction["type_alternative"]) : '';
                         $countTransaction += 1;
                         echo 
                         '<tr>

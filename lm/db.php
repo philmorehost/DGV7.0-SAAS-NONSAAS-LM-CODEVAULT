@@ -6,8 +6,10 @@ define('DB_USER', 'pmhmanager_license');
 define('DB_PASS', 'pmhmanager_license');
 
 try {
+    date_default_timezone_set('UTC');
     $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME, DB_USER, DB_PASS);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("SET time_zone = '+00:00'");
 
     // Create licenses table if it doesn't exist
     $pdo->exec("CREATE TABLE IF NOT EXISTS `licenses` (

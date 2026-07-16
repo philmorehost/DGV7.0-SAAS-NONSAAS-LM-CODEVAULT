@@ -34,7 +34,7 @@ if (json_last_error() === JSON_ERROR_NONE || (1 == 1)) {
         "dashboard-notification" => $get_dash_notice,
         "purchase-notification" => "",
         "push-notification" => "",
-        "whatsapp" => $get_admin_phone,
+        "phone" => $get_admin_phone,
         "address" => $get_admin_address,
         "email" => $get_admin_email,
         "contact-email" => $get_admin_contact_email

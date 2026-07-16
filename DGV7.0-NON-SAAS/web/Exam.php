@@ -6,10 +6,12 @@
 		include_once("func/exam.php");
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
         if (isset($json_response_decode["ref"])) {
             $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
 ?>
@@ -103,7 +105,7 @@
                     </select>
                 </div>
 
-                <button id="proceedBtn" name="buy-exam" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm rounded-pill" >
+                <button id="proceedBtn" name="buy-exam" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm rounded-pill" >
                     PURCHASE PIN
                 </button>
 

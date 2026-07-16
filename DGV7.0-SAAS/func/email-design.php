@@ -20,8 +20,10 @@ function mailDesignTemplate($title, $message, $details_array, $show_app = true) 
 
     // Fetch active services for dynamic advertising
     $vendor_host = mysqli_real_escape_string($connection_server, $website_url);
-    $vendor_q = mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$vendor_host' LIMIT 1");
-    $vendor_id = ($row = mysqli_fetch_assoc($vendor_q)) ? $row['id'] : 0;
+    $vendor_q = mysqli_query($connection_server, "SELECT id, email FROM sas_vendors WHERE website_url='$vendor_host' LIMIT 1");
+    $vendor_row = mysqli_fetch_assoc($vendor_q);
+    $vendor_id = $vendor_row ? $vendor_row['id'] : 0;
+    $vendor_support_email = $vendor_row['email'] ?? ('support@' . $website_url);
 
     $services_list = [
         'data' => ['label' => 'Data Bundle', 'icon' => 'data.png', 'link' => '/web/Data.php'],
@@ -123,8 +125,8 @@ function mailDesignTemplate($title, $message, $details_array, $show_app = true) 
                 <td style="padding: 20px 25px; background-color: #f8fafc; text-align: center; border-top: 1px solid #f1f5f9;">
                     <p style="margin: 0; font-size: 14px; color: #64748b; font-weight: bold;">Need Help?</p>
                     <div style="margin-top: 10px;">
-                        <a href="https://wa.me/' . ($details_array[0] ?? "") . '" style="text-decoration: none; color: #16a34a; font-size: 14px; font-weight: bold; margin: 0 10px;">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" width="16" style="vertical-align: middle; margin-right: 5px;"> WhatsApp Support
+                        <a href="mailto:' . htmlspecialchars($vendor_support_email) . '" style="text-decoration: none; color: #287bff; font-size: 14px; font-weight: bold; margin: 0 10px;">
+                            Contact Support
                         </a>
                     </div>
                 </td>

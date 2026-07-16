@@ -11,6 +11,7 @@
             $response_message .= "<br>" . $json_response_decode["bonus_message"];
         }
         $_SESSION["product_purchase_response"] = $response_message;
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
         if (isset($json_response_decode["ref"])) {
             $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
         }
@@ -19,6 +20,7 @@
         unset($_SESSION["cable_package"]);
         unset($_SESSION["cable_name"]);
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["verify-cable"])){
@@ -37,6 +39,7 @@
             $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["reset-cable"])){
@@ -45,6 +48,7 @@
         unset($_SESSION["cable_package"]);
         unset($_SESSION["cable_name"]);
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
 ?>
@@ -153,7 +157,7 @@
                 <?php } ?>
 
                 <?php if(!isset($_SESSION["cable_name"])){ ?>
-                <button id="proceedBtn" name="verify-cable" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
+                <button id="proceedBtn" name="verify-cable" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
                     VERIFY DECODER
                 </button>
                 <?php }else{ ?>

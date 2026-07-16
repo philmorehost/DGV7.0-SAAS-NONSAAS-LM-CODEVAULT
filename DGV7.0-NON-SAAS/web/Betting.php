@@ -7,6 +7,7 @@
         include_once("func/betting.php");
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
         if (isset($json_response_decode["ref"])) {
             $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
         }
@@ -16,6 +17,7 @@
         unset($_SESSION["customer_type"]);
         unset($_SESSION["customer_name"]);
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["verify-customer"])){
@@ -34,6 +36,7 @@
             $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["reset-betting"])){
@@ -42,6 +45,7 @@
         unset($_SESSION["customer_provider"]);
         unset($_SESSION["customer_name"]);
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
 ?>
@@ -139,7 +143,7 @@
                 <?php } ?>
 
                 <?php if(!isset($_SESSION["customer_name"])){ ?>
-                <button id="proceedBtn" name="verify-customer" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
+                <button id="proceedBtn" name="verify-customer" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
                     VERIFY CUSTOMER
                 </button>
                 <?php }else{ ?>

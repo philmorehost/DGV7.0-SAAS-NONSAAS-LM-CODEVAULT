@@ -67,6 +67,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 ?>
 <!DOCTYPE html>
@@ -166,7 +167,7 @@
                                 <label class="form-label small fw-bold text-muted text-uppercase mb-2">Amount (₦)</label>
                                 <div class="input-group input-group-lg">
                                     <span class="input-group-text bg-light border-0 fw-bold text-primary">₦</span>
-                                    <input id="share-fund-amount" name="amount" onkeyup="adminConfirmUser();" type="number" step="0.01" min="1" placeholder="0.00" class="form-control bg-light border-0 py-3 rounded-end-3" required/>
+                                    <input id="share-fund-amount" name="amount" onkeyup="adminConfirmUser();" type="number" step="any" min="1" placeholder="0.00" class="form-control bg-light border-0 py-3 rounded-end-3" required/>
                                 </div>
                             </div>
                         </div>

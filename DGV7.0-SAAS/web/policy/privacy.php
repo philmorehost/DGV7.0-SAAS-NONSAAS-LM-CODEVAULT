@@ -68,6 +68,6 @@ include_once '_header.php';
 <p>We may update this Privacy Policy periodically. Material changes will be communicated by email or a prominent notice on our platform. Continued use after changes constitutes acceptance.</p>
 
 <h2>10. Contact Us</h2>
-<p>For privacy-related enquiries, please contact our Data Protection Officer via the live chat or WhatsApp support button on our homepage.</p>
+<p>For privacy-related enquiries, please contact our Data Protection Officer via the live chat button on our homepage.</p>
 
 <?php include_once '_footer.php'; ?>

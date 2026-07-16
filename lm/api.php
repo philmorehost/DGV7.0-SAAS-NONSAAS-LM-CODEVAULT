@@ -34,11 +34,12 @@ if (isset($_POST['key']) && isset($_POST['domain'])) {
             } else {
                 $license_type = $license['license_type'] ?? 'standard';
                 // Check domains in licensed_domains normalized table
-                $domain_stmt = $pdo->prepare("SELECT id FROM licensed_domains WHERE license_id = ? AND domain_name = ?");
-                $domain_stmt->execute([$license['id'], $domain]);
+                $domain_clean = preg_replace('/^www\./', '', $domain);
+                $domain_stmt = $pdo->prepare("SELECT id FROM licensed_domains WHERE license_id = ? AND (domain_name = ? OR domain_name = ? OR domain_name = ?)");
+                $domain_stmt->execute([$license['id'], $domain, $domain_clean, "www." . $domain_clean]);
                 $domain_exists = $domain_stmt->fetch();
                 
-                if ($license_type === 'extended' || $domain_exists || $license['domain'] === $domain) {
+                if ($license_type === 'extended' || $domain_exists || ($license['domain'] === $domain || preg_replace('/^www\./', '', $license['domain']) === $domain_clean)) {
                     $response['status'] = 1;
                     $response['message'] = 'License is valid.';
                     api_log("SUCCESS: Found matching active license (Type: {$license_type}) for domain '{$domain}'.");
@@ -77,3 +78,4 @@ if (isset($_POST['key']) && isset($_POST['domain'])) {
 api_log("Responding with: " . json_encode($response));
 echo json_encode($response);
 ?>
+

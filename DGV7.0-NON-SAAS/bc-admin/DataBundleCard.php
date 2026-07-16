@@ -36,7 +36,10 @@
         exit();
     }
 
-    if(isset($_POST["update-sms-numbers"])){
+    if(isset($_POST["update-sms-bridge"])){
+        $secret = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["print_hub_secret"])));
+        mysqli_query($connection_server, "UPDATE sas_vendors SET print_hub_secret='$secret' WHERE id='".$get_logged_admin_details["id"]."'");
+
         $networks = ["mtn", "airtel", "glo", "9mobile", "dstv", "gotv", "startimes", "aedc", "ekedc", "ikedc", "ibedc", "phed", "kedco", "eedc", "yedc", "bedc", "waec", "neco", "nabteb", "bet9ja", "betking", "1xbet"];
         foreach($networks as $network){
             if(isset($_POST[$network."_sms"])){
@@ -49,7 +52,50 @@
                 }
             }
         }
-        $_SESSION["product_purchase_response"] = "Gateway Numbers updated successfully.";
+        $_SESSION["product_purchase_response"] = "SMS Bridge settings updated successfully.";
+        header("Location: DataBundleCard.php?type=$service_type");
+        exit();
+    }
+
+    if(isset($_POST["update-ussd-settings"])){
+        $username = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["hollatags_username"])));
+        $password = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["hollatags_password"])));
+        $ussd_code = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["hollatags_ussd_code"])));
+        $channel_mode = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["ussd_channel_mode"])));
+
+        mysqli_query($connection_server, "UPDATE sas_vendors SET hollatags_username='$username', hollatags_password='$password', hollatags_ussd_code='$ussd_code', ussd_channel_mode='$channel_mode' WHERE id='".$get_logged_admin_details["id"]."'");
+
+        $networks = ["mtn", "airtel", "glo", "9mobile", "dstv", "gotv", "startimes", "aedc", "ekedc", "ikedc", "ibedc", "phed", "kedco", "eedc", "yedc", "bedc", "waec", "neco", "nabteb", "bet9ja", "betking", "1xbet"];
+        foreach($networks as $network){
+            $ussd_enabled = isset($_POST[$network."_ussd_enabled"]) ? 1 : 0;
+            $ussd_code_val = isset($_POST[$network."_ussd_code"]) ? mysqli_real_escape_string($connection_server, trim(strip_tags($_POST[$network."_ussd_code"]))) : '';
+
+            $check = mysqli_query($connection_server, "SELECT * FROM sas_databundle_config WHERE vendor_id='".$get_logged_admin_details["id"]."' && network='$network' AND service_type='$service_type'");
+            if(mysqli_num_rows($check) == 0){
+                mysqli_query($connection_server, "INSERT INTO sas_databundle_config (vendor_id, network, service_type, ussd_channel_enabled, ussd_code) VALUES ('".$get_logged_admin_details["id"]."', '$network', '$service_type', '$ussd_enabled', '$ussd_code_val')");
+            }else{
+                mysqli_query($connection_server, "UPDATE sas_databundle_config SET ussd_channel_enabled='$ussd_enabled', ussd_code='$ussd_code_val' WHERE vendor_id='".$get_logged_admin_details["id"]."' && network='$network' AND service_type='$service_type'");
+            }
+        }
+        $_SESSION["product_purchase_response"] = "USSD Channel settings updated successfully.";
+        header("Location: DataBundleCard.php?type=$service_type");
+        exit();
+    }
+
+    if(isset($_POST["update-ussd-charges"])){
+        $act_fee = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["ussd_activation_fee"])));
+        $call_charge = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["ussd_per_call_charge"])));
+
+        mysqli_query($connection_server, "UPDATE sas_vendors SET ussd_activation_fee='$act_fee', ussd_per_call_charge='$call_charge' WHERE id='".$get_logged_admin_details["id"]."'");
+        $_SESSION["product_purchase_response"] = "USSD Fees updated successfully.";
+        header("Location: DataBundleCard.php?type=$service_type");
+        exit();
+    }
+
+    if(isset($_GET["action"]) && $_GET["action"] == "revoke-ussd" && isset($_GET["id"])){
+        $act_id = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["id"])));
+        mysqli_query($connection_server, "UPDATE sas_ussd_activations SET status=0 WHERE vendor_id='".$get_logged_admin_details["id"]."' && id='$act_id'");
+        $_SESSION["product_purchase_response"] = "USSD access revoked successfully.";
         header("Location: DataBundleCard.php?type=$service_type");
         exit();
     }
@@ -89,14 +135,6 @@
     if(isset($_POST["clear-all-epin-plans"])){
         mysqli_query($connection_server, "DELETE FROM sas_databundle_plans WHERE vendor_id='".$get_logged_admin_details["id"]."' AND service_type='$service_type'");
         $_SESSION["product_purchase_response"] = "All EPIN-enabled $service_type plans cleared successfully.";
-        header("Location: DataBundleCard.php?type=$service_type");
-        exit();
-    }
-
-    if(isset($_POST["update-print-secret"])){
-        $secret = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["print_hub_secret"])));
-        mysqli_query($connection_server, "UPDATE sas_vendors SET print_hub_secret='$secret' WHERE id='".$get_logged_admin_details["id"]."'");
-        $_SESSION["product_purchase_response"] = "Print Hub Secret Key updated successfully.";
         header("Location: DataBundleCard.php?type=$service_type");
         exit();
     }
@@ -166,58 +204,156 @@
       <div class="row g-4">
         <div class="col-lg-4">
           <div class="card shadow-sm border-0 rounded-4 mb-4 overflow-hidden">
-            <div class="card-header bg-success bg-opacity-10 py-3 border-0">
-                <h5 class="card-title mb-0 fs-6"><i class="bi bi-key me-2 text-success"></i>PrintHub APP Connectivity</h5>
+            <div class="card-header bg-light p-2 border-bottom">
+              <ul class="nav nav-tabs card-header-tabs" id="printHubSettingsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active fw-bold small py-2 px-3" id="sms-bridge-tab" data-bs-toggle="tab" data-bs-target="#sms-bridge-pane" type="button" role="tab"><i class="bi bi-phone me-1 text-success"></i>SMS Bridge</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link fw-bold small py-2 px-3" id="ussd-channel-tab" data-bs-toggle="tab" data-bs-target="#ussd-channel-pane" type="button" role="tab"><i class="bi bi-cpu me-1 text-primary"></i>USSD Channel</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link fw-bold small py-2 px-3" id="ussd-charges-tab" data-bs-toggle="tab" data-bs-target="#ussd-charges-pane" type="button" role="tab"><i class="bi bi-wallet2 me-1 text-warning"></i>USSD Fees</button>
+                </li>
+              </ul>
             </div>
-            <div class="card-body p-4">
-                <p class="small text-muted mb-3">Copy your unique Secret Key to the SMS-Bridge APK to authorize fulfillment from this domain.</p>
-                <form method="post">
+            <div class="card-body p-3 tab-content" id="printHubSettingsContent">
+              <!-- Tab 1: SMS Bridge -->
+              <div class="tab-pane fade show active" id="sms-bridge-pane" role="tabpanel">
+                <p class="small text-muted mb-3 mt-1">Configure automated SMS APK Bridge fulfillment settings.</p>
+                <form method="post" action="">
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Hub Secret Key</label>
-                        <div class="input-group">
-                            <input type="text" name="print_hub_secret" class="form-control" value="<?php echo $get_logged_admin_details['print_hub_secret'] ?? ''; ?>" placeholder="Enter any string as key">
-                            <button type="submit" name="update-print-secret" class="btn btn-success"><i class="bi bi-save"></i></button>
-                        </div>
+                        <input type="text" name="print_hub_secret" class="form-control" value="<?php echo $get_logged_admin_details['print_hub_secret'] ?? ''; ?>" placeholder="Enter secret key">
                     </div>
+                    <div class="alert alert-light border small py-2 mb-3">
+                        <strong>Webhook URL:</strong><br>
+                        <span class="user-select-all text-break">https://<?php echo $_SERVER['HTTP_HOST']; ?>/web/api/endpoint.php</span>
+                    </div>
+                    <h6 class="fw-bold small border-bottom pb-2 text-uppercase text-muted"><i class="bi bi-telephone me-2"></i>Gateway Numbers</h6>
+                    <?php
+                    if($service_type == 'data' || $service_type == 'airtime'){
+                        $networks = ["mtn", "airtel", "glo", "9mobile"];
+                    } elseif($service_type == 'cable') {
+                        $networks = ["dstv", "gotv", "startimes"];
+                    } elseif($service_type == 'electric') {
+                        $networks = ["aedc", "ekedc", "ikedc", "ibedc", "phed", "kedco", "eedc", "yedc", "bedc"];
+                    } elseif($service_type == 'exam') {
+                        $networks = ["waec", "neco", "nabteb"];
+                    } elseif($service_type == 'betting') {
+                        $networks = ["bet9ja", "betking", "1xbet"];
+                    } else {
+                        $networks = [];
+                    }
+                    foreach($networks as $network){
+                        $get_config = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_databundle_config WHERE vendor_id='".$get_logged_admin_details["id"]."' && network='$network' AND service_type='$service_type'"));
+                        echo '<div class="mb-2">
+                                <label class="form-label small text-muted mb-1">'.strtoupper($network).' SMS-To Number</label>
+                                <input type="text" name="'.$network.'_sms" class="form-control form-control-sm" value="'.($get_config ? $get_config['sms_to_number'] : '').'" placeholder="Enter phone number">
+                              </div>';
+                    }
+                    ?>
+                    <button type="submit" name="update-sms-bridge" class="btn btn-success btn-sm w-100 rounded-pill fw-bold shadow-sm mt-3 py-2">Save SMS Settings</button>
                 </form>
-                <div class="alert alert-light border small mt-2 mb-0">
-                    <strong>Webhook URL:</strong><br>
-                    <span class="user-select-all text-break">https://<?php echo $_SERVER['HTTP_HOST']; ?>/web/api/endpoint.php</span>
-                </div>
-            </div>
-          </div>
+              </div>
 
-          <div class="card info-card shadow-sm border-0 rounded-4 mb-4 overflow-hidden">
-            <div class="card-header bg-primary bg-opacity-10 py-3 border-0">
-                <h5 class="card-title mb-0 fs-6"><i class="bi bi-telephone-outbound me-2 text-primary"></i>Gateway Numbers</h5>
-            </div>
-            <div class="card-body p-4">
-                <p class="small text-muted mb-4">Users will send SMS to these numbers to redeem their EPINs.</p>
-                <form method="post">
-              <?php
-                if($service_type == 'data' || $service_type == 'airtime'){
-                    $networks = ["mtn", "airtel", "glo", "9mobile"];
-                } elseif($service_type == 'cable') {
-                    $networks = ["dstv", "gotv", "startimes"];
-                } elseif($service_type == 'electric') {
-                    $networks = ["aedc", "ekedc", "ikedc", "ibedc", "phed", "kedco", "eedc", "yedc", "bedc"];
-                } elseif($service_type == 'exam') {
-                    $networks = ["waec", "neco", "nabteb"];
-                } elseif($service_type == 'betting') {
-                    $networks = ["bet9ja", "betking", "1xbet"];
-                } else {
-                    $networks = [];
-                }
-                foreach($networks as $network){
-                  $get_config = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_databundle_config WHERE vendor_id='".$get_logged_admin_details["id"]."' && network='$network' AND service_type='$service_type'"));
-                  echo '<div class="mb-3">
-                          <label class="form-label small fw-bold">'.strtoupper($network).' SMS-To Number</label>
-                          <input type="text" name="'.$network.'_sms" class="form-control" value="'.($get_config ? $get_config['sms_to_number'] : '').'" placeholder="Enter phone number">
-                        </div>';
-                }
-              ?>
-              <button type="submit" name="update-sms-numbers" class="btn btn-primary w-100 rounded-pill fw-bold shadow-sm">Update Numbers</button>
-            </form>
+              <!-- Tab 2: USSD Channel -->
+              <div class="tab-pane fade" id="ussd-channel-pane" role="tabpanel">
+                <p class="small text-muted mb-3 mt-1">Configure Hollatags Shared USSD parameters.</p>
+                <form method="post" action="">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Hollatags Username</label>
+                        <input type="text" name="hollatags_username" class="form-control form-control-sm" value="<?php echo $get_logged_admin_details['hollatags_username'] ?? ''; ?>" placeholder="Enter username">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Hollatags Password</label>
+                        <input type="password" name="hollatags_password" class="form-control form-control-sm" value="<?php echo $get_logged_admin_details['hollatags_password'] ?? ''; ?>" placeholder="Enter password">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">USSD Shortcode / Dial String</label>
+                        <input type="text" name="hollatags_ussd_code" class="form-control form-control-sm" value="<?php echo $get_logged_admin_details['hollatags_ussd_code'] ?? ''; ?>" placeholder="e.g. *384*241#">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Redemption Channel Mode</label>
+                        <select name="ussd_channel_mode" class="form-select form-select-sm">
+                            <option value="Both" <?php echo (($get_logged_admin_details['ussd_channel_mode'] ?? 'Both') == 'Both') ? 'selected' : ''; ?>>Both (SMS & USSD)</option>
+                            <option value="SMS Only" <?php echo (($get_logged_admin_details['ussd_channel_mode'] ?? 'Both') == 'SMS Only') ? 'selected' : ''; ?>>SMS Only</option>
+                            <option value="USSD Only" <?php echo (($get_logged_admin_details['ussd_channel_mode'] ?? 'Both') == 'USSD Only') ? 'selected' : ''; ?>>USSD Only</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-light border small py-2 mb-3">
+                        <strong>Hollatags Callback URL:</strong><br>
+                        <span class="user-select-all text-break">https://<?php echo $_SERVER['HTTP_HOST']; ?>/web/api/ussd-endpoint.php</span>
+                    </div>
+
+                    <h6 class="fw-bold small border-bottom pb-2 text-uppercase text-muted"><i class="bi bi-cpu me-2"></i>Network Activation</h6>
+                    <?php
+                    foreach($networks as $network){
+                        $get_config = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_databundle_config WHERE vendor_id='".$get_logged_admin_details["id"]."' && network='$network' AND service_type='$service_type'"));
+                        $checked = ($get_config && $get_config['ussd_channel_enabled'] == 1) ? 'checked' : '';
+                        $ussd_code_val = $get_config ? $get_config['ussd_code'] : '';
+                        echo '<div class="border p-2 rounded mb-2 bg-light">
+                                <div class="form-check form-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" name="'.$network.'_ussd_enabled" id="'.$network.'_ussd_enabled" '.$checked.'>
+                                    <label class="form-check-label small fw-bold" for="'.$network.'_ussd_enabled">Enable USSD ('.strtoupper($network).')</label>
+                                </div>
+                                <div>
+                                    <label class="small text-muted">Sub-code Identifier (Optional)</label>
+                                    <input type="text" name="'.$network.'_ussd_code" class="form-control form-control-sm" value="'.$ussd_code_val.'" placeholder="e.g. '.$network.'">
+                                </div>
+                              </div>';
+                    }
+                    ?>
+                    <button type="submit" name="update-ussd-settings" class="btn btn-primary btn-sm w-100 rounded-pill fw-bold shadow-sm mt-3 py-2">Save USSD Settings</button>
+                </form>
+              </div>
+
+              <!-- Tab 3: USSD Charges -->
+              <div class="tab-pane fade" id="ussd-charges-pane" role="tabpanel">
+                <p class="small text-muted mb-3 mt-1">Set fees charged to resellers for USSD access.</p>
+                <form method="post" action="">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">One-time USSD Activation Fee (₦)</label>
+                        <input type="number" name="ussd_activation_fee" step="any" class="form-control" value="<?php echo $get_logged_admin_details['ussd_activation_fee'] ?? '0.00'; ?>" placeholder="0.00">
+                        <div class="form-text small text-muted">Deducted when reseller enables USSD on their hub settings.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Per-USSD Call Charge (₦)</label>
+                        <input type="number" name="ussd_per_call_charge" step="any" class="form-control" value="<?php echo $get_logged_admin_details['ussd_per_call_charge'] ?? '0.00'; ?>" placeholder="0.00">
+                        <div class="form-text small text-muted">Deducted from reseller wallet balance per successful USSD delivery.</div>
+                    </div>
+                    <button type="submit" name="update-ussd-charges" class="btn btn-warning btn-sm w-100 rounded-pill fw-bold shadow-sm py-2 mb-3">Update Fees</button>
+                </form>
+
+                <h6 class="fw-bold small border-bottom pb-2 text-uppercase text-muted"><i class="bi bi-people me-2"></i>Activated Resellers</h6>
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead>
+                            <tr class="small text-muted">
+                                <th>Reseller</th>
+                                <th>Date</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="small">
+                            <?php
+                            $get_activations = mysqli_query($connection_server, "SELECT a.*, u.username FROM sas_ussd_activations a JOIN sas_users u ON a.user_id = u.id WHERE a.vendor_id='".$get_logged_admin_details["id"]."' AND a.status=1");
+                            if (mysqli_num_rows($get_activations) > 0) {
+                                while($act = mysqli_fetch_assoc($get_activations)) {
+                                    echo '<tr>
+                                            <td>@'.$act['username'].'</td>
+                                            <td>'.date("d M y", strtotime($act['activated_at'])).'</td>
+                                            <td class="text-end"><a href="?type='.$service_type.'&action=revoke-ussd&id='.$act['id'].'" class="btn btn-outline-danger btn-xs" onclick="return confirm(\'Revoke USSD access for this reseller?\')">Revoke</a></td>
+                                          </tr>';
+                                }
+                            } else {
+                                echo '<tr><td colspan="3" class="text-center py-3 text-muted">No activated resellers.</td></tr>';
+                            }
+                            ?>
+                        </tbody>
+                    </table>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -339,15 +475,15 @@
               </div>
               <div class="col-md-3">
                 <label class="form-label small fw-bold text-primary">Smart Level (N)</label>
-                <input type="number" step="0.01" id="new_price" name="price" class="form-control rounded-3" placeholder="0.00" required>
+                <input type="number" step="any" id="new_price" name="price" class="form-control rounded-3" placeholder="0.00" required>
               </div>
               <div class="col-md-3">
                 <label class="form-label small fw-bold text-success">Agent Level (N)</label>
-                <input type="number" step="0.01" id="new_price_agent" name="price_agent" class="form-control rounded-3" placeholder="0.00" required>
+                <input type="number" step="any" id="new_price_agent" name="price_agent" class="form-control rounded-3" placeholder="0.00" required>
               </div>
               <div class="col-md-2">
                 <label class="form-label small fw-bold text-info">API Level (N)</label>
-                <input type="number" step="0.01" id="new_price_api" name="price_api" class="form-control rounded-3" placeholder="0.00" required>
+                <input type="number" step="any" id="new_price_api" name="price_api" class="form-control rounded-3" placeholder="0.00" required>
               </div>
               <div class="col-12">
                 <button type="submit" name="add-epin-plan" class="btn btn-primary w-100 rounded-pill fw-bold shadow-sm py-2 mt-2">

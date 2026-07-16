@@ -55,7 +55,7 @@ $potential_savings = $total_spent * 0.15; // Assume 15% savings possible by swit
             <h3>Wallet Burn Rate</h3>
             <p>Based on your current spending, your balance will last for approximately:</p>
             <p style="font-size: 1.5rem; color: #fbbf24;">12 Days</p>
-            <p>I'll remind you on WhatsApp 2 days before exhaustion.</p>
+            <p>I'll email you 2 days before exhaustion.</p>
         </div>
     </div>
 

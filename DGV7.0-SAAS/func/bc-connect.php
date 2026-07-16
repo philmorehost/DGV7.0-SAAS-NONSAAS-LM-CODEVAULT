@@ -31,9 +31,6 @@
 	include_once(__DIR__ . "/bc-mailer.php");
 	include_once(__DIR__ . "/email-design.php");
 	include_once(__DIR__ . "/bc-levelup.php");
-	if (file_exists(__DIR__ . "/db-json.php")) {
-	    bc_verify_integrity();
-	}
 
     $connection = null;
     $connection_server = null;
@@ -51,9 +48,14 @@
         $connection = null;
     }
 
+	if (file_exists(__DIR__ . "/db-json.php")) {
+	    bc_verify_integrity();
+	}
+
 
     // Now include functions that may depend on $connection_server
     include_once(__DIR__ . "/bc-func.php");
+    include_once(__DIR__ . "/bc-bulk-queue.php");
 
     // License Verification & Grace Period Logic
     if ($connection_server) {

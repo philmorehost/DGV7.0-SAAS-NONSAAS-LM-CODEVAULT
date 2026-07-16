@@ -39,7 +39,7 @@ if ($get_vendor) {
             "currency_symbol" => "₦",
             "support" => [
                 "email" => $get_vendor['email'] ?? "",
-                "whatsapp" => !empty($get_vendor['phone_number']) ? "234" . ltrim($get_vendor['phone_number'], '0') : "",
+                "phone" => !empty($get_vendor['phone_number']) ? "234" . ltrim($get_vendor['phone_number'], '0') : "",
                 "address" => $get_vendor['home_address'] ?? ""
             ]
         ]

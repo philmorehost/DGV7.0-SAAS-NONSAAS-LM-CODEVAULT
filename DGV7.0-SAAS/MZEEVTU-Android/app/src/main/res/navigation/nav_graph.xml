@@ -8,7 +8,7 @@
     <!-- Bottom Nav Tabs -->
     <fragment
         android:id="@+id/nav_home"
-        android:name="com.dgv6.app.ui.dashboard.HomeFragment"
+        android:name="com.mzeevtu.apprelease.ui.dashboard.HomeFragment"
         android:label="Home"
         tools:layout="@layout/fragment_home">
 
@@ -50,19 +50,19 @@
 
     <fragment
         android:id="@+id/nav_services"
-        android:name="com.dgv6.app.ui.dashboard.ServicesFragment"
+        android:name="com.mzeevtu.apprelease.ui.dashboard.ServicesFragment"
         android:label="Services"
         tools:layout="@layout/fragment_services" />
 
     <fragment
         android:id="@+id/nav_wallet"
-        android:name="com.dgv6.app.ui.dashboard.WalletFragment"
+        android:name="com.mzeevtu.apprelease.ui.dashboard.WalletFragment"
         android:label="Wallet"
         tools:layout="@layout/fragment_wallet" />
 
     <fragment
         android:id="@+id/nav_profile"
-        android:name="com.dgv6.app.ui.dashboard.ProfileFragment"
+        android:name="com.mzeevtu.apprelease.ui.dashboard.ProfileFragment"
         android:label="Profile"
         tools:layout="@layout/fragment_profile">
         <action android:id="@+id/action_profile_to_set_pin"
@@ -75,84 +75,84 @@
 
     <!-- Service Screens -->
     <fragment android:id="@+id/nav_airtime"
-        android:name="com.dgv6.app.ui.services.AirtimeFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.AirtimeFragment"
         android:label="Buy Airtime"
         tools:layout="@layout/fragment_airtime" />
 
     <fragment android:id="@+id/nav_data"
-        android:name="com.dgv6.app.ui.services.DataFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.DataFragment"
         android:label="Buy Data"
         tools:layout="@layout/fragment_data" />
 
     <fragment android:id="@+id/nav_cable"
-        android:name="com.dgv6.app.ui.services.CableFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.CableFragment"
         android:label="Cable TV"
         tools:layout="@layout/fragment_cable" />
 
     <fragment android:id="@+id/nav_electric"
-        android:name="com.dgv6.app.ui.services.ElectricFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.ElectricFragment"
         android:label="Electricity"
         tools:layout="@layout/fragment_electric" />
 
     <fragment android:id="@+id/nav_exam"
-        android:name="com.dgv6.app.ui.services.ExamFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.ExamFragment"
         android:label="Exam Pin"
         tools:layout="@layout/fragment_exam" />
 
     <fragment android:id="@+id/nav_sms"
-        android:name="com.dgv6.app.ui.services.BulkSmsFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.BulkSmsFragment"
         android:label="Bulk SMS"
         tools:layout="@layout/fragment_bulk_sms" />
 
     <fragment android:id="@+id/nav_giftcard"
-        android:name="com.dgv6.app.ui.services.GiftCardFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.GiftCardFragment"
         android:label="Gift Cards"
         tools:layout="@layout/fragment_giftcard" />
 
     <fragment android:id="@+id/nav_vcard"
-        android:name="com.dgv6.app.ui.services.VirtualCardFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.VirtualCardFragment"
         android:label="Virtual Card"
         tools:layout="@layout/fragment_virtual_card" />
 
     <fragment android:id="@+id/nav_crypto"
-        android:name="com.dgv6.app.ui.services.CryptoFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.CryptoFragment"
         android:label="Crypto Hub"
         tools:layout="@layout/fragment_crypto" />
 
     <!-- Wallet Screens -->
     <fragment android:id="@+id/nav_fund_wallet"
-        android:name="com.dgv6.app.ui.wallet.FundWalletFragment"
+        android:name="com.mzeevtu.apprelease.ui.wallet.FundWalletFragment"
         android:label="Fund Wallet"
         tools:layout="@layout/fragment_fund_wallet" />
 
     <fragment android:id="@+id/nav_withdraw"
-        android:name="com.dgv6.app.ui.wallet.WithdrawFragment"
+        android:name="com.mzeevtu.apprelease.ui.wallet.WithdrawFragment"
         android:label="Withdraw"
         tools:layout="@layout/fragment_withdraw" />
 
     <fragment android:id="@+id/nav_share_fund"
-        android:name="com.dgv6.app.ui.wallet.ShareFundFragment"
+        android:name="com.mzeevtu.apprelease.ui.wallet.ShareFundFragment"
         android:label="Share Fund"
         tools:layout="@layout/fragment_share_fund" />
 
     <fragment android:id="@+id/nav_betting"
-        android:name="com.dgv6.app.ui.services.BettingFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.BettingFragment"
         android:label="Betting"
         tools:layout="@layout/fragment_betting" />
 
     <!-- History & Security -->
     <fragment android:id="@+id/nav_transactions"
-        android:name="com.dgv6.app.ui.transactions.TransactionsFragment"
+        android:name="com.mzeevtu.apprelease.ui.transactions.TransactionsFragment"
         android:label="Transactions"
         tools:layout="@layout/fragment_transactions" />
 
     <fragment android:id="@+id/nav_set_pin"
-        android:name="com.dgv6.app.ui.security.SetPinFragment"
+        android:name="com.mzeevtu.apprelease.ui.security.SetPinFragment"
         android:label="Set PIN"
         tools:layout="@layout/fragment_set_pin" />
 
     <fragment android:id="@+id/nav_print_hub"
-        android:name="com.dgv6.app.ui.services.PrintHubFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.PrintHubFragment"
         android:label="Print Hub"
         tools:layout="@layout/fragment_print_hub">
         <action android:id="@+id/action_print_to_nin"
@@ -162,17 +162,17 @@
     </fragment>
 
     <fragment android:id="@+id/nav_nin_card"
-        android:name="com.dgv6.app.ui.services.NINCardFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.NINCardFragment"
         android:label="NIN Slip"
         tools:layout="@layout/fragment_nin_card" />
 
     <fragment android:id="@+id/nav_bvn_verify"
-        android:name="com.dgv6.app.ui.services.BVNVerifyFragment"
+        android:name="com.mzeevtu.apprelease.ui.services.BVNVerifyFragment"
         android:label="BVN Verify"
         tools:layout="@layout/fragment_bvn_verify" />
 
     <fragment android:id="@+id/nav_kyc"
-        android:name="com.dgv6.app.ui.profile.KYCFragment"
+        android:name="com.mzeevtu.apprelease.ui.profile.KYCFragment"
         android:label="KYC Verification"
         tools:layout="@layout/fragment_kyc" />
 

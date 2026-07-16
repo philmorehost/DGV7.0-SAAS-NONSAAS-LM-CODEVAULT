@@ -101,5 +101,12 @@
     "selected_addons": null,
     "total_order_amount": "0.00",
     "identity_api_id": null,
-    "trans_email_enabled": 1
+    "trans_email_enabled": 1,
+    "hollatags_username": null,
+    "hollatags_password": null,
+    "hollatags_ussd_code": null,
+    "ussd_activation_fee": "0.00",
+    "ussd_per_call_charge": "0.00",
+    "ussd_channel_mode": "Both",
+    "ussd_access": 0
 }

@@ -648,6 +648,22 @@
         exit();
     }
 
+
+    if(isset($_POST["update-cpanel-settings"])){
+        $cp_host = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["cpanel_host"])));
+        $cp_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["cpanel_username"])));
+        $cp_token = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["cpanel_api_token"])));
+
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('cpanel_host', '$cp_host') ON DUPLICATE KEY UPDATE option_value='$cp_host'");
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('cpanel_username', '$cp_user') ON DUPLICATE KEY UPDATE option_value='$cp_user'");
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('cpanel_api_token', '$cp_token') ON DUPLICATE KEY UPDATE option_value='$cp_token'");
+
+        $_SESSION["product_purchase_response"] = "cPanel API settings updated successfully";
+        header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit();
+    }
+
+
     if(isset($_POST["update-printhub-settings"])){
         $new_secret = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["ph_secret"])));
         if(!empty($new_secret)){
@@ -825,6 +841,7 @@
                         <button class="nav-link text-start mb-2 rounded-3 py-3" data-bs-toggle="pill" data-bs-target="#tab-site"><i class="bi bi-globe me-2"></i> Site Details</button>
                         <button class="nav-link text-start rounded-3 py-3" data-bs-toggle="pill" data-bs-target="#tab-system"><i class="bi bi-cpu me-2"></i> System Tools</button>
                         <button class="nav-link text-start rounded-3 py-3" data-bs-toggle="pill" data-bs-target="#tab-whmcs"><i class="bi bi-globe2 me-2"></i> WHMCS API</button>
+                        <button class="nav-link text-start rounded-3 py-3" data-bs-toggle="pill" data-bs-target="#tab-cpanel"><i class="bi bi-hdd-network me-2"></i> cPanel API</button>
                         <button class="nav-link text-start rounded-3 py-3" data-bs-toggle="pill" data-bs-target="#tab-printhub"><i class="bi bi-printer me-2"></i> Print Hub / API</button>
                         <button class="nav-link text-start rounded-3 py-3" data-bs-toggle="pill" data-bs-target="#tab-license"><i class="bi bi-key-fill me-2"></i> License Info</button>
                     </div>
@@ -1183,6 +1200,41 @@
                     </div>
                 </div>
 
+
+<!-- cPanel API Tab -->
+                <div class="tab-pane fade" id="tab-cpanel">
+                    <div class="card shadow-sm border-0 rounded-4">
+                        <div class="card-header bg-white py-3 border-0"><h5 class="fw-bold mb-0">cPanel API Configuration</h5></div>
+                        <div class="card-body p-4">
+                            <div class="alert alert-info border-0 rounded-4 p-3 mb-4 small">
+                                <i class="bi bi-info-circle-fill me-2"></i> This integration allows automatic Addon Domain creation when a vendor's website domain is approved or changed. Ensure your cPanel API token has the necessary privileges.
+                            </div>
+                            <form method="post">
+                                <?php
+                                $cp_host = getSuperAdminOption('cpanel_host');
+                                $cp_user = getSuperAdminOption('cpanel_username');
+                                $cp_token = getSuperAdminOption('cpanel_api_token');
+                                ?>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted">CPANEL HOSTNAME OR IP</label>
+                                    <input name="cpanel_host" type="text" value="<?php echo $cp_host; ?>" class="form-control rounded-3" placeholder="e.g. 192.168.1.1 or server.example.com" required />
+                                </div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold text-muted">CPANEL USERNAME</label>
+                                        <input name="cpanel_username" type="text" value="<?php echo $cp_user; ?>" class="form-control rounded-3" placeholder="e.g. cpuser" required />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold text-muted">API TOKEN</label>
+                                        <input name="cpanel_api_token" type="password" value="<?php echo $cp_token; ?>" class="form-control rounded-3" placeholder="API Token" required />
+                                    </div>
+                                </div>
+                                <button name="update-cpanel-settings" class="btn btn-primary px-5 rounded-pill fw-bold">Save cPanel Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Print Hub Tab -->
                 <div class="tab-pane fade" id="tab-printhub">
                     <div class="card shadow-sm border-0 rounded-4 mb-4">
@@ -1237,6 +1289,20 @@
 
                 <!-- System Tools Tab -->
                 <div class="tab-pane fade" id="tab-system">
+                    <div class="card shadow-sm border-0 rounded-4 mb-4">
+                        <div class="card-header bg-white py-3 border-0"><h5 class="fw-bold mb-0">Temporary Vendor Access</h5></div>
+                        <div class="card-body p-4">
+                            <form method="post">
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted">EXPIRY DURATION (DAYS)</label>
+                                    <input name="tmp_url_expiry_days" type="number" min="1" max="30" value="<?php echo getSuperAdminOption('tmp_url_expiry_days', '3'); ?>" class="form-control rounded-3" required />
+                                    <div class="form-text small">Number of days vendors can use their temporary access URL after approval before it expires.</div>
+                                </div>
+                                <button name="update-tmp-url-settings" class="btn btn-primary px-5 rounded-pill fw-bold">Save Setting</button>
+                            </form>
+                        </div>
+                    </div>
+
                     <div class="card shadow-sm border-0 rounded-4 mb-4">
                         <div class="card-header bg-white py-3 border-0"><h5 class="fw-bold mb-0">App Service Pricing (Optional Add-ons)</h5></div>
                         <div class="card-body p-4">
@@ -1309,6 +1375,40 @@
                                         </button>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div class="bg-light p-4 rounded-4 border mb-4 mt-4">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3">
+                                        <i class="bi bi-cloud-arrow-down text-primary fs-4"></i>
+                                    </div>
+                                    <h6 class="fw-bold mb-0">System Automated Updates (OTA)</h6>
+                                </div>
+                                <p class="small text-muted mb-4">To automate super admin over-the-air platform update installations with email notifications, set up a cron job on your server to execute once every 24 hours.</p>
+
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">Recommended Command Path</label>
+                                    <div class="input-group mb-2 shadow-sm">
+                                        <input type="text" class="form-control bg-white font-monospace small" value="php <?php echo realpath(dirname(__FILE__) . '/cron_update.php'); ?>" readonly id="cronPathUpdates">
+                                        <button class="btn btn-primary" type="button" onclick="copyText('Update cron path copied', document.getElementById('cronPathUpdates').value)">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-light p-4 rounded-4 border mt-4">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-danger bg-opacity-10 p-2 rounded-3 me-3">
+                                        <i class="bi bi-trash text-danger fs-4"></i>
+                                    </div>
+                                    <h6 class="fw-bold mb-0">System Tools & Maintenance</h6>
+                                </div>
+                                <p class="small text-muted mb-4">Safely optimize SAAS database tables, clean update staging files, delete redundant log files, and remove old zip backups.</p>
+
+                                <a href="cleanup_platform.php" target="_blank" class="btn btn-outline-danger btn-sm rounded-pill fw-bold px-4 py-2">
+                                    <i class="bi bi-trash-fill me-1"></i> Launch Platform Cleanup Utility
+                                </a>
                             </div>
                         </div>
                     </div>

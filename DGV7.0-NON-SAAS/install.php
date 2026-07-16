@@ -240,7 +240,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'install') {
         'exam'         => ['clubkonnect.com','abumpay.com','naijaresultpins.com'],
         'rechargecard' => ['alrahuzdata.com','bilalsadasub.com','clubkonnect.com','legitdataway.com'],
         'betting'      => ['clubkonnect.com'],
-        'sms'          => ['philmoresms.com','kudisms.net','termii.com'],
+        'sms'          => ['app.philmoresms.com','kudisms.net','termii.com'],
     ];
 
     foreach ($api_seeds as $api_type => $providers) {

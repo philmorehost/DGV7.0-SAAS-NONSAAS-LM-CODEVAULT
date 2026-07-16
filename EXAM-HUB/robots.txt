@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /core/
+Disallow: /install/
+Disallow: /includes/
+
+# AI Crawler optimization (Allowing AI bots as requested by SEO strategy)
+User-agent: GPTBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Anthropic-ai
+Allow: /
+User-agent: Claude-Web
+Allow: /
+
+# Content-Signal
+Content-Signal: Enhanced
+
+Sitemap: /sitemap.xml

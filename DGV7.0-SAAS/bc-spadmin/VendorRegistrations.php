@@ -81,6 +81,9 @@
                         // 6. Delete from pending vendors
                         mysqli_query($connection_server, "DELETE FROM sas_pending_vendors WHERE id='$pending_id'") or die("Error deleting from pending vendors: " . mysqli_error($connection_server));
 
+                        // 6b. Add addon domain via cPanel API
+                        include_once(__DIR__ . "/../func/cpanel-func.php");
+                        cpanel_add_addon_domain($website_url);
 
                         // Fetch domain settings to include in the welcome email
                         $nameservers = '';
@@ -119,6 +122,20 @@
                             $email_subject = str_replace($key, $val, $email_subject);
                             $email_body = str_replace($key, $val, $email_body);
                         }
+
+                        // Append instructions for the temporary URL
+                        $expiry_days = (int)getSuperAdminOption('tmp_url_expiry_days', '3');
+                        $tmp_instructions = "
+                        <br><br>
+                        <strong>Temporary Dashboard Access:</strong><br>
+                        While your domain name (<strong>{$website_url}</strong>) is propagating, you can access your temporary admin dashboard through your Portal Link above. This temporary access will be valid for <strong>{$expiry_days} days</strong>.
+                        ";
+                        if (strpos($email_body, 'Portal Link') === false && strpos($email_body, '{portal_link}') === false) {
+                           // if {portal_link} was missing from the template, ensure they get it
+                           $email_body .= "<br><br><strong>Portal Link:</strong> <a href=\"{$portal_link}\">{$portal_link}</a>";
+                        }
+                        $email_body .= $tmp_instructions;
+
                         sendVendorEmail($email, $email_subject, $email_body);
 
                         $_SESSION['page_alert'] = "Vendor approved and account activated.";

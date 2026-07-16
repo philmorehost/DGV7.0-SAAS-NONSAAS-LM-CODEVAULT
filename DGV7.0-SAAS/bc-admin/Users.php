@@ -175,6 +175,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: /bc-admin/Users.php");
+        exit;
     }
 
     if(isset($_POST["permanent-delete-user"])){
@@ -250,6 +251,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: /bc-admin/Users.php");
+        exit;
     }
 
     if(isset($_GET["account-log"])){
@@ -261,6 +263,8 @@
                     $get_user_info = mysqli_fetch_array($get_logged_user_query);
                     $_SESSION["user_session"] = $get_user_info["username"];
                     $_SESSION["admin_to_user_redirect"] = true;
+                    $json_response_array = array("desc" => "Redirecting to user dashboard...");
+                    $json_response_encode = json_encode($json_response_array, true);
                 }else{
                     if(mysqli_num_rows($get_logged_user_query) < 1){
                         $json_response_array = array("desc" => "Error: User not Exists");
@@ -285,6 +289,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: /bc-admin/Users.php");
+        exit;
     }
     
 ?>

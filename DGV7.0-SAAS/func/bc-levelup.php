@@ -8,12 +8,8 @@ if (!defined('SYSTEM_ENTRY')) {
  * Dynamic Encryption/Decryption Helpers
  */
 function bc_crypt_secret_key() {
-    $domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    if (strpos($domain, ':') !== false) {
-        $domain = explode(':', $domain)[0];
-    }
-    // Mix the domain name with a strong private salt
-    return hash('sha256', $domain . 'DGV7_INTEGRITY_SALT_2026_!');
+    // Stable key independent of the accessing domain to allow multi-tenant SAAS vendor domains to decrypt activation token
+    return hash('sha256', 'DGV7_INTEGRITY_SALT_2026_!');
 }
 
 function bc_encrypt_key($plain_text) {
@@ -107,7 +103,24 @@ function bc_verify_integrity() {
     }
 
     $domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    // Clean up domain (remove port if present)
+
+    // Use the exact domain the license was registered under (set when the admin
+    // saved/validated the key in Account Settings). Falling back to a guessed
+    // vendor domain here caused valid keys to fail integrity checks whenever the
+    // first-registered vendor's website_url didn't match what was actually
+    // licensed with the remote server.
+    global $connection_server;
+    if (isset($connection_server) && $connection_server) {
+        $q_domain = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='license_domain' LIMIT 1");
+        if ($q_domain && $r_domain = mysqli_fetch_assoc($q_domain)) {
+            if (!empty($r_domain['option_value'])) {
+                $domain = $r_domain['option_value'];
+            }
+        }
+    }
+
+    // Clean up domain (remove protocol and port if present)
+    $domain = str_replace(["https://", "http://"], "", $domain);
     if (strpos($domain, ':') !== false) {
         $domain = explode(':', $domain)[0];
     }
@@ -176,7 +189,7 @@ function bc_verify_integrity() {
             ];
             @file_put_contents($cache_file, json_encode($new_cache));
 
-            if ($status === 1) {
+            if ($status === 1 || (isset($res_decoded['message']) && stripos($res_decoded['message'], 'Limit exceeded') !== false)) {
                 $GLOBALS['bc_integrity_fail'] = false;
                 return true;
             } else {

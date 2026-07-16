@@ -469,12 +469,69 @@ switch ($action_type) {
     case 'analysis':
         $ai_result = $ai->chat($model_to_use, $safe_prompt, ['temperature' => 0.3]);
         break;
+    case 'balance':
+        // Direct data lookup — no AI call needed, so this doesn't burn tokens.
+        $bal = (float)($get_logged_user_details['balance'] ?? 0);
+        $ai_result = [
+            'status'      => 'success',
+            'response'    => "Your current wallet balance is ₦" . number_format($bal, 2) . ".",
+            'model'       => 'system',
+            'duration_ms' => 0,
+        ];
+        $tokens_per_call = 0;
+        break;
+    case 'batch_status':
+        // Direct data lookup via the bulk-queue progress helper — no AI call needed.
+        $batch_number = trim($json_input['batch_number'] ?? $_POST['batch_number'] ?? '');
+        if (empty($batch_number)) {
+            echo json_encode(['status' => 'error', 'code' => 'MISSING_BATCH', 'message' => 'Please provide a batch number.']);
+            exit;
+        }
+        $progress = bc_get_bulk_batch_progress($connection_server, $safe_vid, $is_admin_actor ? null : $username, $batch_number);
+        $ai_result = [
+            'status'      => 'success',
+            'response'    => "Batch #$batch_number is <b>{$progress['status']}</b>: {$progress['successful']} successful, {$progress['failed']} failed, {$progress['pending']} pending of {$progress['total']} total."
+                . (!empty($progress['ai_diagnosis']) ? " AI diagnosis: " . $progress['ai_diagnosis'] : ""),
+            'model'       => 'system',
+            'duration_ms' => 0,
+        ];
+        $tokens_per_call = 0;
+        break;
     default:
         $is_confirm = preg_match('/\b(yes|confirm|proceed|go ahead|yep|sure|ok|do it|okay|process)\b/i', trim($prompt_raw));
         if ($is_confirm && !empty($_SESSION['ai_pending_vtu'])) {
             $intent = $_SESSION['ai_pending_vtu'];
-            $action_type = 'execute_vtu'; 
+            $action_type = 'execute_vtu';
             goto execute_vtu_logic;
+        }
+
+        // Proactive: balance queries answered directly from real data (no AI guessing, no token cost)
+        if (preg_match('/\b(my\s+)?(wallet\s+)?balance\b|how much (do i have|is in my wallet)/i', $prompt_raw)) {
+            $bal = (float)($get_logged_user_details['balance'] ?? 0);
+            $ai_result = [
+                'status'      => 'success',
+                'response'    => "Your current wallet balance is ₦" . number_format($bal, 2) . ".",
+                'model'       => 'system',
+                'duration_ms' => 0,
+            ];
+            $tokens_per_call = 0;
+            break;
+        }
+
+        // Proactive: batch status queries ("check batch 4F2A9C", "status of batch #4F2A9C")
+        if (preg_match('/batch\s*#?\s*([a-zA-Z0-9]{4,10})/i', $prompt_raw, $batch_match)) {
+            $progress = bc_get_bulk_batch_progress($connection_server, $safe_vid, $is_admin_actor ? null : $username, $batch_match[1]);
+            if ($progress['total'] > 0) {
+                $ai_result = [
+                    'status'      => 'success',
+                    'response'    => "Batch #{$batch_match[1]} is <b>{$progress['status']}</b>: {$progress['successful']} successful, {$progress['failed']} failed, {$progress['pending']} pending of {$progress['total']} total."
+                        . (!empty($progress['ai_diagnosis']) ? " AI diagnosis: " . $progress['ai_diagnosis'] : ""),
+                    'model'       => 'system',
+                    'duration_ms' => 0,
+                ];
+                $tokens_per_call = 0;
+                break;
+            }
         }
 
         // Proactive Intent Detection: Check if this is a transaction request

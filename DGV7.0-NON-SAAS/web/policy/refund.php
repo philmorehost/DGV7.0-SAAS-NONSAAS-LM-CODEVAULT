@@ -38,7 +38,7 @@ include_once '_header.php';
     <li>Log in to your account and navigate to <strong>Transaction History</strong>.</li>
     <li>Locate the affected transaction and use the <strong>Requery</strong> feature to check the delivery status.</li>
     <li>If the requery confirms non-delivery, the amount will be auto-reversed to your wallet within 15 minutes.</li>
-    <li>For cases not resolved by the requery feature, contact support via WhatsApp or live chat with your transaction reference number.</li>
+    <li>For cases not resolved by the requery feature, contact support via live chat with your transaction reference number.</li>
 </ol>
 
 <h2>6. Processing Time</h2>

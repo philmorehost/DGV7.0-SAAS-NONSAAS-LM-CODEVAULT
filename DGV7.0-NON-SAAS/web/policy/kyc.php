@@ -64,6 +64,6 @@ include_once '_header.php';
 </ul>
 
 <h2>10. Contact</h2>
-<p>If you have questions about the KYC process or your verification status, contact our support team via the WhatsApp or live chat button on our homepage.</p>
+<p>If you have questions about the KYC process or your verification status, contact our support team via the live chat button on our homepage.</p>
 
 <?php include_once '_footer.php'; ?>

@@ -65,6 +65,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     } 
 
     include_once("../func/bc-product-actions.php");
@@ -101,10 +102,14 @@
 
     if(isset($_POST["install-product"])){
         $products_array = array("mtn", "airtel", "glo", "9mobile");
+        // NOTE: these values become `val_1`, looked up verbatim by api-gateway files (see the
+        // SAAS edition's func/api-gateway/shared-data-hdkdata-com.php for the pattern) — keep
+        // them as plain size labels with no "_Nday(s)" suffix. Validity days are tracked
+        // separately in val_3 ("Days" column in the pricing table below).
         $product_varieties = array(
-            "mtn" => array("1gb_1day","2.5gb_1day"),
-            "airtel" => array("500mb_7days","1gb_7days"),
-            "glo" => array("1gb_3days","3gb_7days","5gb_3days"),
+            "mtn" => array("1gb","2.5gb"),
+            "airtel" => array("500mb","1gb"),
+            "glo" => array("1gb","3gb","5gb"),
             "9mobile" => array()
         );
         $account_level_table_name_arrays = array("sas_smart_parameter_values", "sas_agent_parameter_values", "sas_api_parameter_values");
@@ -169,6 +174,7 @@
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
     $csv_price_level_array = [];
@@ -277,19 +283,19 @@
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Prov. %</label>
-                            <input type="number" id="provider-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="provider-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Smart %</label>
-                            <input type="number" id="smart-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="smart-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">Agent %</label>
-                            <input type="number" id="agent-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="agent-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-1">
                             <label class="form-label small fw-bold">API %</label>
-                            <input type="number" id="api-disc" class="form-control" value="0" step="0.1">
+                            <input type="number" id="api-disc" class="form-control" value="0" step="any">
                         </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" onclick="fetchVariations();" class="btn btn-primary w-100 fw-bold">Fetch Plans</button>
@@ -515,9 +521,9 @@
                                                         <input name="product-code-1[]" type="hidden" value="'.$product_smart_details["val_1"].'"/>
                                                         <input name="product-name[]" type="hidden" class="product-name-val" value="'.$product_smart_details["val_4"].'"/>
                                                     </td>
-                                                    <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_smart_level" name="smart-price[]" type="number" step="0.01" value="'.$product_smart_details["val_2"].'" class="form-control form-control-sm text-center" style="max-width:90px"></td>
-                                                    <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_agent_level" name="agent-price[]" type="number" step="0.01" value="'.$product_agent_details["val_2"].'" class="form-control form-control-sm text-center" style="max-width:90px"></td>
-                                                    <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_api_level" name="api-price[]" type="number" step="0.01" value="'.$product_api_details["val_2"].'" class="form-control form-control-sm text-center" style="max-width:90px"></td>
+                                                    <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_smart_level" name="smart-price[]" type="number" step="any" value="'.$product_smart_details["val_2"].'" class="form-control form-control-sm text-center" style="max-width:90px"></td>
+                                                    <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_agent_level" name="agent-price[]" type="number" step="any" value="'.$product_agent_details["val_2"].'" class="form-control form-control-sm text-center" style="max-width:90px"></td>
+                                                    <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_api_level" name="api-price[]" type="number" step="any" value="'.$product_api_details["val_2"].'" class="form-control form-control-sm text-center" style="max-width:90px"></td>
                                                     <td><input id="'.strtolower($products).'_shared_data_'.str_replace(["_","-"],"_",$product_smart_details["val_1"]).'_days" name="product-days[]" type="number" value="'.$product_api_details["val_3"].'" class="form-control form-control-sm text-center" style="max-width:60px"></td>
                                                     <td>'.$status_badge.'</td>
                                                     <td class="text-end pe-3">

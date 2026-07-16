@@ -146,7 +146,7 @@
 
             <div class="small text-muted mb-0">
               <p class="mb-2"><i class="bi bi-clock me-2"></i>Wallet funded within 15 mins of confirmation.</p>
-              <p class="mb-0"><i class="bi bi-whatsapp me-2"></i>Support: <span class="fw-bold text-success"><?php echo $get_admin_payment_details["phone_number"]; ?></span></p>
+              <p class="mb-0"><i class="bi bi-telephone-fill me-2"></i>Support: <span class="fw-bold text-success"><?php echo $get_admin_payment_details["phone_number"]; ?></span></p>
             </div>
           </div>
         </div>

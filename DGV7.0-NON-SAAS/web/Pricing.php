@@ -508,11 +508,12 @@
 
         <?php if($is_pricing_empty): ?>
             <!-- Fallback Empty State if Admin hasn't setup prices yet -->
+            <?php $vendor_contact_email = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT email FROM sas_vendors WHERE id='$vid' LIMIT 1"))['email'] ?? ''; ?>
             <div class="empty-pricing-card text-center my-5 bg-white shadow-sm border rounded-4 py-5">
                 <i class="bi bi-tags-fill text-muted mb-3 opacity-50" style="font-size: 4rem;"></i>
                 <h4 class="fw-bold text-dark mb-2">Pricing Currently Unavailable</h4>
                 <p class="text-muted mx-auto mb-4" style="max-width: 500px;">The administrator is currently configuring the pricing and discount tables for this portal. Please contact our support team or try again later.</p>
-                <a href="https://wa.me/<?php echo $get_all_site_details['whatsapp_number'] ?? ''; ?>" target="_blank" class="btn btn-primary rounded-pill px-4 fw-bold shadow"><i class="bi bi-whatsapp me-2"></i>Contact Administrator</a>
+                <a href="mailto:<?php echo htmlspecialchars($vendor_contact_email); ?>" class="btn btn-primary rounded-pill px-4 fw-bold shadow"><i class="bi bi-envelope-fill me-2"></i>Contact Administrator</a>
             </div>
         <?php else: ?>
             

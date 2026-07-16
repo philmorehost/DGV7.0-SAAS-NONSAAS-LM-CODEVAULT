@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace 'com.dgv6.app'
-    compileSdk 33
+    namespace 'com.mzeevtu.apprelease'
+    compileSdk 35
 
     defaultConfig {
-        applicationId "com.dgv6.app"
+        applicationId "com.mzeevtu.apprelease"
         minSdk 24
-        targetSdk 33
-        versionCode 1
-        versionName "1.0.0"
+        targetSdk 35
+        versionCode 3
+        versionName "1.0.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 

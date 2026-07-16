@@ -181,6 +181,12 @@ function resolveVendorID($force_recompute = false) {
         return $static_vendor_id;
     }
 
+    // Temporary Override Cache for Temp URL Access
+    if (isset($_SESSION['tmp_vendor_override']) && $_SESSION['tmp_vendor_override'] > 0) {
+        $static_vendor_id = (int)$_SESSION['tmp_vendor_override'];
+        return $static_vendor_id;
+    }
+
     // Session Cache
     $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
     $host_key = 'cached_vid_' . str_replace(['.', ':'], '_', $host);
@@ -295,10 +301,14 @@ function isKYCEnforced($v_id = null) {
     if ($v_id === null) $v_id = resolveVendorID();
     if ($v_id <= 0) return false;
 
-    if (isset($kyc_enforced_cache[$v_id])) return $kyc_enforced_cache[$v_id];
+    // Check config page bypass
+    $current_uri = explode("?", trim($_SERVER["REQUEST_URI"] ?? ""))[0];
+    $is_config_page = in_array($current_uri, ["/web/AccountSettings.php", "/web/KYCVerification.php", "/web/SecurityQuest.php"]);
 
-    // Branch DG6.7 Optimization: Session Cache
-    if (isset($_SESSION['kyc_enforced_cache'][$v_id])) {
+    if (!$is_config_page && isset($kyc_enforced_cache[$v_id])) return $kyc_enforced_cache[$v_id];
+
+    // Branch DG6.7 Optimization: Session Cache with 30s TTL
+    if (!$is_config_page && isset($_SESSION['kyc_enforced_cache'][$v_id]) && isset($_SESSION['kyc_enforced_time'][$v_id]) && (time() - $_SESSION['kyc_enforced_time'][$v_id] < 30)) {
         $kyc_enforced_cache[$v_id] = $_SESSION['kyc_enforced_cache'][$v_id];
         return $kyc_enforced_cache[$v_id];
     }
@@ -307,7 +317,10 @@ function isKYCEnforced($v_id = null) {
     $global_force_kyc = getSuperAdminOption('force_kyc', '0');
     if ($global_force_kyc == 1) {
         $kyc_enforced_cache[$v_id] = true;
-        if (isset($_SESSION)) $_SESSION['kyc_enforced_cache'][$v_id] = true;
+        if (isset($_SESSION)) {
+            $_SESSION['kyc_enforced_cache'][$v_id] = true;
+            $_SESSION['kyc_enforced_time'][$v_id] = time();
+        }
         return true;
     }
 
@@ -316,13 +329,19 @@ function isKYCEnforced($v_id = null) {
     if ($q_v && $r = mysqli_fetch_assoc($q_v)) {
         if ($r['force_kyc'] == 1) {
             $kyc_enforced_cache[$v_id] = true;
-            if (isset($_SESSION)) $_SESSION['kyc_enforced_cache'][$v_id] = true;
+            if (isset($_SESSION)) {
+                $_SESSION['kyc_enforced_cache'][$v_id] = true;
+                $_SESSION['kyc_enforced_time'][$v_id] = time();
+            }
             return true;
         }
     }
 
     $kyc_enforced_cache[$v_id] = false;
-    if (isset($_SESSION)) $_SESSION['kyc_enforced_cache'][$v_id] = false;
+    if (isset($_SESSION)) {
+        $_SESSION['kyc_enforced_cache'][$v_id] = false;
+        $_SESSION['kyc_enforced_time'][$v_id] = time();
+    }
     return false;
 }
 
@@ -496,10 +515,10 @@ function checkTextEmpty($text)
 function userBalance($decimalIndex)
 {
 	global $get_logged_user_details;
-	if (!empty($get_logged_user_details["balance"])) {
-		$exp_number = array_filter(explode(".", trim($get_logged_user_details["balance"])));
-		$firstNumber = $exp_number[0];
-		$decimalNumber = $exp_number[1];
+	if (isset($get_logged_user_details["balance"]) && trim($get_logged_user_details["balance"]) !== "") {
+		$exp_number = explode(".", trim($get_logged_user_details["balance"]));
+		$firstNumber = isset($exp_number[0]) ? $exp_number[0] : '0';
+		$decimalNumber = isset($exp_number[1]) ? $exp_number[1] : '0';
 
 		if (is_numeric($get_logged_user_details["balance"]) && is_numeric($decimalIndex)) {
 			return ($firstNumber + 0) . "." . sprintf("%0" . $decimalIndex . "d", $decimalNumber);
@@ -516,10 +535,10 @@ function userBalance($decimalIndex)
 function vendorBalance($decimalIndex)
 {
 	global $get_logged_admin_details;
-	if (!empty($get_logged_admin_details["balance"])) {
-		$exp_number = array_filter(explode(".", trim($get_logged_admin_details["balance"])));
-		$firstNumber = $exp_number[0];
-		$decimalNumber = $exp_number[1];
+	if (isset($get_logged_admin_details["balance"]) && trim($get_logged_admin_details["balance"]) !== "") {
+		$exp_number = explode(".", trim($get_logged_admin_details["balance"]));
+		$firstNumber = isset($exp_number[0]) ? $exp_number[0] : '0';
+		$decimalNumber = isset($exp_number[1]) ? $exp_number[1] : '0';
 
 		if (is_numeric($get_logged_admin_details["balance"]) && is_numeric($decimalIndex)) {
 			return ($firstNumber + 0) . "." . sprintf("%0" . $decimalIndex . "d", $decimalNumber);
@@ -766,7 +785,11 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 							$raw_funding_template_body = str_replace($array_key, $array_val, $raw_funding_template_body);
 						}
 
-						$transaction_template_encoded_text_array = array("{admin_firstname}" => $get_vendor_det["firstname"], "{admin_lastname}" => $get_vendor_det["lastname"], "{username}" => $get_logged_user_det["username"], "{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_debit, 2), "{balance_after}" => toDecimal($user_balance_after_debit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
+						$vendor_firstname = $get_vendor_det ? ($get_vendor_det["firstname"] ?? "") : "";
+						$vendor_lastname = $get_vendor_det ? ($get_vendor_det["lastname"] ?? "") : "";
+						$vendor_email = $get_vendor_det ? ($get_vendor_det["email"] ?? "") : "";
+
+						$transaction_template_encoded_text_array = array("{admin_firstname}" => $vendor_firstname, "{admin_lastname}" => $vendor_lastname, "{username}" => $get_logged_user_det["username"], "{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_debit, 2), "{balance_after}" => toDecimal($user_balance_after_debit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
 						$raw_transaction_template_subject = getUserEmailTemplate('user-transactions', 'subject');
 						$raw_transaction_template_body = getUserEmailTemplate('user-transactions', 'body');
 						foreach ($transaction_template_encoded_text_array as $array_key => $array_val) {
@@ -774,7 +797,9 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 							$raw_transaction_template_body = str_replace($array_key, $array_val, $raw_transaction_template_body);
 						}
 						sendVendorEmail($get_logged_user_det["email"], $raw_funding_template_subject, $raw_funding_template_body);
-						sendVendorEmail($get_vendor_det["email"], $raw_transaction_template_subject, $raw_transaction_template_body);
+						if (!empty($vendor_email)) {
+							sendVendorEmail($vendor_email, $raw_transaction_template_subject, $raw_transaction_template_body);
+						}
 						// Email End
 						return "success";
 					} else {
@@ -801,7 +826,11 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 						$raw_funding_template_body = str_replace($array_key, $array_val, $raw_funding_template_body);
 					}
 
-					$transaction_template_encoded_text_array = array("{admin_firstname}" => $get_vendor_det["firstname"], "{admin_lastname}" => $get_vendor_det["lastname"], "{username}" => $get_logged_user_det["username"], "{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_credit, 2), "{balance_after}" => toDecimal($user_balance_after_credit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
+					$vendor_firstname = $get_vendor_det ? ($get_vendor_det["firstname"] ?? "") : "";
+					$vendor_lastname = $get_vendor_det ? ($get_vendor_det["lastname"] ?? "") : "";
+					$vendor_email = $get_vendor_det ? ($get_vendor_det["email"] ?? "") : "";
+
+					$transaction_template_encoded_text_array = array("{admin_firstname}" => $vendor_firstname, "{admin_lastname}" => $vendor_lastname, "{username}" => $get_logged_user_det["username"], "{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_credit, 2), "{balance_after}" => toDecimal($user_balance_after_credit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
 					$raw_transaction_template_subject = getUserEmailTemplate('user-transactions', 'subject');
 					$raw_transaction_template_body = getUserEmailTemplate('user-transactions', 'body');
 					foreach ($transaction_template_encoded_text_array as $array_key => $array_val) {
@@ -809,7 +838,9 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 						$raw_transaction_template_body = str_replace($array_key, $array_val, $raw_transaction_template_body);
 					}
 					sendVendorEmail($get_logged_user_det["email"], $raw_funding_template_subject, $raw_funding_template_body);
-					sendVendorEmail($get_vendor_det["email"], $raw_transaction_template_subject, $raw_transaction_template_body);
+					if (!empty($vendor_email)) {
+						sendVendorEmail($vendor_email, $raw_transaction_template_subject, $raw_transaction_template_body);
+					}
 					// Email End
 					return "success";
 				} else {
@@ -1874,7 +1905,7 @@ function sendVendorEmail($recipient_email, $email_subject, $email_body)
 	// More headers
     $from_name = $get_all_site_details["site_title"] ?? $get_all_super_admin_site_details["site_title"] ?? "System Admin";
 	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
-	$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
+	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
 	$website_admin_phone_number = "234" . substr($logged_account_details["phone_number"], 1, 11);
@@ -1910,7 +1941,7 @@ function sendSuperAdminEmail($recipient_email, $email_subject, $email_body)
 	// More headers
     $from_name = $get_all_super_admin_site_details["site_title"] ?? "Super Admin";
 	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
-	$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
+	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
 	$website_admin_phone_number = "234" . substr($logged_account_details["phone_number"], 1, 11);
@@ -3110,7 +3141,7 @@ function makePayvesselRequest($req_method, $generatedAccessToken, $parameter_url
 	$curl_json_result = json_decode($curl_result, true);
 
 	if ($curl_json_result !== null) {
-		if (($curl_json_result["status"] === true)) {
+		if (isset($curl_json_result["status"]) && ($curl_json_result["status"] === true)) {
 			$encoded_json_result = json_encode($curl_json_result, true);
 			$payvessel_json_response_array = array("status" => "success", "message" => "Request Successful", "json_result" => $encoded_json_result);
 			return json_encode($payvessel_json_response_array, true);
@@ -3488,6 +3519,8 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
 {
     global $connection_server, $get_logged_user_details, $get_logged_admin_details;
 
+    $debug_file = __DIR__ . "/../logs/payhub_api_debug.txt";
+
     if ($vid === null) {
         $vid = $get_logged_user_details["vendor_id"] ?? $get_logged_admin_details["id"] ?? resolveVendorID();
     }
@@ -3575,6 +3608,12 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
         $log_entry .= "CRITICAL: No PayHub configuration found in database.\n";
         @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
         return json_encode(["status" => "failed", "message" => "PayHub not configured"]);
+    }
+
+    if (empty(trim($url))) {
+        $log_entry .= "CRITICAL: PayHub URL evaluates to empty.\n";
+        @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
+        return json_encode(["status" => "failed", "message" => "Invalid PayHub URL"]);
     }
 
     $ch = curl_init($url);

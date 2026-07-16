@@ -11,6 +11,7 @@
             $response_message .= "<br>" . $json_response_decode["bonus_message"];
         }
         $_SESSION["product_purchase_response"] = $response_message;
+        $_SESSION["product_purchase_status"] = $json_response_decode["status"] ?? null;
         if (isset($json_response_decode["ref"])) {
             $_SESSION["last_transaction_ref"] = $json_response_decode["ref"];
         }
@@ -20,6 +21,7 @@
         unset($_SESSION["meter_type"]);
         unset($_SESSION["meter_name"]);
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["verify-meter"])){
@@ -39,6 +41,7 @@
             $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
 
     if(isset($_POST["reset-electric"])){
@@ -48,6 +51,7 @@
         unset($_SESSION["meter_type"]);
         unset($_SESSION["meter_name"]);
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit;
     }
     
 ?>
@@ -150,7 +154,7 @@
                 <?php } ?>
 
                 <?php if(!isset($_SESSION["meter_name"])){ ?>
-                <button id="proceedBtn" name="verify-meter" type="button" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
+                <button id="proceedBtn" name="verify-meter" type="submit" style="pointer-events: none;" class="btn btn-primary btn-lg w-100 shadow-sm" >
                     VERIFY METER
                 </button>
                 <?php }else{ ?>

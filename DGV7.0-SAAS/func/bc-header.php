@@ -254,6 +254,7 @@ if ($select_user_vendor_status_message && mysqli_num_rows($select_user_vendor_st
         </a>
       </li><!-- End Dashboard Nav -->
 
+      <?php if(isServiceEnabled('ai_suite')): ?>
       <li class="nav-item">
         <a class="nav-link <?php echo ($current_page == 'AISuite.php') ? 'active_item' : 'collapsed'; ?>" href="<?php echo $web_http_host; ?>/web/AISuite.php">
           <i class="bi bi-cpu-fill"></i>
@@ -273,6 +274,7 @@ if ($select_user_vendor_status_message && mysqli_num_rows($select_user_vendor_st
           </div>
         </a>
       </li><!-- End AI Assistant Terminal Nav -->
+      <?php endif; ?>
 
       <li class="nav-heading">Services</li>
 
@@ -373,11 +375,13 @@ if ($select_user_vendor_status_message && mysqli_num_rows($select_user_vendor_st
               <i class="bi bi-circle"></i><span>Share Fund History</span>
             </a>
           </li>
+          <?php if(isServiceEnabled('vtu_coins')): ?>
           <li>
             <a href="<?php echo $web_http_host; ?>/web/CoinConversion.php" class="<?php echo ($current_page == 'CoinConversion.php') ? 'active' : ''; ?>">
               <i class="bi bi-circle"></i><span>Convert Coins</span>
             </a>
           </li>
+          <?php endif; ?>
         </ul>
       </li>
 
@@ -669,7 +673,7 @@ if ($select_user_vendor_status_message && mysqli_num_rows($select_user_vendor_st
 // DGV6.90 AI Edition: Inject AI assistant widget
 // Now enabled for all users to provide contextual support
 // Relieved VTU pages from floating widget to favor dedicated terminal
-if (isset($get_logged_user_details)):
+if (isset($get_logged_user_details) && isServiceEnabled('ai_suite')):
     $current_page = basename($_SERVER["PHP_SELF"]);
     $vtu_pages = ['Airtime.php', 'Data.php', 'Cable.php', 'Electric.php', 'Betting.php', 'Exam.php', 'BulkAirtime.php', 'BulkData.php', 'BulkSMS.php', 'AI-Assistant.php'];
     if (!in_array($current_page, $vtu_pages)):

@@ -1,0 +1,54 @@
+com.payhub.guest.app-activity-1.8.0-0 C:\Users\User\.gradle\caches\8.9\transforms\02a08e23845d75bdeaa92a984c0e4fc5\transformed\activity-1.8.0\res
+com.payhub.guest.app-navigation-common-2.7.4-1 C:\Users\User\.gradle\caches\8.9\transforms\1046755e4b48cb2c71c2c8f1522d22f2\transformed\navigation-common-2.7.4\res
+com.payhub.guest.app-appcompat-resources-1.6.1-2 C:\Users\User\.gradle\caches\8.9\transforms\13e627c387ed82f6adfd43c87f46d264\transformed\appcompat-resources-1.6.1\res
+com.payhub.guest.app-material-icons-core-release-3 C:\Users\User\.gradle\caches\8.9\transforms\15a7a2ec9544ccdfb98c581135f5f483\transformed\material-icons-core-release\res
+com.payhub.guest.app-ui-unit-release-4 C:\Users\User\.gradle\caches\8.9\transforms\1816dcedc0648f17aaee0bca6d68c8da\transformed\ui-unit-release\res
+com.payhub.guest.app-lifecycle-viewmodel-savedstate-2.6.2-5 C:\Users\User\.gradle\caches\8.9\transforms\203d119dfc93fb35e39627ddab0ea9df\transformed\lifecycle-viewmodel-savedstate-2.6.2\res
+com.payhub.guest.app-lifecycle-livedata-core-2.6.2-6 C:\Users\User\.gradle\caches\8.9\transforms\231ee466349b3e5b8f2a78719d86c07c\transformed\lifecycle-livedata-core-2.6.2\res
+com.payhub.guest.app-runtime-release-7 C:\Users\User\.gradle\caches\8.9\transforms\278f405648b1abf67bf5ce44855a894e\transformed\runtime-release\res
+com.payhub.guest.app-navigation-runtime-2.7.4-8 C:\Users\User\.gradle\caches\8.9\transforms\2da83cfee035032ebaeaf78161acce98\transformed\navigation-runtime-2.7.4\res
+com.payhub.guest.app-core-ktx-1.12.0-9 C:\Users\User\.gradle\caches\8.9\transforms\2fba1163bd40639f8fe0cdb33b46f461\transformed\core-ktx-1.12.0\res
+com.payhub.guest.app-annotation-experimental-1.3.0-10 C:\Users\User\.gradle\caches\8.9\transforms\34bbbc4571d564cef2e09c5deb90fd64\transformed\annotation-experimental-1.3.0\res
+com.payhub.guest.app-ui-geometry-release-11 C:\Users\User\.gradle\caches\8.9\transforms\3517826ebbe43c78ba0918a47670e0b4\transformed\ui-geometry-release\res
+com.payhub.guest.app-navigation-runtime-ktx-2.7.4-12 C:\Users\User\.gradle\caches\8.9\transforms\3d7c9e6ffa634242406f1b4fc86d0455\transformed\navigation-runtime-ktx-2.7.4\res
+com.payhub.guest.app-material-ripple-release-13 C:\Users\User\.gradle\caches\8.9\transforms\56d1c884b54858fc71f813a3a6d89e20\transformed\material-ripple-release\res
+com.payhub.guest.app-lifecycle-viewmodel-compose-2.6.2-14 C:\Users\User\.gradle\caches\8.9\transforms\5905ac14a54bf61d90b77638ff100086\transformed\lifecycle-viewmodel-compose-2.6.2\res
+com.payhub.guest.app-lifecycle-viewmodel-ktx-2.6.2-15 C:\Users\User\.gradle\caches\8.9\transforms\5a1f3939a7a6028d74fe61a8c55e70ab\transformed\lifecycle-viewmodel-ktx-2.6.2\res
+com.payhub.guest.app-navigation-common-ktx-2.7.4-16 C:\Users\User\.gradle\caches\8.9\transforms\5b6c9a05008e7f135348d90737bdef45\transformed\navigation-common-ktx-2.7.4\res
+com.payhub.guest.app-navigation-compose-2.7.4-17 C:\Users\User\.gradle\caches\8.9\transforms\65bc63fea32e574870115ae3c34cfabd\transformed\navigation-compose-2.7.4\res
+com.payhub.guest.app-activity-ktx-1.8.0-18 C:\Users\User\.gradle\caches\8.9\transforms\67130b9fd8fd6268d79fd50c56146e4d\transformed\activity-ktx-1.8.0\res
+com.payhub.guest.app-ui-tooling-preview-release-19 C:\Users\User\.gradle\caches\8.9\transforms\67f4398e956ec6826728a8357000cef8\transformed\ui-tooling-preview-release\res
+com.payhub.guest.app-core-1.12.0-20 C:\Users\User\.gradle\caches\8.9\transforms\7cbeb1d22d8f518bf86adc7e297adaa1\transformed\core-1.12.0\res
+com.payhub.guest.app-lifecycle-process-2.6.2-21 C:\Users\User\.gradle\caches\8.9\transforms\7f1ea59b0fda0b3a9c6f8759050ab3e9\transformed\lifecycle-process-2.6.2\res
+com.payhub.guest.app-ui-util-release-22 C:\Users\User\.gradle\caches\8.9\transforms\89b2ab0bf2bd9a058638483cc4f611f5\transformed\ui-util-release\res
+com.payhub.guest.app-material3-1.1.2-23 C:\Users\User\.gradle\caches\8.9\transforms\8bcbc51f3d19c5652bbfe643befaa925\transformed\material3-1.1.2\res
+com.payhub.guest.app-customview-poolingcontainer-1.0.0-24 C:\Users\User\.gradle\caches\8.9\transforms\8f2252c97c95dd2f4d4e48361c9b0bbc\transformed\customview-poolingcontainer-1.0.0\res
+com.payhub.guest.app-profileinstaller-1.3.1-25 C:\Users\User\.gradle\caches\8.9\transforms\91d7e44390141eb3a9406f8279d12799\transformed\profileinstaller-1.3.1\res
+com.payhub.guest.app-lifecycle-runtime-2.6.2-26 C:\Users\User\.gradle\caches\8.9\transforms\93fc98123a1d9b6f0d9b1febb5d878db\transformed\lifecycle-runtime-2.6.2\res
+com.payhub.guest.app-animation-core-release-27 C:\Users\User\.gradle\caches\8.9\transforms\9525ac25f36a8d1a932eda65fdc7252b\transformed\animation-core-release\res
+com.payhub.guest.app-material-release-28 C:\Users\User\.gradle\caches\8.9\transforms\986c450b03067fb2b006b3ae6ef0ed24\transformed\material-release\res
+com.payhub.guest.app-runtime-saveable-release-29 C:\Users\User\.gradle\caches\8.9\transforms\9f8631f911b1c8949a8fb59fa01bc78a\transformed\runtime-saveable-release\res
+com.payhub.guest.app-animation-release-30 C:\Users\User\.gradle\caches\8.9\transforms\a175bd838ab78ab5c9191c201b5d2b3f\transformed\animation-release\res
+com.payhub.guest.app-core-runtime-2.2.0-31 C:\Users\User\.gradle\caches\8.9\transforms\a24dfb7ee1adb27dd04f94f26b451a24\transformed\core-runtime-2.2.0\res
+com.payhub.guest.app-ui-release-32 C:\Users\User\.gradle\caches\8.9\transforms\ab86461fe3a42628e68dbc3031672c7b\transformed\ui-release\res
+com.payhub.guest.app-savedstate-1.2.1-33 C:\Users\User\.gradle\caches\8.9\transforms\ae2e4c3d4ffe6662c65465703543a213\transformed\savedstate-1.2.1\res
+com.payhub.guest.app-material-icons-extended-release-34 C:\Users\User\.gradle\caches\8.9\transforms\b3dad4300435d9f5e77c5dcbddb6604a\transformed\material-icons-extended-release\res
+com.payhub.guest.app-activity-compose-1.8.0-35 C:\Users\User\.gradle\caches\8.9\transforms\bbaa7c327e66e236f43cf328b3611080\transformed\activity-compose-1.8.0\res
+com.payhub.guest.app-foundation-layout-release-36 C:\Users\User\.gradle\caches\8.9\transforms\c243693381c242b79c0f10d22a312319\transformed\foundation-layout-release\res
+com.payhub.guest.app-ui-graphics-release-37 C:\Users\User\.gradle\caches\8.9\transforms\c54d27de8ce5175c992c1294786660ff\transformed\ui-graphics-release\res
+com.payhub.guest.app-emoji2-1.4.0-38 C:\Users\User\.gradle\caches\8.9\transforms\c995d776e49d0931c987ca9fa2245ae7\transformed\emoji2-1.4.0\res
+com.payhub.guest.app-ui-text-release-39 C:\Users\User\.gradle\caches\8.9\transforms\cc5cdcac08b101446f5174cf39b33ee8\transformed\ui-text-release\res
+com.payhub.guest.app-savedstate-ktx-1.2.1-40 C:\Users\User\.gradle\caches\8.9\transforms\e49cfa6753f960dd2337f82a2f7f5dc0\transformed\savedstate-ktx-1.2.1\res
+com.payhub.guest.app-lifecycle-viewmodel-2.6.2-41 C:\Users\User\.gradle\caches\8.9\transforms\ea809a4187d86c8e67c06ed27b90ac73\transformed\lifecycle-viewmodel-2.6.2\res
+com.payhub.guest.app-lifecycle-runtime-ktx-2.6.2-42 C:\Users\User\.gradle\caches\8.9\transforms\f18e2c29311b9a4c0a016fe698e268c3\transformed\lifecycle-runtime-ktx-2.6.2\res
+com.payhub.guest.app-foundation-release-43 C:\Users\User\.gradle\caches\8.9\transforms\f1d70bf38338c10ad33f33bef51db329\transformed\foundation-release\res
+com.payhub.guest.app-startup-runtime-1.1.1-44 C:\Users\User\.gradle\caches\8.9\transforms\f3d62ea687a8c38e6ab83bc36f6e651b\transformed\startup-runtime-1.1.1\res
+com.payhub.guest.app-coil-base-2.5.0-45 C:\Users\User\.gradle\caches\8.9\transforms\f964fb0f3f9cdfbb461de9e03fd05a86\transformed\coil-base-2.5.0\res
+com.payhub.guest.app-pngs-46 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\build\generated\res\pngs\release
+com.payhub.guest.app-resValues-47 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\build\generated\res\resValues\release
+com.payhub.guest.app-packageReleaseResources-48 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
+com.payhub.guest.app-packageReleaseResources-49 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
+com.payhub.guest.app-merged-not-compiled-resources-50 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\build\intermediates\merged-not-compiled-resources\release
+com.payhub.guest.app-merged_res-51 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\build\intermediates\merged_res\release
+com.payhub.guest.app-main-52 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\src\main\res
+com.payhub.guest.app-release-53 C:\Users\User\Downloads\DGV7.0 SAAS and NON-SAAS and LM\DGV7.0-NON-SAAS\PayHub-Guest-Android\app\src\release\res

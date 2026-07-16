@@ -93,6 +93,7 @@
     	$json_response_decode = json_decode($json_response_encode,true);
     	$_SESSION["product_purchase_response"] = $json_response_decode["desc"];
     	header("Location: /bc-admin/FundTransferRequests.php");
+    	exit;
     }
 ?>
 <!DOCTYPE html>
@@ -181,12 +182,12 @@
         ?>
         <div class="card info-card px-5 py-5">
             <div class="row mb-3">
-                <form method="get" action="FundTransferRequests.php" class="">
-                    <input style="user-select: auto;" name="searchq" type="text" value="<?php echo trim(strip_tags($_GET["searchq"])); ?>" placeholder="Reference No, Username, amount e.t.c" class="form-control mt-3" />
-                    <button style="user-select: auto;" type="submit" class="btn btn-primary d-inline col-12 col-lg-auto my-2" >
-                        <i class="bi bi-search"></i> Search
-                    </button>
-                </form>
+                 <form method="get" action="FundTransferRequests.php" class="">
+                     <input style="user-select: auto;" name="searchq" type="text" value="<?php echo isset($_GET["searchq"]) ? trim(strip_tags($_GET["searchq"])) : ''; ?>" placeholder="Reference No, Username, amount e.t.c" class="form-control mt-3" />
+                     <button style="user-select: auto;" type="submit" class="btn btn-primary d-inline col-12 col-lg-auto my-2" >
+                         <i class="bi bi-search"></i> Search
+                     </button>
+                 </form>
             </div>
 
             <div class="mt-4">

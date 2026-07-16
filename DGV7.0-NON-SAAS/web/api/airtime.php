@@ -33,35 +33,29 @@ if ($select_vendor_table) {
 		if (($get_logged_user_details["api_status"] == 1 || $purchase_method == "app") && $get_logged_user_details["status"] == 1) {
 
 			$_SESSION["user_session"] = $get_logged_user_details["username"];
-            $batch_number = substr(str_shuffle("12345678901234567890"), 0, 6);
 
             // Handle Bulk
             $phone_input = $get_api_post_info["phone_number"] ?? $get_api_post_info["phone_no"] ?? "";
             $phone_array = array_unique(array_filter(explode(",", $phone_input)));
+            $fixed_amount = mysqli_real_escape_string($connection_server, preg_replace("/[^0-9.]+/", "", trim(strip_tags($get_api_post_info["amount"] ?? ""))));
+            $fixed_network = $get_api_post_info["network"] ?? "";
 
             if (count($phone_array) > 1) {
-                $processed = 0;
+                $queue_items = array();
                 foreach ($phone_array as $each_phone) {
-                    // Re-check status in loop (in case of immediate block)
-                    $u_id = $get_logged_user_details['id'];
-                    $s_check = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT status FROM sas_users WHERE id='$u_id' LIMIT 1"));
-                    if ($s_check['status'] != 1) break;
-
-                    $get_api_post_info["phone_number"] = $each_phone;
-                    // Auto-identify network if not provided or set to auto
-                    if (empty($get_api_post_info["network"]) || $get_api_post_info["network"] == "auto") {
-                        $get_api_post_info["network"] = identifyISP($each_phone);
-                    }
-
-                    include("../func/airtime.php");
-                    if (isset($reference)) alterTransaction($reference, "batch_number", $batch_number);
-                    $processed++;
+                    $isp = (empty($fixed_network) || $fixed_network == "auto") ? identifyISP($each_phone) : $fixed_network;
+                    $queue_items[] = array(
+                        "phone"  => sanitize_phone_number(trim(strip_tags($each_phone))),
+                        "isp"    => $isp,
+                        "amount" => $fixed_amount,
+                    );
                 }
+                $enqueue_result = bc_enqueue_bulk_batch($connection_server, $get_logged_user_details["vendor_id"], $get_logged_user_details["username"], $get_logged_user_details["id"], "airtime", $purchase_method, $queue_items);
                 $api_json_response_encode = json_encode([
-                    "status" => "success",
-                    "desc" => "Bulk Airtime request received and is being processed.",
-                    "batch_number" => $batch_number,
-                    "count" => $processed
+                    "status" => "queued",
+                    "desc" => "Bulk Airtime request received and queued for background processing.",
+                    "batch_number" => $enqueue_result["batch_number"],
+                    "count" => $enqueue_result["total"]
                 ]);
             } else {
                 include_once("../func/airtime.php");

@@ -39,13 +39,19 @@ if (in_array($requester_ip, $whitelisted_ips)) {
     
     // Serve the SAAS unlicensed update payload directly
     try {
-        // Find latest released SAAS update
-        $stmt = $pdo->prepare("SELECT u.* FROM script_updates u JOIN script_tiers t ON u.tier_id = t.id WHERE t.tier_code = 'SAAS' AND u.is_released = 1 ORDER BY u.release_date DESC, u.id DESC LIMIT 1");
-        $stmt->execute();
+        $force_version = trim($_REQUEST['force_version'] ?? '');
+        if (!empty($force_version)) {
+            // Filter by SAAS tier to prevent cross-tier contamination
+            $stmt = $pdo->prepare("SELECT u.* FROM script_updates u JOIN script_tiers t ON u.tier_id = t.id WHERE u.version_number = ? AND t.tier_code = 'SAAS' LIMIT 1");
+            $stmt->execute([$force_version]);
+        } else {
+            $stmt = $pdo->prepare("SELECT u.* FROM script_updates u JOIN script_tiers t ON u.tier_id = t.id WHERE t.tier_code = 'SAAS' AND u.is_released = 1 ORDER BY u.release_date DESC, u.id DESC LIMIT 1");
+            $stmt->execute();
+        }
         $latest_update = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$latest_update) {
-            echo json_encode(['status' => 'error', 'message' => 'No released updates found for SAAS.']);
+            echo json_encode(['status' => 'error', 'message' => 'No matching update found.']);
             exit;
         }
 
@@ -126,6 +132,9 @@ try {
             $tier_code = 'NON-SAAS';
             $tier_id = 2;
         }
+        check_update_log("WARNING: License '{$license_key}' has no tier_id set. Fell back to tier '{$tier_code}' (tier_id={$tier_id}) based on license_type='{$license['license_type']}'.");
+    } else {
+        check_update_log("INFO: License '{$license_key}' resolved to tier '{$tier_code}' (tier_id={$tier_id}) from DB.");
     }
 
     // Check if domain is registered
@@ -157,9 +166,16 @@ try {
         $update_ip_stmt->execute([$requester_ip, $license['id'], $requesting_domain]);
     }
 
-    // Fetch the latest released update for the tier
-    $update_stmt = $pdo->prepare("SELECT * FROM script_updates WHERE tier_id = ? AND is_released = 1 ORDER BY release_date DESC, id DESC LIMIT 1");
-    $update_stmt->execute([$tier_id]);
+    // Fetch the update package details (either specific version or latest released)
+    $force_version = trim($_REQUEST['force_version'] ?? '');
+    if (!empty($force_version)) {
+        // Filter by this license's tier to prevent cross-tier version contamination
+        $update_stmt = $pdo->prepare("SELECT * FROM script_updates WHERE version_number = ? AND tier_id = ? LIMIT 1");
+        $update_stmt->execute([$force_version, $tier_id]);
+    } else {
+        $update_stmt = $pdo->prepare("SELECT * FROM script_updates WHERE tier_id = ? AND is_released = 1 ORDER BY release_date DESC, id DESC LIMIT 1");
+        $update_stmt->execute([$tier_id]);
+    }
     $latest_update = $update_stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$latest_update) {
