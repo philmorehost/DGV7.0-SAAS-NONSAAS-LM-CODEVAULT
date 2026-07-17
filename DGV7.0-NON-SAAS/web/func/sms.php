@@ -87,7 +87,12 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                         $product_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_products WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && product_name='" . $product_name . "' LIMIT 1"));
                                         $product_discount_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM $acc_level_table_name WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && api_id='" . $api_detail["id"] . "' && product_id='" . $product_table["id"] . "' && val_1='" . $sms_type . "' LIMIT 1"));
                                         $text_len = strlen(urldecode($text_message));
-                                        $sms_pages = ($text_len <= 160) ? 1 : (int) ceil($text_len / 153);
+                                        $sms_pages = ($text_len <= 160) ? 1 : (int) ceil($text_len / 157);
+                                        if ($sms_pages > 3) {
+                                            $json_response_array = array("status" => "failed", "desc" => "Maximum of 3 SMS pages allowed. Your message requires $sms_pages pages.");
+                                            $json_response_encode = json_encode($json_response_array, true);
+                                            return;
+                                        }
                                         $amount = ($product_discount_table["val_2"] * count($sms_phone_array)) * $sms_pages;
                                         $discounted_amount = $amount;
                                     }

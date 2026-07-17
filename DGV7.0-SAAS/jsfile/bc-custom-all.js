@@ -1455,7 +1455,7 @@
         var textMessageSpan = document.getElementById("text-message-span");
         if(!textMessage) return;
 
-        var textMsgMax = 459;
+        var textMsgMax = 471;
         if(textMessage.value.length > textMsgMax){
             textMessage.value = textMessage.value.substring(0, textMsgMax);
         }
@@ -1463,7 +1463,7 @@
         var len = textMessage.value.length;
         var pages = 0;
         if(len > 0){
-            pages = (len <= 160) ? 1 : Math.ceil(len / 153);
+            pages = (len <= 160) ? 1 : Math.ceil(len / 157);
             if(pages > 3) pages = 3;
         }
         var notice = (len >= textMsgMax) ? " — SMS 3 Pages Maximum" : "";
