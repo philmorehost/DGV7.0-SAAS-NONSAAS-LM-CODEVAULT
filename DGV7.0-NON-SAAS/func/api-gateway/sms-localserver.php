@@ -31,13 +31,7 @@ if (in_array($product_name, array_keys($sms_service_provider_alter_code))) {
   );
   curl_setopt($curl_request, CURLOPT_HTTPHEADER, $curl_http_headers);
 
-  if (curl_errno($curl_request)) {
-   $api_response = "failed";
-   $api_response_text = 1;
-   $api_response_description = "";
-   $api_response_status = 3;
-  }
-
+  $curl_postfields_data = "";
   if (in_array($sms_type, array("standard_sms", "flash_sms"))) {
    $curl_postfields_data = json_encode(array("api_key" => $api_detail["api_key"], "network" => $product_name, "sender_id" => $sender_id, "phone_number" => $phone_no, "type" => $sms_type, "message" => $text_message, "date" => $schedule_date), true);
   }
@@ -54,7 +48,23 @@ if (in_array($product_name, array_keys($sms_service_provider_alter_code))) {
 
   curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
   $curl_result = curl_exec($curl_request);
-  $curl_json_result = json_decode($curl_result, true);
+
+  if (curl_errno($curl_request) || $curl_result === false) {
+   $api_response = "failed";
+   $api_response_text = curl_error($curl_request) ?: "Connection error";
+   $api_response_description = "API Connection Failed";
+   $api_response_status = 3;
+   $curl_json_result = array();
+  } else {
+   $curl_json_result = json_decode($curl_result, true);
+   if (!is_array($curl_json_result)) {
+    $api_response = "failed";
+    $api_response_text = "invalid_json";
+    $api_response_description = "Invalid response format from provider";
+    $api_response_status = 3;
+    $curl_json_result = array();
+   }
+  }
 
 
   if (in_array($sms_type, array("standard_sms", "flash_sms"))) {

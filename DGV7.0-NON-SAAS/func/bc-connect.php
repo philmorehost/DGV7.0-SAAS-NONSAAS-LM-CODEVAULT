@@ -26,7 +26,7 @@
     $connection_server = null;
 
     try {
-	    $connection_server = mysqli_connect($mySqlServer, $mySqlUser, $mySqlPass, $mySqlDBName);
+	    $connection_server = @mysqli_connect($mySqlServer, $mySqlUser, $mySqlPass, $mySqlDBName);
         if ($connection_server) {
             mysqli_set_charset($connection_server, "utf8mb4");
         }
