@@ -75,7 +75,7 @@
                 echo '<div class="alert alert-' . $msg['status'] . ' alert-dismissible fade show" role="alert">' . htmlspecialchars($msg['text']) . '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>';
             }
 
-            $get_user_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' && username='".$get_logged_user_details["username"]."' && batch_number='$batch' ORDER BY date DESC");
+            $get_user_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' AND username='".$get_logged_user_details["username"]."' AND batch_number='$batch' ORDER BY date DESC");
 
             // Some queue items never reach chargeUser() (insufficient balance, blocked
             // phone, gateway error, abuse limit, etc.) and so never get a sas_transactions
@@ -89,7 +89,7 @@
             }
             $uncharged_queue_items = array();
             $has_pending = false;
-            $get_queue_items = mysqli_query($connection_server, "SELECT * FROM sas_bulk_queue_items WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' && username='".$get_logged_user_details["username"]."' && batch_number='$batch' ORDER BY id DESC");
+            $get_queue_items = mysqli_query($connection_server, "SELECT * FROM sas_bulk_queue_items WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' AND username='".$get_logged_user_details["username"]."' AND batch_number='$batch' ORDER BY id DESC");
             if ($get_queue_items) {
                 while ($qi_row = mysqli_fetch_assoc($get_queue_items)) {
                     if (empty($qi_row['reference']) || !isset($tx_references[$qi_row['reference']])) {
@@ -184,7 +184,7 @@
                                         $qi_desc = htmlspecialchars($qi_row['response_desc'] ?? 'Not processed');
                                     } else {
                                         $qi_status_html = '<span class="text-warning fw-bold">'.ucfirst($qi_row['status']).'</span>';
-                                        $qi_desc = 'Waiting to be processed';
+                                        $qi_desc = '<button type="button" class="btn btn-danger btn-sm" onclick="cancelSingleItem('.$qi_row['id'].')">Cancel</button>';
                                     }
                                     echo '<tr>';
                                     if ($has_pending) {
@@ -199,7 +199,7 @@
                                         <td>&mdash;</td>
                                         <td>'.$qi_status_html.'</td>
                                         <td>'.($qi_row['processed_at'] ? date('M d, Y H:i:s', strtotime($qi_row['processed_at'])) : '&mdash;').'</td>
-                                        <td><small class="text-muted">'.$qi_desc.'</small></td>
+                                        <td>'.$qi_desc.'</td>
                                     </tr>';
                                 }
                             }
@@ -251,6 +251,18 @@
                 
             if (confirm(confirmMsg)) {
                 document.getElementById('formAction').value = action;
+                document.getElementById('batchActionForm').submit();
+            }
+        }
+
+        function cancelSingleItem(id) {
+            if (confirm('Are you sure you want to cancel this pending transaction?')) {
+                // We reuse the cancel_selected logic but strictly for this one ID
+                document.querySelectorAll('.pending-checkbox').forEach(cb => cb.checked = false);
+                const checkbox = document.querySelector('input[value="' + id + '"].pending-checkbox');
+                if (checkbox) checkbox.checked = true;
+                
+                document.getElementById('formAction').value = 'cancel_selected';
                 document.getElementById('batchActionForm').submit();
             }
         }
