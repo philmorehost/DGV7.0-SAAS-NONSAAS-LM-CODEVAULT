@@ -31,6 +31,25 @@
                     $_SESSION['batch_action_msg'] = ["status" => "danger", "text" => "Failed to cancel selected transactions."];
                 }
             }
+        } elseif ($_POST['action'] === 'cancel_legacy_tx' && !empty($_POST['legacy_ref'])) {
+            $legacy_ref = mysqli_real_escape_string($connection_server, $_POST['legacy_ref']);
+            $check_tx = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='$vendor_id' AND username='$username' AND batch_number='$batch' AND reference='$legacy_ref' AND status='2'");
+            if ($check_tx && mysqli_num_rows($check_tx) == 1) {
+                $tx_row = mysqli_fetch_assoc($check_tx);
+                $amount_to_refund = (float)$tx_row["discounted_amount"];
+                $reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
+                
+                $charge = chargeOtherUser($tx_row["username"], "credit", $tx_row["product_unique_id"], "Reversed", $reference_2, "", $tx_row["amount"], $amount_to_refund, "Refund for manually cancelled transaction Ref: '".$tx_row["reference"]."'", $tx_row["mode"], $_SERVER["HTTP_HOST"] ?? "WEB", "1");
+                
+                if ($charge === "success") {
+                    mysqli_query($connection_server, "UPDATE sas_transactions SET status='0', description='Cancelled by user' WHERE reference='$legacy_ref'");
+                    $_SESSION['batch_action_msg'] = ["status" => "success", "text" => "Transaction successfully cancelled and refunded."];
+                } else {
+                    $_SESSION['batch_action_msg'] = ["status" => "danger", "text" => "Failed to refund user. Transaction was not cancelled."];
+                }
+            } else {
+                $_SESSION['batch_action_msg'] = ["status" => "danger", "text" => "Pending transaction not found."];
+            }
         }
         header("Location: BatchDetails.php?batch=" . urlencode($batch));
         exit();
@@ -136,8 +155,9 @@
             </div>
             <?php endif; ?>
 
-            <form id="batchActionForm" method="post" action="">
-                <input type="hidden" name="action" id="formAction" value="">
+            <form method="POST" id="batchActionForm" action="">
+            <input type="hidden" name="action" id="formAction" value="">
+            <input type="hidden" name="legacy_ref" id="formLegacyRef" value="">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
                         <thead>
@@ -159,8 +179,12 @@
                                 echo '<tr><td colspan="'.$colspan.'" class="text-center py-4">No transactions found in this batch.</td></tr>';
                             } else {
                                 foreach ($tx_references as $row) {
-                                    $status_text = tranStatus($row['status']);
                                     $status_class = ($row['status'] == 1 ? 'text-success' : ($row['status'] == 2 ? 'text-warning' : 'text-danger'));
+                                    $status_text = tranStatus($row['status']);
+                                    $legacy_action = '<button type="button" class="btn btn-primary btn-sm" onclick="showTransactionDetails(\''.$row['reference'].'\')">Details</button>';
+                                    if ($row['status'] == 2) {
+                                        $legacy_action .= ' <button type="button" class="btn btn-danger btn-sm ms-1" onclick="cancelLegacyItem(\''.$row['reference'].'\')">Cancel</button>';
+                                    }
                                     echo '<tr>';
                                     if ($has_pending) {
                                         echo '<td></td>';
@@ -170,13 +194,9 @@
                                         <td>₦'.number_format($row['discounted_amount'], 2).'</td>
                                         <td><span class="'.$status_class.' fw-bold">'.$status_text.'</span></td>
                                         <td>'.date('M d, Y H:i:s', strtotime($row['date'])).'</td>
-                                        <td><button type="button" class="btn btn-primary btn-sm" onclick="showTransactionDetails(\''.$row['reference'].'\')">Details</button></td>
+                                        <td>'.$legacy_action.'</td>
                                     </tr>';
                                 }
-                                // Items rejected before a charge was ever attempted — no transaction
-                                // row exists, so surface the queue's own recorded reason instead.
-                                // Items still 'pending'/'processing' haven't been attempted yet, so
-                                // they aren't failures — just show them as still in progress.
                                 foreach ($uncharged_queue_items as $qi_row) {
                                     $is_item_pending = in_array($qi_row['status'], ['pending', 'processing']);
                                     if ($qi_row['status'] === 'done') {
@@ -263,6 +283,14 @@
                 if (checkbox) checkbox.checked = true;
                 
                 document.getElementById('formAction').value = 'cancel_selected';
+                document.getElementById('batchActionForm').submit();
+            }
+        }
+
+        function cancelLegacyItem(ref) {
+            if (confirm('Are you sure you want to cancel this pending transaction? Your wallet will be refunded.')) {
+                document.getElementById('formAction').value = 'cancel_legacy_tx';
+                document.getElementById('formLegacyRef').value = ref;
                 document.getElementById('batchActionForm').submit();
             }
         }
