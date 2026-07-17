@@ -166,6 +166,13 @@ function bc_finalize_completed_bulk_batches($connection_server)
         $remaining = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT COUNT(*) as c FROM sas_bulk_queue_items WHERE batch_number='" . mysqli_real_escape_string($connection_server, $batch['batch_number']) . "' AND status != 'done'"));
         if ((int)$remaining['c'] > 0) continue; // Still has pending/processing items
 
+        // Wait 5 minutes after the last item was processed to allow webhooks and requery
+        // cron jobs to resolve any transactions stuck in status=2 (pending) to status=1 or 0.
+        $last_processed = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT MAX(processed_at) as m FROM sas_bulk_queue_items WHERE batch_number='" . mysqli_real_escape_string($connection_server, $batch['batch_number']) . "'"));
+        if ($last_processed && strtotime($last_processed['m']) > time() - 300) {
+            continue;
+        }
+
         // Total submitted numbers for this batch — sas_bulk_queue_items is the
         // authoritative record (one row per number, written at enqueue time),
         // unlike sas_transactions which only gets a row once chargeUser() actually
