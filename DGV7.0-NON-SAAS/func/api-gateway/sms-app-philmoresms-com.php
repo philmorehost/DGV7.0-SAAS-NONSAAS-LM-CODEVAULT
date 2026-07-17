@@ -9,7 +9,7 @@
             'token' => $api_token,
             'senderID' => $sender_id,
             'recipients' => $phone_no,
-            'message' => $text_message
+            'message' => urldecode($text_message)
         ));
 
         $curl_request = curl_init($curl_url);
