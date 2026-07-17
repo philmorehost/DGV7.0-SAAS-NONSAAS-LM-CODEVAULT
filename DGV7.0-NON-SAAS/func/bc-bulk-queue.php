@@ -151,23 +151,35 @@ function bc_get_bulk_batch_progress($connection_server, $vendor_id, $username, $
     }
 
     $successful = 0;
-    $failed = 0;
+    $successful = 0;
     $tq = mysqli_query($connection_server, "SELECT status, COUNT(*) as c FROM sas_transactions WHERE vendor_id='$vendor_id_esc'$username_filter AND batch_number='$batch_esc' GROUP BY status");
     while ($tq && $row = mysqli_fetch_assoc($tq)) {
         if ($row['status'] == 1) $successful += (int)$row['c'];
-        elseif ($row['status'] == 3) $failed += (int)$row['c'];
     }
 
-    $total = (int)($header['total_count'] ?? ($queue_counts['pending'] + $queue_counts['processing'] + $queue_counts['done']));
-    $pending = $queue_counts['pending'] + $queue_counts['processing'];
+    $actual_pending = $queue_counts['pending'] + $queue_counts['processing'];
+    $failed = max(0, $queue_counts['done'] - $successful);
+    if ($header && isset($header['total_count']) && (int)$header['total_count'] > 0) {
+        $total = (int)$header['total_count'];
+        if ($actual_pending == 0 && ($successful + $failed) < $total) {
+            $failed = $total - $successful;
+        }
+    } else {
+        $total = $successful + $failed + $actual_pending;
+    }
+
+    $batch_status = $header['status'] ?? ($actual_pending > 0 ? 'processing' : 'completed');
+    if ($actual_pending == 0 && $total > 0) {
+        $batch_status = 'completed';
+    }
 
     return array(
         'batch_number' => $batch_number,
-        'status'       => $header['status'] ?? 'pending',
+        'status'       => $batch_status,
         'total'        => $total,
         'successful'   => $successful,
         'failed'       => $failed,
-        'pending'      => max(0, $total - $successful - $failed),
+        'pending'      => $actual_pending,
         'ai_diagnosis' => $header['ai_diagnosis'] ?? null,
     );
 }
