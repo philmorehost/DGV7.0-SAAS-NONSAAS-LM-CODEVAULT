@@ -1102,7 +1102,7 @@
     	var amount = document.getElementById("share-fund-amount").value.trim();
     	var proceedBtn = document.getElementById("proceedBtn");
     	
-    	if((userAccountStatus == true) && Number(amount) && (amount.length >= 2) && (amount >= 10) && (amount <= 99999)){
+    	if((userAccountStatus == true) && Number(amount) && (amount.length >= 2) && (amount >= 10) && (amount <= 999999999)){
     		proceedBtn.style = "pointer-events: auto;";
     	}else{
     		proceedBtn.style = "pointer-events: none;";
@@ -1113,7 +1113,7 @@
         var elementTag = elementTag.value;
         var proceedBtn = document.getElementById("proceedBtn");
 
-        if(Number(elementTag) && (elementTag.length >= 2) && (elementTag >= 10) && (elementTag <= 999999)){
+        if(Number(elementTag) && (elementTag.length >= 2) && (elementTag >= 10) && (elementTag <= 999999999)){
             proceedBtn.style = "pointer-events: auto;";
         }else{
             proceedBtn.style = "pointer-events: none;";
