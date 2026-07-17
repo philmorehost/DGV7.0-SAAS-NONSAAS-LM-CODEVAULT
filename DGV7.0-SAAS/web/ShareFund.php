@@ -81,20 +81,6 @@
         	$json_response_array = array("desc" => "Balance is LOW");
         	$json_response_encode = json_encode($json_response_array,true);
         }
-    }else{
-        //Purchase Method Not specified
-        $json_response_array = array("desc" => "Purchase Method Not specified");
-        $json_response_encode = json_encode($json_response_array,true);
-        $json_response_decode = json_decode($json_response_encode,true);
-        if (!isset($_SESSION["transfer_result"])) {
-            $_SESSION["transfer_result"] = [
-                "status" => "error",
-                "title" => "Transfer Failed",
-                "message" => $json_response_decode["desc"]
-            ];
-        }
-        header("Location: ".$_SERVER["REQUEST_URI"]);
-        exit();
     }
 ?>
 <!DOCTYPE html>

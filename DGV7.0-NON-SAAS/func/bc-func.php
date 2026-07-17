@@ -1174,9 +1174,10 @@ function getTransaction($reference, $column_name)
 function transactionActionButton($api_id, $product_id, $transaction_ref, $transaction_status, $transaction_type, $transaction_desc = '')
 {
 	global $connection_server, $get_logged_user_details;
-	if (!empty($api_id) && !empty($product_id)) {
+	if (!empty($api_id) && !empty($product_id) && !empty($get_logged_user_details['vendor_id'])) {
 		$get_user_product_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_products WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && id='" . $product_id . "' LIMIT 1"));
 		$get_user_api_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_apis WHERE vendor_id='" . $get_logged_user_details["vendor_id"] . "' && id='" . $api_id . "' LIMIT 1"));
+
 
 		$product_transaction_action_button = '-';
 
