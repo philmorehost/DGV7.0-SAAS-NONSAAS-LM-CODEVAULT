@@ -1,34 +1,8 @@
 <?php session_start();
     include("../func/bc-config.php");
 
-    if (isset($_GET['debug']) && $_GET['debug'] == '1') {
-        $batch_debug = mysqli_real_escape_string($connection_server, $_GET['batch'] ?? '');
-        echo "<pre><h3>DEBUG INFORMATION FOR BATCH: $batch_debug</h3>";
-        
-        // 1. Check sas_bulk_product_purchase
-        $b_purchase = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT * FROM sas_bulk_product_purchase WHERE batch_number='$batch_debug'"));
-        echo "<b>sas_bulk_product_purchase:</b>\n";
-        print_r($b_purchase);
-        
-        // 2. Check sas_bulk_queue_items
-        $q_items = mysqli_query($connection_server, "SELECT * FROM sas_bulk_queue_items WHERE batch_number='$batch_debug'");
-        echo "\n<b>sas_bulk_queue_items rows:</b>\n";
-        while ($row = mysqli_fetch_assoc($q_items)) {
-            print_r($row);
-        }
-        
-        // 3. Check sas_transactions
-        $txs = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE batch_number='$batch_debug'");
-        echo "\n<b>sas_transactions rows:</b>\n";
-        while ($row = mysqli_fetch_assoc($txs)) {
-            print_r($row);
-        }
-        
-        echo "</pre>";
-        exit();
-    }
-
     if(!isset($_GET["batch"]) || empty(trim(strip_tags($_GET["batch"])))){
+
 
         header("Location: BatchTransactions.php");
         exit();
