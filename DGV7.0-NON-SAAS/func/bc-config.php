@@ -279,6 +279,48 @@ if ($connection_server) {
             mysqli_query($connection_server, "ALTER TABLE sas_conversions ADD INDEX idx_conv_lookup (vendor_id, username, status)");
         }
 
+        // Migration: Performance Indexes for NON-SAAS
+        $perf_indexes = [
+            'sas_users' => [
+                'idx_v_user' => '(vendor_id, username)',
+                'idx_v_status' => '(vendor_id, status)'
+            ],
+            'sas_transactions' => [
+                'idx_v_user_status' => '(vendor_id, username, status)',
+                'idx_batch_no' => '(batch_number)',
+                'idx_ref' => '(reference)'
+            ],
+            'sas_vendors' => [
+                'idx_v_url_status' => '(website_url, status)'
+            ],
+            'sas_bulk_queue_items' => [
+                'idx_batch_status' => '(batch_number, status)',
+                'idx_v_status' => '(vendor_id, status)'
+            ],
+            'sas_submitted_payments' => [
+                'idx_v_user' => '(vendor_id, username)',
+                'idx_ref' => '(reference)'
+            ],
+            'sas_vendor_style_templates' => [
+                'idx_vendor' => '(vendor_id)'
+            ],
+            'sas_kyc_verifications' => [
+                'idx_v_name' => '(vendor_id, verification_name)'
+            ],
+            'sas_service_control' => [
+                'idx_v_service' => '(vendor_id, service_name)'
+            ]
+        ];
+
+        foreach ($perf_indexes as $tbl => $idxs) {
+            foreach ($idxs as $idx_name => $idx_cols) {
+                $check_i = mysqli_query($connection_server, "SHOW INDEX FROM `$tbl` WHERE Key_name = '$idx_name'");
+                if ($check_i && mysqli_num_rows($check_i) == 0) {
+                    @mysqli_query($connection_server, "ALTER TABLE `$tbl` ADD INDEX `$idx_name` $idx_cols");
+                }
+            }
+        }
+
         // Migration: Ensure default KYC config for all vendors (0 = Disabled by default)
         $kyc_defaults = array("bvn", "nin", "liveliness_video", "liveliness_picture", "govt_id", "proof_of_address");
         $vendors_q = mysqli_query($connection_server, "SELECT id FROM sas_vendors");
@@ -351,7 +393,17 @@ if ($connection_server) {
 
 	// Optimization: Combined super admin and vendor check (Throttled fetching)
 	$vendor_id = resolveVendorID();
-	$select_vendor_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vendor_id' AND status=1 LIMIT 1"));
+	if (!isset($_SESSION['vendor_details_cache']) || ($_SESSION['vendor_details_vid'] ?? 0) != $vendor_id || (time() - ($_SESSION['vendor_details_time'] ?? 0) > 60)) {
+		$q_vendor = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vendor_id' AND status=1 LIMIT 1");
+		$select_vendor_table = ($q_vendor && mysqli_num_rows($q_vendor) > 0) ? mysqli_fetch_array($q_vendor) : false;
+		if ($select_vendor_table) {
+			$_SESSION['vendor_details_cache'] = $select_vendor_table;
+			$_SESSION['vendor_details_vid'] = $vendor_id;
+			$_SESSION['vendor_details_time'] = time();
+		}
+	} else {
+		$select_vendor_table = $_SESSION['vendor_details_cache'];
+	}
 
 	if ($select_vendor_table) {
 		unset($_SESSION["admin_to_user_redirect"]);
@@ -557,17 +609,27 @@ if ($connection_server) {
 //CSS Template Update
 $css_style_template_location = "/cssfile/template/bc-style-template-1.css";
 $vendor_primary_color = "#287bff";
-$select_vendor_style_template = mysqli_query($connection_server, "SELECT * FROM sas_vendor_style_templates WHERE vendor_id='" . $select_vendor_table["id"] . "'");
-if (mysqli_num_rows($select_vendor_style_template) == 1) {
-	$get_vendor_style_template = mysqli_fetch_array($select_vendor_style_template);
-	$style_template_name = $get_vendor_style_template["template_name"];
-	if (!empty($style_template_name)) {
-		$style_template_location = "/cssfile/template/" . $style_template_name;
-		if (file_exists($_SERVER['DOCUMENT_ROOT'] . $style_template_location)) {
-			$css_style_template_location = $style_template_location;
-		}
-	}
-	$vendor_primary_color = $get_vendor_style_template["primary_color"] ?? "#287bff";
+if ($connection_server && isset($select_vendor_table["id"])) {
+    $v_id_tpl = (int)$select_vendor_table["id"];
+    if (!isset($_SESSION['vendor_style_template_cache']) || ($_SESSION['vendor_style_template_vid'] ?? 0) != $v_id_tpl) {
+        $q_tpl = mysqli_query($connection_server, "SELECT template_name, primary_color FROM sas_vendor_style_templates WHERE vendor_id='$v_id_tpl' LIMIT 1");
+        $tpl_data = ($q_tpl && mysqli_num_rows($q_tpl) > 0) ? mysqli_fetch_assoc($q_tpl) : null;
+        $_SESSION['vendor_style_template_cache'] = $tpl_data;
+        $_SESSION['vendor_style_template_vid'] = $v_id_tpl;
+    } else {
+        $tpl_data = $_SESSION['vendor_style_template_cache'];
+    }
+
+    if ($tpl_data) {
+        $style_template_name = $tpl_data["template_name"] ?? '';
+        if (!empty($style_template_name)) {
+            $style_template_location = "/cssfile/template/" . $style_template_name;
+            if (file_exists($_SERVER['DOCUMENT_ROOT'] . $style_template_location)) {
+                $css_style_template_location = $style_template_location;
+            }
+        }
+        $vendor_primary_color = $tpl_data["primary_color"] ?? "#287bff";
+    }
 }
 
 //Service Provider ID Array

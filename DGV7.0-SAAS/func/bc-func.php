@@ -5322,7 +5322,15 @@ function getSuperAdminOption($name, $default = '') {
     global $connection_server;
     static $admin_options_cache = [];
 
-    // Ensure connection is active and valid before checking/querying
+    if (isset($admin_options_cache[$name])) return $admin_options_cache[$name];
+
+    // Branch DG6.7 Optimization: Session Caching for platform-wide options
+    if (isset($_SESSION['super_admin_options_cache'][$name])) {
+        $admin_options_cache[$name] = $_SESSION['super_admin_options_cache'][$name];
+        return $admin_options_cache[$name];
+    }
+
+    // Ensure connection is active and valid before querying DB
     $is_closed = false;
     if (!$connection_server || !($connection_server instanceof mysqli)) {
         $is_closed = true;
@@ -5351,14 +5359,6 @@ function getSuperAdminOption($name, $default = '') {
                 // Fail silently
             }
         }
-    }
-
-    if (isset($admin_options_cache[$name])) return $admin_options_cache[$name];
-
-    // Branch DG6.7 Optimization: Session Caching for platform-wide options
-    if (isset($_SESSION['super_admin_options_cache'][$name])) {
-        $admin_options_cache[$name] = $_SESSION['super_admin_options_cache'][$name];
-        return $admin_options_cache[$name];
     }
 
     $q = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='".mysqli_real_escape_string($connection_server, $name)."' LIMIT 1");
