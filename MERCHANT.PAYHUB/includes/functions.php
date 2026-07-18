@@ -858,6 +858,7 @@ function sendEmail($to, $subject, $body) {
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
+        $mail->CharSet = 'UTF-8';
         $mail->Host       = $smtp_host;
         $mail->SMTPAuth   = true;
         $mail->Username   = $smtp_user;
