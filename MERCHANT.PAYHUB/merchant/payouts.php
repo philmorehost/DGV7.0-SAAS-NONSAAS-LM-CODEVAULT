@@ -5,6 +5,7 @@ require_once '../includes/functions.php';
 if (!isLoggedIn()) {
     redirect('../login.php');
 }
+requireCompliance();
 
 $user = getAuthUser();
 $db = Database::connect();

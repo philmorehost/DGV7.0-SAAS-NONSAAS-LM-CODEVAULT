@@ -241,6 +241,38 @@ function redirect($path) {
     exit;
 }
 
+/**
+ * Enforces mandatory compliance for merchant portal pages.
+ * Redirects unverified/pending merchants to the compliance page.
+ */
+function requireCompliance() {
+    if (!isLoggedIn()) {
+        redirect(BASE_URL . 'login.php');
+    }
+    
+    // Admins bypass compliance lockdown
+    if (isAdmin()) {
+        return;
+    }
+    
+    $user = getAuthUser();
+    if (!$user) {
+        redirect(BASE_URL . 'login.php');
+    }
+    
+    // If merchant is not approved (is_kyc_verified != 1)
+    if ((int)$user['is_kyc_verified'] !== 1) {
+        $current_page = basename($_SERVER['PHP_SELF']);
+        $allowed_pages = ['compliance.php', 'tickets.php', 'logout.php'];
+        
+        if (!in_array($current_page, $allowed_pages)) {
+            $_SESSION['compliance_notice'] = "Mandatory Compliance Required: Please complete your verification to access full portal features.";
+            redirect(BASE_URL . 'merchant/compliance.php');
+        }
+    }
+}
+
+
 function formatCurrency($amount) {
     return '₦' . number_format($amount, 2);
 }

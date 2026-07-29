@@ -82,20 +82,32 @@ $limit = 20;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-$total_stmt = $db->query("SELECT COUNT(*) FROM users WHERE role = 'merchant' AND is_kyc_verified != 1");
+$status_filter = isset($_GET['status_filter']) ? (int)$_GET['status_filter'] : 2; // Default to '2' (Submitted / Pending Review)
+
+if ($status_filter === 1) {
+    $where_sql = "WHERE role = 'merchant' AND is_kyc_verified = 1 AND is_deleted = 0";
+} elseif ($status_filter === 0) {
+    $where_sql = "WHERE role = 'merchant' AND is_kyc_verified = 0 AND is_deleted = 0";
+} elseif ($status_filter === 3) {
+    $where_sql = "WHERE role = 'merchant' AND is_kyc_verified = 3 AND is_deleted = 0";
+} else {
+    // Default: Show Submitted applications needing review (is_kyc_verified = 2)
+    $where_sql = "WHERE role = 'merchant' AND is_kyc_verified = 2 AND is_deleted = 0";
+}
+
+$total_stmt = $db->query("SELECT COUNT(*) FROM users $where_sql");
 $total_rows = $total_stmt->fetchColumn();
 $total_pages = ceil($total_rows / $limit);
 
-// Fetch Pending KYC (is_kyc_verified = 2 is submitted, but let's show all unverified for now)
-// We select specific columns to avoid memory issues if there's lots of data
+// Fetch compliance submissions matching filter
 $stmt = $db->prepare("SELECT id, email, business_name, business_type, country, is_kyc_verified, created_at,
                       registration_number, rc_number, bn_number, tin, id_type, id_expiry_date, bvn,
                       residential_address, id_card_path, utility_bill_path, liveliness_path,
                       cac_cert_path, cac_form_path, memart_path, bn_cert_path, bn_form_path,
                       ngo_form_path, ngo_constitution_path, gov_auth_letter_path, gov_gazette_path,
                       business_address_proof_path, kyc_notes
-                      FROM users WHERE role = 'merchant' AND is_kyc_verified != 1 AND is_deleted = 0
-                      ORDER BY is_kyc_verified DESC, created_at DESC LIMIT ? OFFSET ?");
+                      FROM users $where_sql
+                      ORDER BY created_at DESC LIMIT ? OFFSET ?");
 $stmt->bindValue(1, $limit, PDO::PARAM_INT);
 $stmt->bindValue(2, $offset, PDO::PARAM_INT);
 $stmt->execute();
@@ -129,24 +141,37 @@ include '../includes/dashboard-head.php';
           }">
         <?php include '../includes/topbar.php'; ?>
         <div class="flex-1 overflow-y-auto p-4 sm:p-8">
-            <?php if (isset($success_msg)): ?>
+            <?php if (isset($error_msg) && $error_msg): ?>
+                <div class="mb-6 p-4 bg-red-50 text-red-700 rounded-2xl border border-red-100 font-medium">
+                    <?php echo htmlspecialchars($error_msg); ?>
+                </div>
+            <?php endif; ?>
+            <?php if (isset($success_msg) && $success_msg): ?>
                 <div class="mb-6 p-4 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100 font-medium">
                     <?php echo $success_msg; ?>
                 </div>
             <?php endif; ?>
 
-            <div class="mb-8">
-                <h1 class="text-2xl font-bold text-slate-900 mb-2">Compliance Queue</h1>
-                <p class="text-slate-500">Review uploaded KYC documents and approve or reject applications</p>
+            <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900 mb-2">Compliance Queue</h1>
+                    <p class="text-slate-500">Review uploaded KYC documents and approve or reject applications</p>
+                </div>
+                <div class="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm text-xs font-bold shrink-0">
+                    <a href="?status_filter=2" class="px-3 py-1.5 rounded-xl transition-all <?php echo $status_filter === 2 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'; ?>">Submitted (Review Queue)</a>
+                    <a href="?status_filter=3" class="px-3 py-1.5 rounded-xl transition-all <?php echo $status_filter === 3 ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'; ?>">Rejected</a>
+                    <a href="?status_filter=1" class="px-3 py-1.5 rounded-xl transition-all <?php echo $status_filter === 1 ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'; ?>">Approved</a>
+                    <a href="?status_filter=0" class="px-3 py-1.5 rounded-xl transition-all <?php echo $status_filter === 0 ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'; ?>">Unsubmitted</a>
+                </div>
             </div>
 
             <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
                 <div class="p-6 border-b border-slate-100 font-bold flex justify-between items-center">
                     <div>
-                        <span>KYC Review Queue</span>
-                        <p class="text-[10px] text-slate-400 font-normal">Page <?php echo $page; ?> of <?php echo $total_pages; ?></p>
+                        <span>KYC Applications</span>
+                        <p class="text-[10px] text-slate-400 font-normal">Page <?php echo $page; ?> of <?php echo max(1, $total_pages); ?></p>
                     </div>
-                    <span class="text-xs font-normal text-slate-500"><?php echo $total_rows; ?> total applications</span>
+                    <span class="text-xs font-normal text-slate-500"><?php echo $total_rows; ?> applications in current view</span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
@@ -159,16 +184,38 @@ include '../includes/dashboard-head.php';
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
+                            <?php if (empty($pending)): ?>
+                                <tr>
+                                    <td colspan="4" class="px-6 py-12 text-center text-slate-400 text-sm">
+                                        No applications found for this filter status.
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
                             <?php foreach ($pending as $m): ?>
                                 <tr class="hover:bg-slate-50/30 transition-colors">
                                     <td class="px-4 sm:px-6 py-4">
-                                        <div class="font-bold text-slate-900 truncate max-w-[150px] sm:max-w-none"><?php echo $m['business_name']; ?></div>
-                                        <div class="text-xs text-slate-500 truncate max-w-[150px] sm:max-w-none"><?php echo $m['email']; ?></div>
+                                        <div class="font-bold text-slate-900 truncate max-w-[150px] sm:max-w-none"><?php echo htmlspecialchars($m['business_name'] ?: 'N/A'); ?></div>
+                                        <div class="text-xs text-slate-500 truncate max-w-[150px] sm:max-w-none"><?php echo htmlspecialchars($m['email']); ?></div>
                                     </td>
-                                    <td class="hidden sm:table-cell px-6 py-4 text-sm font-medium text-slate-700"><?php echo $m['business_type'] ?: 'Not selected'; ?></td>
+                                    <td class="hidden sm:table-cell px-6 py-4 text-sm font-medium text-slate-700"><?php echo htmlspecialchars($m['business_type'] ?: 'Not selected'); ?></td>
                                     <td class="hidden md:table-cell px-6 py-4">
-                                        <span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider <?php echo $m['is_kyc_verified'] == 2 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'; ?>">
-                                            <?php echo $m['is_kyc_verified'] == 2 ? 'Submitted' : 'Pending'; ?>
+                                        <?php
+                                            $st = (int)$m['is_kyc_verified'];
+                                            $badge_class = 'bg-slate-100 text-slate-600';
+                                            $badge_text = 'Pending';
+                                            if ($st === 1) {
+                                                $badge_class = 'bg-emerald-100 text-emerald-700';
+                                                $badge_text = 'Approved';
+                                            } elseif ($st === 2) {
+                                                $badge_class = 'bg-indigo-100 text-indigo-700';
+                                                $badge_text = 'Submitted';
+                                            } elseif ($st === 3) {
+                                                $badge_class = 'bg-rose-100 text-rose-700';
+                                                $badge_text = 'Rejected';
+                                            }
+                                        ?>
+                                        <span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider <?php echo $badge_class; ?>">
+                                            <?php echo $badge_text; ?>
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
@@ -329,10 +376,10 @@ include '../includes/dashboard-head.php';
                             <div class="flex gap-3 shrink-0">
                                 <button type="button"
                                         :disabled="processing"
-                                        @click="submitKYC(0)"
+                                        @click="submitKYC(3)"
                                         class="px-8 py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all text-sm flex items-center gap-2">
-                                    <span x-show="processing && document.getElementById('kycStatus').value == 0" class="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
-                                    Reject
+                                    <span x-show="processing && document.getElementById('kycStatus').value == 3" class="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></span>
+                                    Reject Application
                                 </button>
                                 <button type="button"
                                         :disabled="processing"

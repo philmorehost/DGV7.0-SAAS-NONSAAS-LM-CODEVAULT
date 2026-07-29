@@ -17,9 +17,21 @@ $isTest = $tx ? (bool)$tx['is_test'] : false;
 $pk = $isTest ? getConfig('paystack_test_public_key') : getConfig('paystack_public_key');
 
 $amount = $tx ? (float)$tx['amount'] : (float)($_GET['amount'] ?? 1000);
-$email = $tx ? $tx['customer_email'] : ($_GET['email'] ?? '');
+// Sanitize the query-string branch: only the $tx branch has been through
+// sanitize() (at initialize time). This value is rendered into the page and
+// into a <script> block below, so an unsanitized ?email= was a reflected XSS
+// reachable with any reference that has no transaction.
+$email = $tx ? $tx['customer_email'] : sanitize($_GET['email'] ?? '');
 if (!$ref) $ref = 'PH_'.time();
 $isEmbedded = isset($_GET['embed']) && $_GET['embed'] == '1';
+
+// Where postMessage results may be delivered. inline.js sends its own origin;
+// accept it only if it is a well-formed scheme://host[:port], so the value can
+// never widen delivery beyond a single concrete origin.
+$parentOrigin = (string)($_GET['origin'] ?? '');
+if (!preg_match('#^https?://[A-Za-z0-9.\-]+(:\d+)?$#', $parentOrigin)) {
+    $parentOrigin = '';
+}
 
 if (!$isEmbedded) {
     include 'includes/header.php';
@@ -95,7 +107,7 @@ if (!$isEmbedded) {
                     </div>
                     <div>
                         <p class="text-[10px] text-slate-400 font-bold uppercase">Customer</p>
-                        <p class="text-sm font-bold text-slate-700"><?php echo $email ?: 'Guest Customer'; ?></p>
+                        <p class="text-sm font-bold text-slate-700"><?php echo htmlspecialchars($email ?: 'Guest Customer', ENT_QUOTES, 'UTF-8'); ?></p>
                     </div>
                 </div>
             </div>
@@ -116,6 +128,22 @@ if (!$isEmbedded) {
 </div>
 
 <script>
+<?php
+/*
+ * Values interpolated into this block are emitted with json_encode() rather
+ * than echoed between quotes. Inside a <script> a JS string is not an HTML
+ * text node, so htmlspecialchars() is the wrong escaper — json_encode with
+ * the HEX_* flags produces a complete, correctly quoted JS literal and cannot
+ * terminate the string or the enclosing </script>.
+ */
+$jsEnc = static function ($value): string {
+    return json_encode($value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES);
+};
+// '' would be an invalid postMessage target, so fall back to '*' only when no
+// valid origin was supplied — matching the previous behaviour for callers that
+// predate the origin parameter, while a known origin is always targeted exactly.
+$jsTargetOrigin = $parentOrigin !== '' ? $jsEnc($parentOrigin) : $jsEnc('*');
+?>
 <?php if ($isTest): ?>
 // SANDBOX MODE: Simulate success without going through real Paystack API
 function simulateSuccess() {
@@ -123,10 +151,10 @@ function simulateSuccess() {
     btn.disabled = true;
     btn.textContent = 'Processing...';
 
-    fetch('<?php echo BASE_URL; ?>api/transaction/simulate.php?reference=<?php echo urlencode($ref); ?>', {
+    fetch(<?php echo $jsEnc(BASE_URL . 'api/transaction/simulate.php?reference=' . urlencode($ref)); ?>, {
         method: 'GET',
         headers: {
-            'Authorization': 'Bearer <?php echo $pk; ?>'
+            'Authorization': 'Bearer ' + <?php echo $jsEnc($pk); ?>
         }
     })
     .then(function(r) { return r.json(); })
@@ -135,10 +163,10 @@ function simulateSuccess() {
             <?php if ($isEmbedded): ?>
                 window.parent.postMessage({
                     type: 'payhub_success',
-                    data: { reference: '<?php echo addslashes($ref); ?>', status: 'success' }
-                }, '*');
+                    data: { reference: <?php echo $jsEnc($ref); ?>, status: 'success' }
+                }, <?php echo $jsTargetOrigin; ?>);
             <?php else: ?>
-                window.location.href = 'verify.php?reference=<?php echo urlencode($ref); ?>';
+                window.location.href = <?php echo $jsEnc('verify.php?reference=' . urlencode($ref)); ?>;
             <?php endif; ?>
         } else {
             btn.disabled = false;
@@ -157,10 +185,10 @@ function simulateSuccess() {
 function payWithPaystack() {
     const paystack = new PaystackPop();
     paystack.newTransaction({
-        key: '<?php echo $pk; ?>',
-        email: '<?php echo $email; ?>',
-        amount: <?php echo $amount * 100; ?>,
-        reference: '<?php echo $ref; ?>',
+        key: <?php echo $jsEnc($pk); ?>,
+        email: <?php echo $jsEnc($email); ?>,
+        amount: <?php echo (int) round($amount * 100); ?>,
+        reference: <?php echo $jsEnc($ref); ?>,
         onCancel: function(){
             alert('Transaction cancelled.');
         },
@@ -169,9 +197,9 @@ function payWithPaystack() {
                 window.parent.postMessage({
                     type: 'payhub_success',
                     data: response
-                }, '*');
+                }, <?php echo $jsTargetOrigin; ?>);
             <?php else: ?>
-                window.location.href = 'verify.php?reference=' + response.reference;
+                window.location.href = 'verify.php?reference=' + encodeURIComponent(response.reference);
             <?php endif; ?>
         }
     });

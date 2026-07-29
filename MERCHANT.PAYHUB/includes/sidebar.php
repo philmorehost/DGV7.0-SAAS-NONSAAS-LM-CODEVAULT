@@ -115,70 +115,119 @@ $role = $_SESSION['role'] ?? 'merchant';
                 Security
             </a>
         <?php else: ?>
-            <div class="px-3 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Main</div>
-            <a href="<?php echo BASE_URL; ?>merchant/dashboard.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'dashboard.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-                Dashboard
+            <?php $is_verified = (int)($user['is_kyc_verified'] ?? 0) === 1; ?>
+            <div class="px-3 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                <span>Main</span>
+                <?php if (!$is_verified): ?>
+                    <span class="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <i data-lucide="lock" class="w-3 h-3"></i> Locked
+                    </span>
+                <?php endif; ?>
+            </div>
+            <a href="<?php echo BASE_URL; ?>merchant/dashboard.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'dashboard.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                    Dashboard
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/compliance.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'compliance.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="shield-alert" class="w-5 h-5"></i>
-                Compliance
+            <a href="<?php echo BASE_URL; ?>merchant/compliance.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'compliance.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="shield-alert" class="w-5 h-5"></i>
+                    Compliance
+                </div>
+                <?php if (!$is_verified): ?>
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <?php endif; ?>
             </a>
 
             <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Collections</div>
-            <a href="<?php echo BASE_URL; ?>merchant/transactions.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'transactions.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
-                Transactions
+            <a href="<?php echo BASE_URL; ?>merchant/transactions.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'transactions.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+                    Transactions
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/invoices.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'invoices.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="file-text" class="w-5 h-5"></i>
-                Invoices
+            <a href="<?php echo BASE_URL; ?>merchant/invoices.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'invoices.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="file-text" class="w-5 h-5"></i>
+                    Invoices
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/subscriptions.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'subscriptions.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="refresh-ccw" class="w-5 h-5"></i>
-                Subscriptions
+            <a href="<?php echo BASE_URL; ?>merchant/subscriptions.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'subscriptions.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="refresh-ccw" class="w-5 h-5"></i>
+                    Subscriptions
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
 
             <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Finance</div>
-            <a href="<?php echo BASE_URL; ?>merchant/payouts.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'payouts.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="arrow-down-left" class="w-5 h-5"></i>
-                Payouts
+            <a href="<?php echo BASE_URL; ?>merchant/payouts.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'payouts.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="arrow-down-left" class="w-5 h-5"></i>
+                    Payouts
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/ledger.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'ledger.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="activity" class="w-5 h-5"></i>
-                Balance Ledger
+            <a href="<?php echo BASE_URL; ?>merchant/ledger.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'ledger.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="activity" class="w-5 h-5"></i>
+                    Balance Ledger
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/disputes.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'disputes.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="shield-check" class="w-5 h-5"></i>
-                Disputes
+            <a href="<?php echo BASE_URL; ?>merchant/disputes.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'disputes.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="shield-check" class="w-5 h-5"></i>
+                    Disputes
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
 
             <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Management</div>
-            <a href="<?php echo BASE_URL; ?>merchant/customers.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'customers.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="users" class="w-5 h-5"></i>
-                Customers
+            <a href="<?php echo BASE_URL; ?>merchant/customers.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'customers.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="users" class="w-5 h-5"></i>
+                    Customers
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
             <a href="<?php echo BASE_URL; ?>merchant/tickets.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'tickets.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
                 <i data-lucide="ticket" class="w-5 h-5"></i>
                 Support
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/sub-accounts.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'sub-accounts.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="layers" class="w-5 h-5"></i>
-                Sub-accounts
+            <a href="<?php echo BASE_URL; ?>merchant/sub-accounts.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'sub-accounts.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="layers" class="w-5 h-5"></i>
+                    Sub-accounts
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
 
             <div class="pt-4 pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Developer</div>
-            <a href="<?php echo BASE_URL; ?>merchant/api-keys.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'api-keys.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="code" class="w-5 h-5"></i>
-                API Keys
+            <a href="<?php echo BASE_URL; ?>merchant/api-keys.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'api-keys.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="code" class="w-5 h-5"></i>
+                    API Keys
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/reconcile.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'reconcile.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="refresh-cw" class="w-5 h-5"></i>
-                Reconcile
+            <a href="<?php echo BASE_URL; ?>merchant/reconcile.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'reconcile.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                    Reconcile
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
-            <a href="<?php echo BASE_URL; ?>merchant/settings.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'settings.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
-                <i data-lucide="settings" class="w-5 h-5"></i>
-                Settings
+            <a href="<?php echo BASE_URL; ?>merchant/settings.php" class="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'settings.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                    Settings
+                </div>
+                <?php if (!$is_verified): ?><i data-lucide="lock" class="w-4 h-4 text-slate-400"></i><?php endif; ?>
             </a>
         <?php endif; ?>
     </nav>

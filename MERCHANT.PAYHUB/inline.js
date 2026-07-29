@@ -56,7 +56,23 @@ const PayhubPop = {
                     if (options.onClose) options.onClose();
                 };
 
-                const checkoutUrl = baseUrl + 'checkout.php?amount=' + (options.amount / 100) + '&email=' + options.email + '&ref=' + options.ref + '&embed=1';
+                // Tell the checkout which origin it may deliver its result to,
+                // so it can target this page exactly instead of broadcasting.
+                const checkoutUrl = baseUrl + 'checkout.php'
+                    + '?amount=' + encodeURIComponent(options.amount / 100)
+                    + '&email=' + encodeURIComponent(options.email)
+                    + '&ref=' + encodeURIComponent(options.ref)
+                    + '&origin=' + encodeURIComponent(window.location.origin)
+                    + '&embed=1';
+
+                // The origin the result must come from — derived from where
+                // this script itself was served.
+                let checkoutOrigin;
+                try {
+                    checkoutOrigin = new URL(baseUrl, window.location.href).origin;
+                } catch (e) {
+                    checkoutOrigin = null;
+                }
 
                 const iframe = document.createElement('iframe');
                 iframe.src = checkoutUrl;
@@ -70,13 +86,34 @@ const PayhubPop = {
                 overlay.appendChild(container);
                 document.body.appendChild(overlay);
 
-                // Listen for messages from iframe
-                window.addEventListener('message', function(event) {
-                    if (event.data && event.data.type === 'payhub_success') {
-                        document.body.removeChild(overlay);
-                        if (options.callback) options.callback(event.data.data);
-                    }
-                }, false);
+                // Listen for messages from the checkout iframe.
+                //
+                // The origin check is what makes this trustworthy: without it
+                // ANY frame on the merchant's page — an ad, a widget, an
+                // injected iframe — could post a payhub_success and drive the
+                // merchant's success callback without a payment ever happening.
+                // The listener is also removed once it fires, so repeated
+                // checkouts do not stack duplicate handlers that re-fire the
+                // callback.
+                function onCheckoutMessage(event) {
+                    if (checkoutOrigin && event.origin !== checkoutOrigin) { return; }
+                    if (event.source !== iframe.contentWindow) { return; }
+                    if (!event.data || event.data.type !== 'payhub_success') { return; }
+
+                    window.removeEventListener('message', onCheckoutMessage, false);
+
+                    if (overlay.parentNode) { document.body.removeChild(overlay); }
+                    if (options.callback) options.callback(event.data.data);
+                }
+
+                window.addEventListener('message', onCheckoutMessage, false);
+
+                // Drop the listener if the customer just closes the popup.
+                const previousOnClose = options.onClose;
+                options.onClose = function () {
+                    window.removeEventListener('message', onCheckoutMessage, false);
+                    if (previousOnClose) previousOnClose();
+                };
             }
         };
     }
