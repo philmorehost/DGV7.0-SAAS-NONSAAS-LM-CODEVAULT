@@ -127,7 +127,8 @@ data class SiteInfo(
 
 data class SupportInfo(
     val email: String = "",
-    val address: String = ""
+    val address: String = "",
+    val whatsapp: String = ""
 )
 
 // ── Result wrapper ────────────────────────────────────────────────────────────

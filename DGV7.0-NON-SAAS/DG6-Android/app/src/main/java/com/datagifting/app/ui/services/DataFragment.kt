@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.datagifting.app.R
 import com.datagifting.app.api.RetrofitClient
 import com.datagifting.app.databinding.FragmentDataBinding
+import com.datagifting.app.util.PinPromptHelper
 import com.datagifting.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -221,24 +222,35 @@ class DataFragment : Fragment(R.layout.fragment_data) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Confirm Purchase")
             .setMessage("Phone: $phone\nNetwork: ${selectedNetwork.uppercase()}\nType: ${selectedDataType.replace("-", " ").uppercase()}\nPlan: ${plan.name}\nAmount: â‚¦${plan.amount}$durationLine")
-            .setPositiveButton("Buy Now") { _, _ -> doPurchase(phone, plan) }
+            .setPositiveButton("Buy Now") { _, _ -> promptPinThenPurchase(phone, plan) }
             .setNegativeButton("Cancel", null).show()
     }
 
-    private fun doPurchase(phone: String, plan: DataPlanItem) {
+    private fun promptPinThenPurchase(phone: String, plan: DataPlanItem) {
+        val prefs = PreferenceManager(requireContext())
+        PinPromptHelper.requirePin(
+            requireContext(), prefs,
+            onReady = { pin -> doPurchase(phone, plan, pin) },
+            onNeedsSetup = { snack("Please set a transaction PIN in Profile > Set PIN first") }
+        )
+    }
+
+    private fun doPurchase(phone: String, plan: DataPlanItem, pin: String? = null) {
         binding.progressBar.visibility = View.VISIBLE
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
                 val api = RetrofitClient.getService()
-                val resp = api.purchaseData(mapOf(
+                val requestBody = mutableMapOf<String, Any>(
                     "api_key"   to prefs.getApiKey(),
                     "network"   to selectedNetwork,
                     "data_type" to selectedDataType,
                     "plan_code" to plan.code,
                     "phone_no"  to phone
-                ))
+                )
+                if (!pin.isNullOrEmpty()) requestBody["pin"] = pin
+                val resp = api.purchaseData(requestBody)
                 val status = resp.body()?.get("status") as? String ?: "failed"
                 val msg = resp.body()?.get("message") as? String
                     ?: resp.body()?.get("desc") as? String ?: ""

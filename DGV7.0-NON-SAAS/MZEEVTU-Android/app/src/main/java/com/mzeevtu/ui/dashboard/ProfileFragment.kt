@@ -85,6 +85,20 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
             startActivity(intent)
         }
 
+        binding.btnWhatsappSupport.setOnClickListener {
+            val number = prefs.getString(Constants.KEY_SUPPORT_WHATSAPP)
+            if (number.isBlank()) {
+                Toast.makeText(requireContext(), "WhatsApp support is not configured yet.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$number"))
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Unable to open WhatsApp.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         binding.btnLogout.setOnClickListener {
             prefs.clear()
             startActivity(Intent(requireContext(), LoginActivity::class.java).apply {

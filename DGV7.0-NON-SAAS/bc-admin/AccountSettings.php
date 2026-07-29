@@ -854,8 +854,9 @@ if (isset($_POST["update-security-settings"])) {
     $smtp_pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_pass"])));
     $smtp_port = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_port"])));
     $smtp_sec = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_sec"])));
+    $support_whatsapp = mysqli_real_escape_string($connection_server, preg_replace('/[^0-9]/', '', $_POST["support-whatsapp"] ?? ''));
 
-    mysqli_query($connection_server, "UPDATE sas_vendors SET force_security_pin='$force_pin', reg_otp_enabled='$force_otp', trans_email_enabled='$force_email', force_google_sso='$force_sso', google_client_id='$google_id', smtp_host='$smtp_host', smtp_user='$smtp_user', smtp_pass='$smtp_pass', smtp_port='$smtp_port', smtp_sec='$smtp_sec' WHERE id='" . $get_logged_admin_details["id"] . "'");
+    mysqli_query($connection_server, "UPDATE sas_vendors SET force_security_pin='$force_pin', reg_otp_enabled='$force_otp', trans_email_enabled='$force_email', force_google_sso='$force_sso', google_client_id='$google_id', smtp_host='$smtp_host', smtp_user='$smtp_user', smtp_pass='$smtp_pass', smtp_port='$smtp_port', smtp_sec='$smtp_sec', support_whatsapp='$support_whatsapp' WHERE id='" . $get_logged_admin_details["id"] . "'");
 
     if (!empty($new_pin)) {
         if (is_numeric($new_pin) && strlen($new_pin) == 4) {
@@ -1594,7 +1595,12 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                     <div class="form-check form-switch mb-3">
                                         <input class="form-check-input" type="checkbox" name="force-pin" id="forcePin" <?php echo $get_logged_admin_details['force_security_pin'] ? 'checked' : ''; ?>>
                                         <label class="form-check-label fw-bold" for="forcePin">Enforce Transaction PIN for all Users</label>
-                                        <div class="small text-muted">Users will be forced to setup and use a 4-digit PIN for all transfers.</div>
+                                        <div class="small text-muted">Users will be forced to setup and use a 4-digit PIN for all transfers. Applies to the website, mobile apps, and API alike.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold" for="supportWhatsapp">Support WhatsApp Number</label>
+                                        <input class="form-control" type="text" name="support-whatsapp" id="supportWhatsapp" placeholder="e.g. 2348012345678 or 14155552671" value="<?php echo htmlspecialchars($get_logged_admin_details['support_whatsapp'] ?? ''); ?>">
+                                        <div class="small text-muted">Digits only, with country code, no leading 0 or +. Any country is fine — use whatever country your WhatsApp Business number is registered in. Powers the WhatsApp support button shown to users, including in the mobile apps.</div>
                                     </div>
                                     <div class="form-check form-switch mb-3">
                                         <input class="form-check-input" type="checkbox" name="force-reg-otp" id="forceRegOTP" <?php echo ($get_logged_admin_details['reg_otp_enabled'] ?? 1) ? 'checked' : ''; ?>>

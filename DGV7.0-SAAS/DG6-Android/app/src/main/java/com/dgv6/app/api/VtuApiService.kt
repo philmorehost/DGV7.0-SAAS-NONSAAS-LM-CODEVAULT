@@ -156,6 +156,9 @@ interface VtuApiService {
     @POST("web/api/set-pin.php")
     suspend fun setPin(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
 
+    @POST("web/api/security-quest.php")
+    suspend fun securityQuest(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
+
     // ── Contacts ──────────────────────────────────────────────────────────
     @POST("web/api/contacts.php")
     suspend fun contactsAction(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
@@ -181,5 +184,12 @@ interface VtuApiService {
 
     @POST("web/api/kyc.php")
     suspend fun kycUpload(@Body body: okhttp3.MultipartBody): Response<Map<String, Any>>
+
+    // ── AI Assistant ──────────────────────────────────────────────────────
+    @POST("api/app-backend/ai-intent-parser.php")
+    suspend fun parseAiIntent(@Header("Authorization") token: String, @Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
+
+    @POST("api/app-backend/ai-vision-parser.php")
+    suspend fun parseAiVision(@Header("Authorization") token: String, @Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
 }
 

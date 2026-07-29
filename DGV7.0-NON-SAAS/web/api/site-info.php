@@ -40,7 +40,10 @@ if ($get_vendor) {
             "support" => [
                 "email" => $get_vendor['email'] ?? "",
                 "phone" => !empty($get_vendor['phone_number']) ? "234" . ltrim($get_vendor['phone_number'], '0') : "",
-                "address" => $get_vendor['home_address'] ?? ""
+                "address" => $get_vendor['home_address'] ?? "",
+                // Passed through as-is (already digits-only, country code included) — not assumed to
+                // be Nigerian, since vendors may run their WhatsApp Business number on any country's line.
+                "whatsapp" => $get_vendor['support_whatsapp'] ?? ""
             ]
         ]
     ]);

@@ -29,6 +29,9 @@ class PreferenceManager(context: Context) {
     fun saveDouble(key: String, value: Double) = prefs.edit().putString(key, value.toString()).apply()
     fun getDouble(key: String, default: Double = 0.0) = prefs.getString(key, default.toString())?.toDoubleOrNull() ?: default
 
+    fun saveLong(key: String, value: Long) = prefs.edit().putLong(key, value).apply()
+    fun getLong(key: String, default: Long = 0L) = prefs.getLong(key, default)
+
     fun isLoggedIn() = getBoolean(Constants.KEY_IS_LOGGED_IN, false)
     fun getApiKey() = getString(Constants.KEY_API_KEY)
 

@@ -16,12 +16,19 @@ object Constants {
     const val KEY_BALANCE = "balance"
     const val KEY_ACCOUNT_LEVEL = "account_level"
     const val KEY_PIN_SET = "security_pin_set"
+    const val KEY_PIN_REQUIRED = "pin_required"
     const val KEY_PRIMARY_COLOR = "primary_color"
     const val KEY_LOGO_URL = "logo_url"
     const val KEY_SITE_TITLE = "site_title"
     const val KEY_SUPPORT_EMAIL = "support_email"
+    const val KEY_SUPPORT_WHATSAPP = "support_whatsapp"
     const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
     const val KEY_DARK_MODE = "dark_mode"
+
+    // Security question lock screen
+    const val KEY_SECURITY_VERIFIED_AT = "security_verified_at"
+    const val KEY_HAS_SECURITY_QUEST = "has_security_quest"
+    const val LOCK_TIMEOUT_MINUTES = 5L
 
     // Notification
     const val CHANNEL_BULK = "bulk_transactions"

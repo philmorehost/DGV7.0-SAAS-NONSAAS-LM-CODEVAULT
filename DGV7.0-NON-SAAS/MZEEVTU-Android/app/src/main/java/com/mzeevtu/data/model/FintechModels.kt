@@ -127,7 +127,8 @@ data class SiteInfo(
 
 data class SupportInfo(
     val email: String = "",
-    val address: String = ""
+    val address: String = "",
+    val whatsapp: String = ""
 )
 
 // â”€â”€ Result wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

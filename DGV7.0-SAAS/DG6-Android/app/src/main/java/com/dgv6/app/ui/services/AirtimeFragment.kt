@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentAirtimeBinding
+import com.dgv6.app.util.PinPromptHelper
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -151,24 +152,35 @@ class AirtimeFragment : Fragment(R.layout.fragment_airtime) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Confirm Purchase")
             .setMessage("Buy ₦$amount ${selectedNetwork.uppercase()} airtime for $phone?")
-            .setPositiveButton("Buy Now") { _, _ -> doPurchase(phone, amount) }
+            .setPositiveButton("Buy Now") { _, _ -> promptPinThenPurchase(phone, amount) }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun doPurchase(phone: String, amount: String) {
+    private fun promptPinThenPurchase(phone: String, amount: String) {
+        val prefs = PreferenceManager(requireContext())
+        PinPromptHelper.requirePin(
+            requireContext(), prefs,
+            onReady = { pin -> doPurchase(phone, amount, pin) },
+            onNeedsSetup = { snack("Please set a transaction PIN in Profile > Set PIN first") }
+        )
+    }
+
+    private fun doPurchase(phone: String, amount: String, pin: String? = null) {
         binding.progressBar.visibility = View.VISIBLE
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
                 val api = RetrofitClient.getService()
-                val resp = api.purchaseAirtime(mapOf(
+                val requestBody = mutableMapOf<String, Any>(
                     "api_key" to prefs.getApiKey(),
                     "network" to selectedNetwork,
                     "amount" to amount,
                     "phone_number" to phone
-                ))
+                )
+                if (!pin.isNullOrEmpty()) requestBody["pin"] = pin
+                val resp = api.purchaseAirtime(requestBody)
                 val body = resp.body()
                 val status = body?.get("status") as? String ?: "failed"
                 val msg = body?.get("message") as? String ?: body?.get("desc") as? String ?: "Transaction failed"

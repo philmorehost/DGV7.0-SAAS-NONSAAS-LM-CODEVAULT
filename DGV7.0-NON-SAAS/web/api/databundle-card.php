@@ -42,6 +42,10 @@ if (empty($_POST)) {
     }
 }
 
+if (!requireTransactionPin($select_vendor_table, $get_logged_user_details, $_POST, $__pin_error)) {
+    exit(json_encode(["status" => "failed", "desc" => $__pin_error]));
+}
+
 $network = mysqli_real_escape_string($connection_server, $_POST['network'] ?? '');
 $service_type = mysqli_real_escape_string($connection_server, $_POST['service_type'] ?? 'data');
 $data_type = mysqli_real_escape_string($connection_server, $_POST['data_type'] ?? '');

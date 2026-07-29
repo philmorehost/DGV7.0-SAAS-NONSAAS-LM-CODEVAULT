@@ -21,7 +21,7 @@ if (empty($api_key)) {
 }
 
 $vendor_id = resolveVendorID();
-$get_vendor = mysqli_fetch_array(mysqli_query($connection_server, "SELECT id, ai_status FROM sas_vendors WHERE id='$vendor_id' AND status=1 LIMIT 1"));
+$get_vendor = mysqli_fetch_array(mysqli_query($connection_server, "SELECT id, ai_status, force_security_pin FROM sas_vendors WHERE id='$vendor_id' AND status=1 LIMIT 1"));
 if (!$get_vendor) {
     echo json_encode(["status" => "error", "message" => "Vendor not found"]);
     exit;
@@ -59,6 +59,7 @@ if (mysqli_num_rows($check_user) == 1) {
             "kyc_status" => (int)$user['kyc_status'],
             "kyc_status_name" => $kyc_names[$user['kyc_status']] ?? "Unknown",
             "security_pin_set" => $pin_set,
+            "pin_required" => ((int)($get_vendor['force_security_pin'] ?? 0) === 1),
             "ai_status" => (int)$get_vendor['ai_status'],
             "loyalty" => [
                 "points" => $vtu_details['total_points'],

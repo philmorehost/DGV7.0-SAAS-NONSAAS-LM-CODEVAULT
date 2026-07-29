@@ -35,6 +35,10 @@ if(!$user) exit(json_encode(["status" => "failed", "desc" => "Unauthorized"]));
 // For chargeUser to work correctly, we might need some session-like variables or global user details
 $get_logged_user_details = $user;
 
+if (!requireTransactionPin($select_vendor_table, $get_logged_user_details, $_POST, $__pin_error)) {
+    exit(json_encode(["status" => "failed", "desc" => $__pin_error]));
+}
+
 $network = mysqli_real_escape_string($connection_server, $_POST['network'] ?? '');
 $service_type = mysqli_real_escape_string($connection_server, $_POST['service_type'] ?? 'data');
 $data_type = mysqli_real_escape_string($connection_server, $_POST['data_type'] ?? '');

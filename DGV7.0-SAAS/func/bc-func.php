@@ -384,6 +384,27 @@ function verifyUserPIN($input_pin, $user_details) {
     return false;
 }
 
+/**
+ * Gate for the vendor's "force transaction PIN" toggle (sas_vendors.force_security_pin),
+ * used by every stateless web/api/*.php purchase endpoint. Previously this toggle was only
+ * enforced in the session-based web/Dashboard.php gate — API/app purchases ignored it
+ * entirely, so enabling it in bc-admin had no effect on anything but the web dashboard.
+ */
+function requireTransactionPin($vendor_details, $user_details, $input, &$error_msg) {
+    if (($vendor_details['force_security_pin'] ?? 0) != 1) {
+        return true;
+    }
+    if (empty($user_details['security_pin']) && empty($user_details['transaction_pin'])) {
+        $error_msg = "Transaction PIN required. Please set a PIN in Security Settings first.";
+        return false;
+    }
+    if (!verifyUserPIN($input['pin'] ?? '', $user_details)) {
+        $error_msg = "Invalid transaction PIN.";
+        return false;
+    }
+    return true;
+}
+
 function base64url_decode($data) {
     return base64_decode(strtr($data, '-_', '+/') . str_repeat('=', (4 - (strlen($data) % 4)) % 4));
 }

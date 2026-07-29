@@ -61,6 +61,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         kycVerified = d["kyc_verified"] as? String ?: "No",
                         securityPinSet = d["security_pin_set"] as? Boolean ?: false
                     )
+                    // Cache the vendor's live PIN-enforcement state so purchase screens can decide
+                    // whether to prompt for a PIN without a separate fetch (see requireTransactionPin
+                    // on the backend, the actual enforcement point — this is just UX to avoid a purchase
+                    // bouncing off a server rejection).
+                    prefs.saveBoolean(com.mzeevtu.util.Constants.KEY_PIN_REQUIRED, d["pin_required"] as? Boolean ?: false)
+                    prefs.saveBoolean(com.mzeevtu.util.Constants.KEY_PIN_SET, user.securityPinSet)
                     _balance.postValue(user.balance)
                     _profile.postValue(ApiResult.Success(user))
                 }

@@ -255,7 +255,16 @@
                         android:id="@+id/btn_email_support"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
+                        android:layout_marginBottom="8dp"
                         android:text="Email Support"
+                        android:textSize="14sp"
+                        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+                    <Button
+                        android:id="@+id/btn_whatsapp_support"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="WhatsApp Support"
                         android:textSize="14sp"
                         style="@style/Widget.Material3.Button.OutlinedButton" />
                 </LinearLayout>
