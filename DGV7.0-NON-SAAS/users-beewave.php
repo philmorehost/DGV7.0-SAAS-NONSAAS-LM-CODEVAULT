@@ -20,9 +20,12 @@ if ($select_vendor_table) {
 	$virtual_bankname = $catch_incoming_request["data"]["destination"]["bank_name"];
 	$virtual_accounttype = $catch_incoming_request["data"]["destination"]["account_type"];
 	$payment_method = "BANK TRANSFER";
-	$exp_customer_detail = array_filter(explode("-", trim($customer_email)));
-	$customer_username = $exp_customer_detail[1];
-	$customer_mail = $exp_customer_detail[2];
+	// Limiting explode to 3 parts keeps index 1 (username) reliable and captures the real email
+	// intact in index 2 even when that email itself contains a hyphen — the previous array_filter()
+	// split silently dropped the trailing segment whenever it was empty, causing "Undefined array key 2".
+	$exp_customer_detail = explode("-", trim($customer_email), 3);
+	$customer_username = $exp_customer_detail[1] ?? "";
+	$customer_mail = $exp_customer_detail[2] ?? "";
 	$vendor_id = trim($select_vendor_table["id"]);
 
 	if ($virtual_accounttype == "static") {

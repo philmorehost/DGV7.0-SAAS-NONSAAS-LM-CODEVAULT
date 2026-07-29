@@ -33,7 +33,9 @@
 		$virtual_accountno = $catch_incoming_request["virtualAccount"]["virtualAccountNumber"];
 		$virtual_bankcode = $catch_incoming_request["virtualAccount"]["virtualBank"];
 		$payment_method = "BANK TRANSFER";
-		$exp_customer_detail = explode("-", trim($customer_email));
+		// Limiting explode to 3 parts keeps index 1 (username) reliable and captures the real email
+		// intact in index 2 even when that email itself contains a hyphen.
+		$exp_customer_detail = explode("-", trim($customer_email), 3);
 		$customer_username = isset($exp_customer_detail[1]) ? $exp_customer_detail[1] : '';
 		$customer_mail = isset($exp_customer_detail[2]) ? $exp_customer_detail[2] : $customer_email;
 		$vendor_id = trim($select_vendor_table["id"]);

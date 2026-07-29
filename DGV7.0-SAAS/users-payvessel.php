@@ -33,9 +33,14 @@
 		$virtual_accountno = $catch_incoming_request["virtualAccount"]["virtualAccountNumber"];
 		$virtual_bankcode = $catch_incoming_request["virtualAccount"]["virtualBank"];
 		$payment_method = "BANK TRANSFER";
-		$exp_customer_detail = array_filter(explode("-", trim($customer_email)));
-		$customer_username = $exp_customer_detail[1];
-		$customer_mail = $exp_customer_detail[2];
+		// The registered account reference is built as {sanitized_host}-{username}-{real_email}
+		// (see Dashboard.php). Limiting explode to 3 parts keeps index 1 (username) reliable and
+		// captures the real email intact in index 2 even when that email itself contains a hyphen —
+		// the previous array_filter()-based split silently dropped the trailing segment whenever it
+		// was empty, which is what caused "Undefined array key 2" here.
+		$exp_customer_detail = explode("-", trim($customer_email), 3);
+		$customer_username = $exp_customer_detail[1] ?? "";
+		$customer_mail = $exp_customer_detail[2] ?? "";
 		$vendor_id = trim($select_vendor_table["id"]);
 		
 		$check_if_banks_exists = mysqli_query($connection_server, "SELECT * FROM sas_user_banks WHERE vendor_id='$vendor_id' && username='$customer_username' && account_number='$virtual_accountno' && bank_code='$virtual_bankcode'");
