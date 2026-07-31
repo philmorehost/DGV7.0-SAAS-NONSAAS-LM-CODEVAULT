@@ -188,11 +188,7 @@ class AirtimeFragment : Fragment(R.layout.fragment_airtime) {
                     if (_binding == null) return@runOnUiThread
                     binding.progressBar.visibility = View.GONE
                     binding.btnBuy.isEnabled = true
-                    if (status.contains("success", ignoreCase = true)) {
-                        showSuccess("Airtime purchase successful!\n$msg")
-                    } else {
-                        snack(msg)
-                    }
+                    showResult(status, msg)
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
@@ -205,11 +201,20 @@ class AirtimeFragment : Fragment(R.layout.fragment_airtime) {
         }
     }
 
-    private fun showSuccess(msg: String) {
+    /** Always shows the transaction's actual status (success/pending/failed) via a dialog,
+     *  rather than only success getting a clear dialog and everything else a small snackbar. */
+    private fun showResult(status: String, msg: String) {
+        val title = when {
+            status.contains("success", ignoreCase = true) -> "✅ Successful"
+            status.contains("pending", ignoreCase = true) -> "⏳ Pending"
+            else -> "❌ Failed"
+        }
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("âœ… Success")
-            .setMessage(msg)
-            .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }
+            .setTitle(title)
+            .setMessage(msg.ifBlank { "Airtime purchase $status" })
+            .setPositiveButton("OK") { _, _ ->
+                if (status.contains("success", ignoreCase = true)) requireActivity().onBackPressedDispatcher.onBackPressed()
+            }
             .show()
     }
 

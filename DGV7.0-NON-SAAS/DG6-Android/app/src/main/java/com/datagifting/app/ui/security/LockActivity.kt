@@ -1,5 +1,6 @@
 package com.datagifting.app.ui.security
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
@@ -8,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.datagifting.app.api.RetrofitClient
 import com.datagifting.app.databinding.ActivityLockBinding
+import com.datagifting.app.ui.MainActivity
 import com.datagifting.app.util.Constants
 import com.datagifting.app.util.PreferenceManager
 import com.google.android.material.snackbar.Snackbar
@@ -153,6 +155,14 @@ class LockActivity : AppCompatActivity() {
 
     private fun markVerifiedAndFinish() {
         prefs.saveLong(Constants.KEY_SECURITY_VERIFIED_AT, System.currentTimeMillis())
+        // LockActivity is launched from the Application context (DGApp), which requires
+        // FLAG_ACTIVITY_NEW_TASK and can land it in a separate task from MainActivity. Relying on
+        // finish() alone then has nothing to fall back to in THIS task, and Android drops to the
+        // home screen — looking like the app crashed/closed. Explicitly bring MainActivity back
+        // to the foreground first so there's always something to return to.
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        })
         finish()
     }
 

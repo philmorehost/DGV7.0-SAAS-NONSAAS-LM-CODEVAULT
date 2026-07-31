@@ -258,13 +258,7 @@ class DataFragment : Fragment(R.layout.fragment_data) {
                     if (_binding == null) return@runOnUiThread
                     binding.progressBar.visibility = View.GONE
                     binding.btnBuy.isEnabled = true
-                    if (status.contains("success", true)) {
-                        MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("✅ Data Purchased")
-                            .setMessage(msg)
-                            .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }
-                            .show()
-                    } else snack(msg)
+                    showResult(status, msg)
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
@@ -275,6 +269,23 @@ class DataFragment : Fragment(R.layout.fragment_data) {
                 }
             }
         }
+    }
+
+    /** Always shows the transaction's actual status (success/pending/failed) via a dialog,
+     *  rather than only success getting a clear dialog and everything else a small snackbar. */
+    private fun showResult(status: String, msg: String) {
+        val title = when {
+            status.contains("success", ignoreCase = true) -> "✅ Successful"
+            status.contains("pending", ignoreCase = true) -> "⏳ Pending"
+            else -> "❌ Failed"
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(title)
+            .setMessage(msg.ifBlank { "Data purchase $status" })
+            .setPositiveButton("OK") { _, _ ->
+                if (status.contains("success", ignoreCase = true)) requireActivity().onBackPressedDispatcher.onBackPressed()
+            }
+            .show()
     }
 
     private fun snack(msg: String) = Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG).show()
