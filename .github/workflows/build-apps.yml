@@ -15,11 +15,10 @@ jobs:
       matrix:
         project:
           - DGV7.0-SAAS/DG7-Android
-          - DGV7.0-SAAS/MZEEVTU-Android
           - DGV7.0-NON-SAAS/DG6-Android
-          - DGV7.0-NON-SAAS/MZEEVTU-Android
           - DGV7.0-NON-SAAS/PayHub-Android
           - DGV7.0-NON-SAAS/PayHub-Guest-Android
+          - "ANDROID - iOS/MZEEVTU-Android"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -96,11 +95,10 @@ jobs:
       matrix:
         project:
           - DGV7.0-SAAS/DG7-iOS
-          - DGV7.0-SAAS/MZEEVTU-iOS
           - DGV7.0-NON-SAAS/DG6-iOS
-          - DGV7.0-NON-SAAS/MZEEVTU-iOS
           - DGV7.0-NON-SAAS/PayHub-iOS
           - DGV7.0-NON-SAAS/PayHub-Guest-iOS
+          - "ANDROID - iOS/MZEEVTU-iOS"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4

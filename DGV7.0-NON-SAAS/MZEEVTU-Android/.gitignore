@@ -1,7 +1,0 @@
-.gradle/
-build/
-*.iml
-.idea/
-local.properties
-# Keystore passwords stay out of VCS; the keystore file itself is tracked
-keystore/*.properties
