@@ -55,14 +55,24 @@ class LockActivity : AppCompatActivity() {
                     mapOf("api_key" to prefs.getApiKey(), "action" to "get")
                 )
                 val body = resp.body()
-                val hasQuest = body?.get("has_quest") as? Boolean ?: false
+                if (body == null || body["status"] as? String != "success") {
+                    // Do NOT fall through to "no question set" on a failed call (e.g. invalid
+                    // API key, vendor lookup failure) — that silently shows the wrong screen
+                    // and hides the real problem. Surface it and let the user retry.
+                    runOnUiThread {
+                        setLoading(false)
+                        snackRetry(body?.get("desc") as? String ?: "Unable to load security question. Please try again.")
+                    }
+                    return@launch
+                }
+                val hasQuest = body["has_quest"] as? Boolean ?: false
                 @Suppress("UNCHECKED_CAST")
-                questBank = body?.get("quest_bank") as? List<Map<String, Any>> ?: emptyList()
+                questBank = body["quest_bank"] as? List<Map<String, Any>> ?: emptyList()
                 runOnUiThread {
                     setLoading(false)
                     if (hasQuest) {
                         prefs.saveBoolean(Constants.KEY_HAS_SECURITY_QUEST, true)
-                        showVerify(body?.get("question") as? String ?: "")
+                        showVerify(body["question"] as? String ?: "")
                     } else {
                         prefs.saveBoolean(Constants.KEY_HAS_SECURITY_QUEST, false)
                         showSetup(questBank)
@@ -71,7 +81,7 @@ class LockActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     setLoading(false)
-                    snack(e.message ?: "Unable to load security question")
+                    snackRetry(e.message ?: "Unable to load security question")
                 }
             }
         }
@@ -237,4 +247,13 @@ class LockActivity : AppCompatActivity() {
     }
 
     private fun snack(msg: String) = Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG).show()
+
+    // Used for failures on loadState() itself — this screen has no other content to fall back
+    // to (it's the mandatory gate), so an indefinite Snackbar with a Retry action is used
+    // instead of a transient one that would otherwise leave the user stuck on a blank screen.
+    private fun snackRetry(msg: String) {
+        Snackbar.make(binding.root, msg, Snackbar.LENGTH_INDEFINITE)
+            .setAction("Retry") { loadState() }
+            .show()
+    }
 }
