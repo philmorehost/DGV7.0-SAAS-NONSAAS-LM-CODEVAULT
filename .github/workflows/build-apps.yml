@@ -14,10 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         project:
-          - DGV7.0-SAAS/DG7-Android
           - DGV7.0-NON-SAAS/PayHub-Android
           - DGV7.0-NON-SAAS/PayHub-Guest-Android
           - "ANDROID - iOS/MZEEVTU-Android"
+          - "ANDROID - iOS/DG7-Android"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4

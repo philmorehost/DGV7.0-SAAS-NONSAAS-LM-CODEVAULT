@@ -16,9 +16,10 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 /**
- * Full-screen re-authentication gate shown when the app returns to the foreground after
- * [Constants.LOCK_TIMEOUT_MINUTES] of being backgrounded (see DGApp). Mirrors web/SecurityQuest.php's
- * protection for a shared/unattended device — the app has no session cookie to gate, so instead
+ * Security-question gate. Shown as the mandatory first screen right after every login (see
+ * LoginActivity.navigateToMain), and again whenever the app returns to the foreground after
+ * [Constants.LOCK_TIMEOUT_MINUTES] of being backgrounded (see DGApp) — mirrors web/SecurityQuest.php's
+ * protection for a shared/unattended device. The app has no session cookie to gate, so instead
  * it re-verifies against the stored security answer and records a local "last verified" timestamp.
  * Back navigation is disabled so the underlying app can't be revealed without verifying.
  */
@@ -26,7 +27,9 @@ class LockActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLockBinding
     private lateinit var prefs: PreferenceManager
+    private var questBank: List<Map<String, Any>> = emptyList()
     private var questIds: List<Int> = emptyList()
+    private var resetQuestIds: List<Int> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +56,8 @@ class LockActivity : AppCompatActivity() {
                 )
                 val body = resp.body()
                 val hasQuest = body?.get("has_quest") as? Boolean ?: false
+                @Suppress("UNCHECKED_CAST")
+                questBank = body?.get("quest_bank") as? List<Map<String, Any>> ?: emptyList()
                 runOnUiThread {
                     setLoading(false)
                     if (hasQuest) {
@@ -60,8 +65,7 @@ class LockActivity : AppCompatActivity() {
                         showVerify(body?.get("question") as? String ?: "")
                     } else {
                         prefs.saveBoolean(Constants.KEY_HAS_SECURITY_QUEST, false)
-                        @Suppress("UNCHECKED_CAST")
-                        showSetup(body?.get("quest_bank") as? List<Map<String, Any>> ?: emptyList())
+                        showSetup(questBank)
                     }
                 }
             } catch (e: Exception) {
@@ -76,6 +80,7 @@ class LockActivity : AppCompatActivity() {
     private fun showVerify(question: String) {
         binding.groupVerify.visibility = View.VISIBLE
         binding.groupSetup.visibility = View.GONE
+        binding.groupReset.visibility = View.GONE
         binding.tvQuestion.text = question
         binding.btnVerify.setOnClickListener {
             val answer = binding.etVerifyAnswer.text?.toString()?.trim() ?: ""
@@ -85,11 +90,43 @@ class LockActivity : AppCompatActivity() {
             }
             verify(answer)
         }
+        binding.tvForgotAnswer.setOnClickListener { showReset() }
+    }
+
+    private fun showReset() {
+        binding.groupVerify.visibility = View.GONE
+        binding.groupReset.visibility = View.VISIBLE
+        resetQuestIds = questBank.map { (it["id"] as? Double)?.toInt() ?: (it["id"] as? Int ?: 0) }
+        val labels = questBank.map { it["quest"] as? String ?: "" }
+        binding.spinnerResetQuestion.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        binding.tvCancelReset.setOnClickListener {
+            binding.groupReset.visibility = View.GONE
+            binding.groupVerify.visibility = View.VISIBLE
+        }
+        binding.btnSaveReset.setOnClickListener {
+            val password = binding.etResetPassword.text?.toString()?.trim() ?: ""
+            val answer = binding.etResetAnswer.text?.toString()?.trim() ?: ""
+            val position = binding.spinnerResetQuestion.selectedItemPosition
+            if (password.isEmpty()) {
+                snack("Please enter your account password")
+                return@setOnClickListener
+            }
+            if (answer.length < 3 || answer.length > 20) {
+                snack("Answer must be between 3-20 characters")
+                return@setOnClickListener
+            }
+            if (position < 0 || position >= resetQuestIds.size) {
+                snack("Please select a question")
+                return@setOnClickListener
+            }
+            performReset(resetQuestIds[position], answer, password)
+        }
     }
 
     private fun showSetup(questBank: List<Map<String, Any>>) {
         binding.groupVerify.visibility = View.GONE
         binding.groupSetup.visibility = View.VISIBLE
+        binding.groupReset.visibility = View.GONE
         questIds = questBank.map { (it["id"] as? Double)?.toInt() ?: (it["id"] as? Int ?: 0) }
         val labels = questBank.map { it["quest"] as? String ?: "" }
         binding.spinnerQuestion.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
@@ -149,6 +186,35 @@ class LockActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 runOnUiThread { setLoading(false); snack(e.message ?: "Unable to save security question") }
+            }
+        }
+    }
+
+    private fun performReset(questId: Int, answer: String, password: String) {
+        setLoading(true)
+        lifecycleScope.launch {
+            try {
+                val resp = RetrofitClient.getService().securityQuest(
+                    mapOf(
+                        "api_key" to prefs.getApiKey(),
+                        "action" to "reset",
+                        "quest_id" to questId,
+                        "answer" to answer,
+                        "password" to password
+                    )
+                )
+                val status = resp.body()?.get("status") as? String ?: "failed"
+                runOnUiThread {
+                    setLoading(false)
+                    if (status == "success") {
+                        prefs.saveBoolean(Constants.KEY_HAS_SECURITY_QUEST, true)
+                        markVerifiedAndFinish()
+                    } else {
+                        snack(resp.body()?.get("desc") as? String ?: "Unable to reset security question")
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread { setLoading(false); snack(e.message ?: "Unable to reset security question") }
             }
         }
     }

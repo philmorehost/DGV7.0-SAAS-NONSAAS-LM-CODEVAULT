@@ -11,7 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.databinding.ActivityLoginBinding
 import com.dgv6.app.data.model.ApiResult
 import com.dgv6.app.data.repository.AuthRepository
-import com.dgv6.app.ui.MainActivity
+import com.dgv6.app.ui.security.LockActivity
 import com.dgv6.app.util.Constants
 import com.dgv6.app.util.PreferenceManager
 import com.dgv6.app.util.hide
@@ -126,7 +126,10 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun navigateToMain() {
-        startActivity(Intent(this, MainActivity::class.java).apply {
+        // Route through the security-question gate on every login (password or biometric) —
+        // LockActivity itself decides verify-vs-setup based on the server's has_quest state,
+        // then hands off to MainActivity once resolved.
+        startActivity(Intent(this, LockActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         })
         finish()

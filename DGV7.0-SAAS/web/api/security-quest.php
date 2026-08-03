@@ -47,13 +47,17 @@ $has_quest = !empty(trim($user["security_quest"] ?? '')) && !empty(trim($user["s
 
 switch ($action) {
     case "get":
+        // Always include the question bank — the client needs it both for first-time setup
+        // and for the "reset security answer" form (picking a new question), regardless of
+        // whether a question is already set.
+        $bank = [];
+        $q_bank = mysqli_query($connection_server, "SELECT id, quest FROM sas_security_quests");
+        while ($row = mysqli_fetch_assoc($q_bank)) $bank[] = ["id" => (int)$row["id"], "quest" => $row["quest"]];
+
         if ($has_quest) {
             $quest_row = mysqli_fetch_array(mysqli_query($connection_server, "SELECT quest FROM sas_security_quests WHERE id='" . (int)$user["security_quest"] . "' LIMIT 1"));
-            echo json_encode(["status" => "success", "has_quest" => true, "question" => $quest_row["quest"] ?? ""]);
+            echo json_encode(["status" => "success", "has_quest" => true, "question" => $quest_row["quest"] ?? "", "quest_bank" => $bank]);
         } else {
-            $bank = [];
-            $q_bank = mysqli_query($connection_server, "SELECT id, quest FROM sas_security_quests");
-            while ($row = mysqli_fetch_assoc($q_bank)) $bank[] = ["id" => (int)$row["id"], "quest" => $row["quest"]];
             echo json_encode(["status" => "success", "has_quest" => false, "quest_bank" => $bank]);
         }
         break;
