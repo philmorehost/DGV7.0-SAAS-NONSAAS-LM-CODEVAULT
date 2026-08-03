@@ -144,19 +144,26 @@ function bc_verify_integrity() {
         return false;
     }
 
-    $domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $host_domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $domain = $host_domain;
+    $domain_source = 'HTTP_HOST';
 
     // Use the exact domain the license was registered under (set when the admin
     // saved/validated the key in Account Settings). Falling back to a guessed
     // vendor domain here caused valid keys to fail integrity checks whenever the
     // first-registered vendor's website_url didn't match what was actually
     // licensed with the remote server.
+    //
+    // Note this DB value OVERRIDES the real HTTP_HOST, so a stale/incorrect
+    // license_domain row keeps being sent no matter which hostname the site is
+    // actually served from — reported below so a mismatch is visible instead of silent.
     global $connection_server;
     if (isset($connection_server) && $connection_server) {
         $q_domain = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='license_domain' LIMIT 1");
         if ($q_domain && $r_domain = mysqli_fetch_assoc($q_domain)) {
             if (!empty($r_domain['option_value'])) {
                 $domain = $r_domain['option_value'];
+                $domain_source = 'sas_super_admin_options.license_domain';
             }
         }
     }
@@ -235,7 +242,16 @@ function bc_verify_integrity() {
                 $GLOBALS['bc_integrity_fail'] = false;
                 return true;
             } else {
-                $_SESSION['bc_integrity_debug_err'] = "API returned Status " . $status . ": " . ($res_decoded['message'] ?? 'Inactive/Invalid key');
+                // Report the exact values sent. "Invalid license key or domain" is ambiguous on
+                // its own, and the domain in particular is easy to get wrong: it comes from the
+                // license_domain DB row when set, which silently overrides the hostname the site
+                // is actually being served from.
+                $sent = "sent key='" . $code . "', domain='" . $domain . "' (source: " . $domain_source . ")";
+                if ($domain !== $host_domain) {
+                    $sent .= "; NOTE: this differs from the actual hostname '" . $host_domain . "'";
+                }
+                $_SESSION['bc_integrity_debug_err'] = "API returned Status " . $status . ": "
+                    . ($res_decoded['message'] ?? 'Inactive/Invalid key') . " [" . $sent . "]";
                 $GLOBALS['bc_integrity_fail'] = true;
                 return false;
             }
