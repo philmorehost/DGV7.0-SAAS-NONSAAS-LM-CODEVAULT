@@ -75,6 +75,32 @@ function bc_clear_activation() {
 }
 
 /**
+ * Writes a license-related row into sas_super_admin_options in a way that is correct on both
+ * schema variants of that table (option_name as PRIMARY KEY, or the older layout with a separate
+ * `id` column and no unique constraint on option_name). INSERT ... ON DUPLICATE KEY UPDATE only
+ * behaves as an upsert on the former; on the latter it silently appends duplicate rows, and since
+ * every read here is an unordered "... WHERE option_name=X LIMIT 1", a stale duplicate can win —
+ * which looks exactly like the value never having been saved.
+ *
+ * Returns false on failure so the caller can surface the database error instead of swallowing it.
+ */
+function bc_store_license_option($conn, $name, $value) {
+    if (!$conn) return false;
+    $name_esc  = mysqli_real_escape_string($conn, $name);
+    $value_esc = mysqli_real_escape_string($conn, $value);
+
+    $existing = mysqli_query($conn, "SELECT option_name FROM sas_super_admin_options WHERE option_name='$name_esc' LIMIT 1");
+    if ($existing === false) return false;
+
+    if (mysqli_num_rows($existing) > 0) {
+        // No LIMIT — if duplicates already exist from a previous upsert that silently no-opped,
+        // update all of them so whichever row a later LIMIT 1 read picks holds the same value.
+        return (bool) mysqli_query($conn, "UPDATE sas_super_admin_options SET option_value='$value_esc' WHERE option_name='$name_esc'");
+    }
+    return (bool) mysqli_query($conn, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('$name_esc', '$value_esc')");
+}
+
+/**
  * Verifies system integrity against the validation API
  */
 function bc_verify_integrity() {

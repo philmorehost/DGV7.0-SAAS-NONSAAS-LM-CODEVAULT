@@ -28,12 +28,24 @@ if (isset($GLOBALS['bc_integrity_fail']) && $GLOBALS['bc_integrity_fail'] === tr
             // back to the DB's license_key when the file is unreadable. Without this, a stale/old
             // DB value gets validated instead of the code just re-entered here, making a genuinely
             // valid key appear "invalid" after every deployment.
+            // These used INSERT ... ON DUPLICATE KEY UPDATE, which silently does nothing useful
+            // unless option_name actually carries a UNIQUE/PRIMARY key. bc-tables.php creates the
+            // table with option_name as PRIMARY KEY, but an older schema variant with a separate
+            // `id` column also exists in the wild (see the "SELECT id FROM sas_super_admin_options"
+            // query in bc-tables.php) — on that variant the upsert just appends duplicate rows and
+            // the unordered "LIMIT 1" reads elsewhere can return a stale one, so the key looks like
+            // it never saved. Do an existence-checked UPDATE/INSERT instead: correct on either
+            // schema, and the result is captured so a failure is reported rather than swallowed.
+            $db_write_err = '';
             if (isset($connection_server) && $connection_server) {
                 $current_domain = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                $current_domain_esc = mysqli_real_escape_string($connection_server, $current_domain);
-                $code_esc = mysqli_real_escape_string($connection_server, $code);
-                mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_key', '$code_esc') ON DUPLICATE KEY UPDATE option_value='$code_esc'");
-                mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_domain', '$current_domain_esc') ON DUPLICATE KEY UPDATE option_value='$current_domain_esc'");
+                if (!bc_store_license_option($connection_server, 'license_key', $code)) {
+                    $db_write_err = mysqli_error($connection_server) ?: 'unknown database error';
+                } elseif (!bc_store_license_option($connection_server, 'license_domain', $current_domain)) {
+                    $db_write_err = mysqli_error($connection_server) ?: 'unknown database error';
+                }
+            } else {
+                $db_write_err = 'no database connection available';
             }
             // Force a fresh remote check instead of possibly reading a stale FAILED verdict cached
             // from an earlier attempt (e.g. from before the DB persistence fix above existed, or from
@@ -57,6 +69,9 @@ if (isset($GLOBALS['bc_integrity_fail']) && $GLOBALS['bc_integrity_fail'] === tr
                 }
                 if (empty($write_ok)) {
                     $act_error .= '<br/><span style="font-size: 13px; opacity: 0.85;">Note: could not write func/bc-activation.php — check that the func/ directory is writable by PHP.</span>';
+                }
+                if (!empty($db_write_err)) {
+                    $act_error .= '<br/><span style="font-size: 13px; opacity: 0.85;">Note: could not save the license key to the database — ' . htmlspecialchars($db_write_err) . '</span>';
                 }
                 bc_clear_activation();
             }
