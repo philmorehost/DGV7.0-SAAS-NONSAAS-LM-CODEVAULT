@@ -77,7 +77,7 @@ if ($token_balance < $token_cost) {
 }
 
 // ── Query Cloud AI ────────────────────────────────────────────────────────────
-$engine  = BcAiEngine::getInstance();
+$engine  = ai_engine();
 $model   = getSuperAdminOption('ai_default_model', 'gemini-1.5-flash');
 $result  = $engine->chat($model, $safe_prompt);
 $ai_resp = $result['response'] ?? '';

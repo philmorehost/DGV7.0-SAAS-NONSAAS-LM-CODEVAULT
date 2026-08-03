@@ -41,8 +41,9 @@ if(!isset($_SESSION["user_session"])){
             overflow: hidden;
             background: #fff;
             border: 1px solid #e2e8f0;
-            box-shadow: 0 15px 35px -5px rgba(0,0,0,0.05);
+            box-shadow: 0 20px 50px -12px rgba(0,0,0,0.1);
             position: relative;
+            transition: transform 0.3s ease;
         }
 
         #chat-window {
@@ -52,7 +53,7 @@ if(!isset($_SESSION["user_session"])){
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
-            background: var(--ai-chat-bg);
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             scrollbar-width: thin;
             scroll-behavior: smooth;
         }
@@ -77,16 +78,17 @@ if(!isset($_SESSION["user_session"])){
             background: #fff;
             color: #334155;
             border-bottom-left-radius: 0.25rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            border: 1px solid #f1f5f9;
+            box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.08);
+            border: 1px solid #edf2f7;
+            border-left: 4px solid var(--ai-indigo);
         }
 
         .bubble.user {
             align-self: flex-end;
-            background: var(--ai-indigo);
+            background: linear-gradient(135deg, var(--ai-indigo) 0%, var(--ai-indigo-dark) 100%);
             color: #fff;
             border-bottom-right-radius: 0.25rem;
-            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+            box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
         }
 
         .ai-input-wrapper {
@@ -113,34 +115,36 @@ if(!isset($_SESSION["user_session"])){
             font-weight: 600;
             white-space: nowrap;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             color: #64748b;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
         }
 
         .action-pill:hover {
             border-color: var(--ai-indigo);
             color: var(--ai-indigo);
-            background: #f5f3ff;
-            transform: translateY(-2px);
+            background: #fff;
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
         }
 
         .terminal-input-group {
-            background: #f1f5f9;
-            border-radius: 1rem;
-            padding: 0.5rem 0.5rem 0.5rem 1.25rem;
+            background: #f8fafc;
+            border-radius: 1.25rem;
+            padding: 0.6rem 0.6rem 0.6rem 1.5rem;
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            transition: 0.3s;
-            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            border: 2px solid #e2e8f0;
         }
 
         .terminal-input-group:focus-within {
             background: #fff;
-            border-color: var(--ai-indigo-light);
+            border-color: var(--ai-indigo);
             box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
         }
 
@@ -282,7 +286,7 @@ if(!isset($_SESSION["user_session"])){
         function quickPrompt(type) {
             let text = "";
             switch(type) {
-                case 'airtime': text = "Buy MTN 500 airtime for 08012345678"; break;
+                case 'airtime': text = "Buy MTN airtime N100 for 07064436690"; break;
                 case 'data':    text = "Buy MTN 1GB SME data for 08123456789"; break;
                 case 'electric': text = "Pay IKEDC 1000 for meter 11223344556"; break;
                 case 'cable':   text = "Renew DSTV Compact for 1234567890"; break;
@@ -339,11 +343,20 @@ if(!isset($_SESSION["user_session"])){
                     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: payload.toString()
                 });
-                const data = await response.json();
+                
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error("Malformed JSON response:", responseText);
+                    throw new Error("Server returned a malformed response. Please try again.");
+                }
+
                 chatWindow.removeChild(loading);
 
                 if (data.status === 'success') {
-                    appendMessage(data.response.replace(/\n/g, '<br>'), 'bot', true);
+                    appendMessage(data.response.replace(/\\n/g, '<br>'), 'bot', true);
                     if (data.pending_vtu) {
                         sessionStorage.setItem('pending_vtu', JSON.stringify(data.pending_vtu));
                     }
@@ -352,7 +365,7 @@ if(!isset($_SESSION["user_session"])){
                 }
             } catch(e) {
                 if(loading.parentNode) chatWindow.removeChild(loading);
-                appendMessage("Connection failed. Please check your internet and try again.", 'bot');
+                appendMessage(e.message || "Connection failed. Please check your internet and try again.", 'bot');
             }
         }
 

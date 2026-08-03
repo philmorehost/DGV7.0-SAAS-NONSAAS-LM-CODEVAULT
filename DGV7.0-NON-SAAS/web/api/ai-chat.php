@@ -81,10 +81,10 @@ if ($current_balance < $ai_cost) {
 }
 
 // Process AI request
-$engine = BcAiEngine::getInstance();
-$ai_resp = $engine->chat($safe_prompt);
+$engine = ai_engine();
+$ai_result = $engine->chat($engine->getDefaultModel(), $safe_prompt);
 
-if (empty($ai_resp) || $ai_resp === false) {
+if (empty($ai_result) || ($ai_result['status'] ?? '') !== 'success') {
     ai_api_json(503, ["status" => "error", "message" => "AI engine is temporarily unavailable. Please try again later."]);
 }
 
@@ -106,7 +106,7 @@ if ($update_balance) {
 
     ai_api_json(200, [
         "status" => "success",
-        "response" => $ai_resp,
+        "response" => $ai_result['response'],
         "cost" => $ai_cost,
         "new_balance" => $new_balance
     ]);

@@ -46,7 +46,7 @@ $label = $page_labels[$page] ?? "the $page feature";
 $lang_note = $lang !== 'en' ? " Reply in $lang language." : '';
 $prompt = "You are a helpful Nigerian fintech guide. Give one concise, practical tip (max 2 sentences) for a user on the '$label' page of a VTU app.$lang_note";
 
-$engine  = BcAiEngine::getInstance();
+$engine  = ai_engine();
 $model   = getSuperAdminOption('ai_default_model', 'gemini-1.5-flash');
 $result  = $engine->chat($model, $prompt);
 $tip     = $result['response'] ?? '';
