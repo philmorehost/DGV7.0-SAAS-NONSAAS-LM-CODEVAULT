@@ -17,7 +17,11 @@ if (isset($GLOBALS['bc_integrity_fail']) && $GLOBALS['bc_integrity_fail'] === tr
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_activate_code'])) {
         $code = trim($_POST['action_activate_code']);
         if (!empty($code)) {
-            bc_write_activation($code);
+            // Return value was previously discarded. A failed write here (func/ not writable by
+            // PHP — very common right after re-uploading files via FTP/cPanel, which resets
+            // ownership) silently left the system with no readable activation code, producing a
+            // bare "invalid for this domain" with no explanation. Track it and report it below.
+            $write_ok = bc_write_activation($code);
             // Persist to the database too, not just the func/bc-activation.php file. That file
             // (and func/cache/bc-core.cache) gets wiped whenever the site's files are redeployed
             // (e.g. re-uploading func/ via cPanel File Manager), and bc_verify_integrity() falls
@@ -50,6 +54,9 @@ if (isset($GLOBALS['bc_integrity_fail']) && $GLOBALS['bc_integrity_fail'] === tr
                 if (isset($_SESSION['bc_integrity_debug_err']) && !empty($_SESSION['bc_integrity_debug_err'])) {
                     $act_error .= '<br/><span style="font-size: 13px; opacity: 0.85;">Details: ' . htmlspecialchars($_SESSION['bc_integrity_debug_err']) . '</span>';
                     unset($_SESSION['bc_integrity_debug_err']);
+                }
+                if (empty($write_ok)) {
+                    $act_error .= '<br/><span style="font-size: 13px; opacity: 0.85;">Note: could not write func/bc-activation.php — check that the func/ directory is writable by PHP.</span>';
                 }
                 bc_clear_activation();
             }

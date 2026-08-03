@@ -98,6 +98,22 @@ function bc_verify_integrity() {
         }
     }
     if (empty($code)) {
+        // This branch used to return silently, which made it indistinguishable from a genuine
+        // "license server rejected the key" failure — the activation screen showed only
+        // "invalid for this domain" with no Details line, hiding the real cause. Report the
+        // concrete state instead: this failure means no code could be read from EITHER
+        // func/bc-activation.php OR the sas_super_admin_options.license_key row, which after a
+        // redeploy is almost always a func/ permission problem (PHP can no longer write the file).
+        $activation_file = __DIR__ . '/bc-activation.php';
+        $diag = [];
+        $diag[] = file_exists($activation_file)
+            ? 'activation file exists but decrypted to an empty value'
+            : 'activation file missing';
+        $diag[] = is_writable(__DIR__) ? 'func/ writable' : 'func/ NOT writable by PHP';
+        $diag[] = (isset($connection_server) && $connection_server)
+            ? 'no license_key row in sas_super_admin_options'
+            : 'no database connection available for license_key fallback';
+        $_SESSION['bc_integrity_debug_err'] = 'No activation code could be read (' . implode('; ', $diag) . ').';
         $GLOBALS['bc_integrity_fail'] = true;
         return false;
     }
