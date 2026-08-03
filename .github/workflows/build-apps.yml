@@ -15,7 +15,6 @@ jobs:
       matrix:
         project:
           - DGV7.0-SAAS/DG7-Android
-          - DGV7.0-NON-SAAS/DG6-Android
           - DGV7.0-NON-SAAS/PayHub-Android
           - DGV7.0-NON-SAAS/PayHub-Guest-Android
           - "ANDROID - iOS/MZEEVTU-Android"
@@ -95,10 +94,9 @@ jobs:
       matrix:
         project:
           - DGV7.0-SAAS/DG7-iOS
-          - DGV7.0-NON-SAAS/DG6-iOS
           - DGV7.0-NON-SAAS/PayHub-iOS
-          - DGV7.0-NON-SAAS/PayHub-Guest-iOS
           - "ANDROID - iOS/MZEEVTU-iOS"
+          - "ANDROID - iOS/PayHub-Guest-iOS"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
