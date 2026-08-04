@@ -1,9 +1,17 @@
 <?php session_start();
 include("../func/bc-admin-config.php");
+include_once("../func/bc-ai-engine.php");
 
 $vid = $get_logged_admin_details['id'];
+$ai_engine = ai_engine();
+$assigned_model_raw = $get_logged_admin_details['ai_model_assigned'] ?: getSuperAdminOption('ai_default_model', '');
+$assigned_model = $ai_engine->isModelCompatible($assigned_model_raw) ? $assigned_model_raw : $ai_engine->getDefaultModel();
 
-// AJAX Handler for Drafts
+$site_q = mysqli_query($connection_server, "SELECT site_title FROM sas_site_details WHERE vendor_id='$vid' LIMIT 1");
+$site_data = mysqli_fetch_assoc($site_q);
+$biz_name = $get_logged_admin_details['company_name'] ?? ($site_data['site_title'] ?? 'Our VTU Platform');
+
+// AJAX Handler for Drafts / AI / Live Progress
 if (isset($_GET['action'])) {
     // Security: Verify Vendor session
     if (!isset($_SESSION['admin_session'])) {
@@ -38,7 +46,7 @@ if (isset($_GET['action'])) {
         }
         exit;
     }
-    
+
     // Vendor Asset Upload Handler for GrapesJS
     if ($_GET['action'] == 'upload_asset' && isset($_FILES['files'])) {
         $upload_dir = '../uploaded-image/vendor_' . $vid . '/';
@@ -65,12 +73,100 @@ if (isset($_GET['action'])) {
         echo json_encode(['data' => $responses]);
         exit;
     }
+
+    // ─── AI: "Help me write" / "Refine content" ─────────────────────────────
+    if (in_array($_GET['action'], ['ai_write', 'ai_refine'], true)) {
+        header('Content-Type: application/json');
+
+        $token_bal = (int)($get_logged_admin_details['ai_token_balance'] ?? 0);
+        $per_tx_cost = (int)($get_logged_admin_details['ai_per_tx_cost'] ?? 2);
+        if ($token_bal < $per_tx_cost) {
+            echo json_encode(['status' => 'error', 'message' => 'Insufficient AI tokens. Please top up in AI Suite.']);
+            exit;
+        }
+
+        $ai_action = $_GET['action'];
+        $raw_input = trim($_POST['content'] ?? '');
+        if (empty($raw_input)) {
+            echo json_encode(['status' => 'error', 'message' => $ai_action === 'ai_write' ? 'Please describe what this email should say.' : 'There is no content to refine yet.']);
+            exit;
+        }
+
+        $safe_input = bc_firewall_prompt($raw_input);
+        if ($safe_input === false) {
+            echo json_encode(['status' => 'error', 'message' => 'Your request contains content that cannot be processed. Please describe a VTU business email.']);
+            exit;
+        }
+
+        if ($ai_action === 'ai_write') {
+            $prompt = "You are a professional VTU business email copywriter for '$biz_name' (website: {$get_logged_admin_details['website_url']}).
+Write a complete marketing/notification email based on this brief: \"$safe_input\"
+Respond with a subject line on the very first line, prefixed exactly with \"SUBJECT:\", then a blank line, then the email body as light HTML (short paragraphs, <b> for emphasis, <br> for line breaks) — no full HTML document.
+You may use these personalization tags where natural: {firstname}, {lastname}, {email}, {phone}, {address}, {website}.";
+        } else {
+            $refine_instructions = [
+                'shorter'    => 'Make this significantly shorter and punchier while keeping the core message and call to action.',
+                'persuasive' => 'Rewrite this to be more persuasive and urgent, while staying honest and professional.',
+                'tone'       => 'Rewrite this with a warmer, more conversational tone.',
+                'improve'    => 'Improve the clarity, grammar, and persuasiveness of this content without changing its meaning.',
+            ];
+            $refine_mode = trim($_POST['refine_mode'] ?? 'improve');
+            $instruction = $refine_instructions[$refine_mode] ?? $refine_instructions['improve'];
+            $prompt = "You are a professional marketing editor. $instruction
+Keep any personalization tags like {firstname} unchanged. If a line starting with \"SUBJECT:\" is present, keep that same format at the top of your response. Return only the revised content as light HTML, with no explanations before or after it.
+
+Content to revise:
+$safe_input";
+        }
+
+        $start_time = microtime(true);
+        $result = $ai_engine->chat($assigned_model, $prompt, ['temperature' => 0.85]);
+        $duration = round((microtime(true) - $start_time) * 1000);
+
+        if ($result['status'] === 'success') {
+            $generated = trim($result['response']);
+            $tokens = strlen($prompt . $generated) / 4;
+            $esc_res = mysqli_real_escape_string($connection_server, $generated);
+            $esc_label = mysqli_real_escape_string($connection_server, ($ai_action === 'ai_write' ? 'SendMail Write' : 'SendMail Refine') . ': ' . substr($safe_input, 0, 150));
+            mysqli_query($connection_server, "INSERT INTO sas_ai_transactions (vendor_id, username, prompt, response, tokens_burned, status, duration_ms) VALUES ('$vid', 'admin_{$get_logged_admin_details['email']}', '$esc_label', '$esc_res', '$tokens', 'success', '$duration')");
+
+            mysqli_query($connection_server, "UPDATE sas_vendors SET ai_token_balance = ai_token_balance - $per_tx_cost WHERE id='$vid'");
+            $get_logged_admin_details['ai_token_balance'] = $token_bal - $per_tx_cost;
+
+            $subject_out = '';
+            $body_out = $generated;
+            if (preg_match('/^\s*SUBJECT:\s*(.+)$/mi', $generated, $m)) {
+                $subject_out = trim($m[1]);
+                $body_out = trim(preg_replace('/^\s*SUBJECT:\s*.+$/mi', '', $generated, 1));
+            }
+
+            echo json_encode([
+                'status'           => 'success',
+                'subject'          => $subject_out,
+                'body'             => $body_out,
+                'tokens_remaining' => $get_logged_admin_details['ai_token_balance'],
+            ]);
+        } else {
+            echo json_encode(['status' => 'error', 'message' => 'AI Error: ' . ($result['message'] ?? 'Unable to connect to AI engine.')]);
+        }
+        exit;
+    }
+
+    // ─── Live campaign progress (polled by the report panel) ────────────────
+    if ($_GET['action'] == 'campaign_progress') {
+        header('Content-Type: application/json');
+        $cid = (int)($_GET['campaign_id'] ?? 0);
+        $progress = bc_get_mail_campaign_progress($connection_server, $cid, $vid);
+        echo json_encode($progress ?: ['status' => 'error', 'message' => 'Campaign not found.']);
+        exit;
+    }
 }
 
 if (isset($_POST["send-mail"])) {
     $subject = trim($_POST["subject"]);
-    $body = trim($_POST["body"]); // GrapesJS output
-    $mailto = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["mailto"]))));
+    $body = trim($_POST["body"]);
+    $status_cohort = trim($_POST['status_cohort'] ?? '');
+    $account_level = (int)($_POST['account_level'] ?? 0);
 
     $external_emails = [];
 
@@ -103,36 +199,35 @@ if (isset($_POST["send-mail"])) {
         }
     }
 
-    $external_emails = array_unique($external_emails);
-
     if (!empty($subject) && !empty($body)) {
-        $success_count = 0;
-
-        // Internal targets
-        if (!empty($mailto)) {
-            $res = sendVendorEmailSpecific($mailto, $subject, $body);
-            if ($res == "success") $success_count++;
-        }
-
-        // External targets
-        if (!empty($external_emails)) {
-            foreach ($external_emails as $ext_email) {
-                sendVendorEmail($ext_email, $subject, $body);
-            }
-            $success_count += count($external_emails);
-        }
-
-        if ($success_count > 0) {
-            $_SESSION["product_purchase_response"] = "Campaign Dispatch Successful! (Targeted: $success_count)";
+        $recipients = bc_resolve_campaign_recipients($connection_server, $vid, $status_cohort, $account_level, $external_emails);
+        if (!empty($recipients)) {
+            $campaign_id = bc_enqueue_mail_campaign($connection_server, $vid, $subject, $body, $recipients, 'sendmail', $biz_name, $get_logged_admin_details['website_url']);
+            $_SESSION["product_purchase_response"] = "Campaign queued! Sending to " . count($recipients) . " recipient(s) in the background — no need to wait here.";
+            header("Location: SendMail.php?campaign=$campaign_id");
         } else {
-            $_SESSION["product_purchase_response"] = "Error: No targets selected or dispatch failed.";
+            $_SESSION["product_purchase_response"] = "Error: No valid recipients found for the selected targeting.";
+            header("Location: SendMail.php");
         }
     } else {
         $_SESSION["product_purchase_response"] = "Error: Subject and Body are required.";
+        header("Location: SendMail.php");
     }
-    header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
+
+$recent_campaigns = bc_get_recent_mail_campaigns($connection_server, $vid, 10);
+$active_campaign_id = (int)($_GET['campaign'] ?? 0);
+
+// Preset "help me write" chips — same set used in AI Marketing Studio, for consistency.
+$prompt_chips = [
+    'Weekend data promo'      => 'Promote a weekend discount on data bundles running from Friday to Sunday',
+    'New service announcement'=> 'Announce that we now support a new VTU service and invite users to try it',
+    'Win back dormant users'  => "Re-engage users who haven't made a purchase in a while with a welcome-back offer",
+    'Referral bonus push'     => 'Encourage users to refer friends and earn a referral bonus for every signup',
+    'Price drop alert'        => 'Announce a price drop on airtime and data rates effective immediately',
+    'Festive greeting'        => 'Send a warm festive/holiday greeting to customers with a special seasonal offer',
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -142,7 +237,7 @@ if (isset($_POST["send-mail"])) {
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <link rel="stylesheet" href="<?php echo $css_style_template_location; ?>">
     <link rel="stylesheet" href="/cssfile/bc-style.css">
-    
+
     <!-- Vendor CSS Files -->
     <link href="../assets-2/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="../assets-2/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
@@ -166,6 +261,13 @@ if (isset($_POST["send-mail"])) {
             border-radius: 10px 10px 0 0;
             background: #f8fafc;
         }
+        .prompt-chip { border: 1.5px solid #e2e8f0; background: #fff; border-radius: 2rem; padding: 0.35rem 0.9rem; font-size: 0.78rem; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; }
+        .prompt-chip:hover { border-color: #4f46e5; color: #4f46e5; background: #f5f3ff; }
+        .refine-btn { border-radius: 2rem; font-size: 0.76rem; font-weight: 700; }
+        .campaign-progress-bar { height: 10px; border-radius: 1rem; }
+        .campaign-row { font-size: 0.85rem; }
+        .ai-spinner { display: inline-block; width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: ai-spin 0.7s linear infinite; }
+        @keyframes ai-spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -184,33 +286,54 @@ if (isset($_POST["send-mail"])) {
     <section class="section">
       <div class="row">
         <div class="col-lg-12">
-            <div class="marketing-card">
+            <div class="marketing-card mb-4">
                 <div class="card-body p-0">
                     <div class="row">
         <div class="col-md-12">
-            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-megaphone me-2"></i>Send Email</h5>
+            <h5 class="fw-bold mb-3 text-primary"><i class="bi bi-megaphone me-2"></i>Send Email</h5>
+
+            <div class="mb-3 p-3 bg-light rounded-4 border">
+                <label class="form-label small fw-bold text-muted text-uppercase mb-2">Help Me Write</label>
+                <div class="mb-2 d-flex flex-wrap gap-2">
+                    <?php foreach ($prompt_chips as $label => $chip_prompt): ?>
+                    <button type="button" class="prompt-chip" onclick="document.getElementById('briefInput').value = <?php echo json_encode($chip_prompt); ?>; document.getElementById('briefInput').focus();"><?php echo htmlspecialchars($label); ?></button>
+                    <?php endforeach; ?>
+                </div>
+                <div class="d-flex gap-2">
+                    <input id="briefInput" type="text" class="form-control" placeholder="e.g. Announce a new referral bonus program">
+                    <button type="button" id="btnGenerate" class="btn btn-primary fw-bold px-4 text-nowrap">Generate 🪄</button>
+                </div>
+            </div>
+
             <form id="mainForm" method="post" enctype="multipart/form-data">
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-bold text-muted text-uppercase">Email Subject</label>
                         <input name="subject" id="subject" type="text" class="form-control" placeholder="e.g. System Update v2.0" required />
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label fw-bold text-muted text-uppercase">Target Audience</label>
-                        <select name="mailto" id="mailto" class="form-select">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-bold text-muted text-uppercase">Registered Users</label>
+                        <select name="status_cohort" id="mailto" class="form-select">
                             <option value="">No internal target (External only)</option>
                             <option value="all">All Users</option>
-                            <option value="a">Active Users Only</option>
-                            <option value="b">Blocked Accounts</option>
-                            <option value="d">Deleted Accounts</option>
-                            <option value="bd">Blocked & Deleted</option>
-                            <option value="Select User">Select User</option>
+                            <option value="active">Active Users Only</option>
+                            <option value="blocked">Blocked Users Only</option>
+                            <option value="deleted">Deleted Users Only</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-bold text-muted text-uppercase">Account Level</label>
+                        <select name="account_level" class="form-select">
+                            <option value="0">Any Level</option>
+                            <option value="1">Smart Users Only</option>
+                            <option value="2">Agent Users Only</option>
+                            <option value="3">API Users Only</option>
                         </select>
                     </div>
                 </div>
 
-                <div id="select_user_div" class="mb-3" style="display:none;">
-                    <label class="form-label fw-bold text-muted text-uppercase">Select Users (comma separated emails)</label>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted text-uppercase">External Emails (comma or space separated)</label>
                     <input name="paste_emails" id="paste_emails" type="text" class="form-control" placeholder="user1@email.com, user2@email.com" />
                 </div>
 
@@ -221,7 +344,15 @@ if (isset($_POST["send-mail"])) {
                 </div>
 
                 <div class="mb-4">
-                    <label class="form-label fw-bold text-muted text-uppercase">Message Content</label>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-bold text-muted text-uppercase mb-0">Message Content</label>
+                        <div class="d-flex flex-wrap gap-2" id="refineBar" style="display:none !important;">
+                            <button type="button" class="btn btn-outline-secondary btn-sm refine-btn" data-refine="shorter">✂️ Shorter</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm refine-btn" data-refine="persuasive">🔥 More Persuasive</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm refine-btn" data-refine="tone">😊 Warmer Tone</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm refine-btn" data-refine="improve">✨ Improve</button>
+                        </div>
+                    </div>
                     <div class="mb-2 small text-muted">
                         <strong>Supported Tags:</strong> <code>{firstname}</code>, <code>{lastname}</code>, <code>{email}</code>, <code>{phone}</code>, <code>{address}</code>, <code>{website}</code>
                     </div>
@@ -241,6 +372,55 @@ if (isset($_POST["send-mail"])) {
             </form>
         </div>
     </div>
+            </div>
+        </div>
+      </div>
+
+      <div class="row <?php echo $active_campaign_id ? '' : 'd-none'; ?>" id="progressRow">
+        <div class="col-lg-12">
+            <div class="marketing-card mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-broadcast-pin me-2"></i>Live Send Report</h6>
+                    <span class="badge bg-primary-subtle text-primary" id="progressStatus">—</span>
+                </div>
+                <div class="progress campaign-progress-bar mb-2">
+                    <div class="progress-bar bg-success" id="progressBarSent" style="width:0%"></div>
+                    <div class="progress-bar bg-danger" id="progressBarFailed" style="width:0%"></div>
+                </div>
+                <div class="small text-muted">
+                    <span id="progressSent">0</span> sent &middot;
+                    <span id="progressFailed">0</span> failed &middot;
+                    <span id="progressPending">0</span> pending of
+                    <span id="progressTotal">0</span> total
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-lg-12">
+            <div class="marketing-card">
+                <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Recent Campaigns</h6>
+                <?php if (empty($recent_campaigns)): ?>
+                    <p class="text-muted small mb-0">No campaigns sent yet.</p>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm campaign-row align-middle mb-0">
+                            <thead class="text-muted"><tr><th>Subject</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($recent_campaigns as $c): ?>
+                                <tr>
+                                    <td class="text-truncate" style="max-width:280px;"><?php echo htmlspecialchars($c['subject']); ?></td>
+                                    <td><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($c['status']); ?></span></td>
+                                    <td><?php echo (int)$c['sent_count']; ?></td>
+                                    <td><?php echo (int)$c['failed_count']; ?></td>
+                                    <td><?php echo (int)$c['total_count']; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
       </div>
@@ -265,24 +445,13 @@ if (isset($_POST["send-mail"])) {
             }
         });
 
-        document.getElementById('mailto').addEventListener('change', function() {
-            if (this.value === 'Select User') {
-                document.getElementById('select_user_div').style.display = 'block';
-            } else {
-                document.getElementById('select_user_div').style.display = 'none';
-            }
-        });
-
         fetch('?action=load_draft')
             .then(res => res.json())
             .then(data => {
                 if (data.body_html) {
                     quill.root.innerHTML = data.body_html;
                     document.getElementById('subject').value = data.subject || '';
-                    document.getElementById('mailto').value = data.mailto || 'all';
-                    if (data.mailto === 'Select User') {
-                        document.getElementById('select_user_div').style.display = 'block';
-                    }
+                    document.getElementById('mailto').value = data.mailto || '';
                 }
             });
 
@@ -310,6 +479,103 @@ if (isset($_POST["send-mail"])) {
                 setTimeout(() => btn.innerHTML = '<i class="bi bi-save me-2"></i> Save Draft', 2000);
             });
         }
+
+        // ─── AI: Help Me Write / Refine ───────────────────────────────────────
+        (function() {
+            const briefInput = document.getElementById('briefInput');
+            const btnGenerate = document.getElementById('btnGenerate');
+            const refineBar = document.getElementById('refineBar');
+            const subjectInput = document.getElementById('subject');
+
+            function toggleRefineBar() {
+                refineBar.style.setProperty('display', quill.getText().trim() ? 'flex' : 'none', 'important');
+            }
+            quill.on('text-change', toggleRefineBar);
+            toggleRefineBar();
+
+            function setBusy(btn, busy, busyLabel) {
+                if (busy) {
+                    btn.dataset.originalHtml = btn.innerHTML;
+                    btn.innerHTML = '<span class="ai-spinner me-2"></span>' + busyLabel;
+                    btn.disabled = true;
+                } else {
+                    btn.innerHTML = btn.dataset.originalHtml || btn.innerHTML;
+                    btn.disabled = false;
+                }
+            }
+
+            function callAI(action, body, btn, busyLabel) {
+                setBusy(btn, true, busyLabel);
+                const form = new URLSearchParams(body);
+                fetch('?action=' + action, { method: 'POST', body: form })
+                    .then(r => r.json())
+                    .then(data => {
+                        setBusy(btn, false);
+                        if (data.status === 'success') {
+                            if (data.subject) subjectInput.value = data.subject;
+                            quill.root.innerHTML = data.body;
+                            toggleRefineBar();
+                        } else {
+                            alert(data.message || 'Something went wrong. Please try again.');
+                        }
+                    })
+                    .catch(() => {
+                        setBusy(btn, false);
+                        alert('Network error. Please try again.');
+                    });
+            }
+
+            btnGenerate.addEventListener('click', function() {
+                const brief = briefInput.value.trim();
+                if (!brief) { briefInput.focus(); return; }
+                callAI('ai_write', { content: brief }, btnGenerate, 'Writing...');
+            });
+
+            document.querySelectorAll('.refine-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const content = quill.root.innerHTML;
+                    if (!quill.getText().trim()) return;
+                    callAI('ai_refine', { content: content, refine_mode: btn.dataset.refine }, btn, 'Refining...');
+                });
+            });
+        })();
+
+        // ─── Live campaign progress polling ──────────────────────────────────
+        (function() {
+            const activeCampaignId = <?php echo (int)$active_campaign_id; ?>;
+            if (activeCampaignId <= 0) return;
+
+            const barSent = document.getElementById('progressBarSent');
+            const barFailed = document.getElementById('progressBarFailed');
+            const elSent = document.getElementById('progressSent');
+            const elFailed = document.getElementById('progressFailed');
+            const elPending = document.getElementById('progressPending');
+            const elTotal = document.getElementById('progressTotal');
+            const elStatus = document.getElementById('progressStatus');
+
+            function poll() {
+                fetch('?action=campaign_progress&campaign_id=' + activeCampaignId)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data || data.status === 'error') return;
+                        const total = data.total || 0;
+                        const sentPct = total ? (data.sent / total * 100) : 0;
+                        const failedPct = total ? (data.failed / total * 100) : 0;
+                        barSent.style.width = sentPct + '%';
+                        barFailed.style.width = failedPct + '%';
+                        elSent.textContent = data.sent;
+                        elFailed.textContent = data.failed;
+                        elPending.textContent = data.pending;
+                        elTotal.textContent = total;
+                        elStatus.textContent = data.status;
+                        if (data.status !== 'completed') {
+                            setTimeout(poll, 3000);
+                        }
+                    })
+                    .catch(() => setTimeout(poll, 5000));
+            }
+            poll();
+        })();
     </script>
 </body>
 </html>

@@ -15,6 +15,101 @@ $biz_name = $get_logged_admin_details['company_name'] ?? ($site_data['site_title
 
 $current_bg = $get_logged_admin_details['ai_marketing_bg'] ?? 'midnight';
 
+// ─── AJAX: AI "Help me write" / "Refine content" ─────────────────────────────
+if (isset($_GET['action']) && in_array($_GET['action'], ['ai_write', 'ai_refine'], true)) {
+    header('Content-Type: application/json');
+
+    if (empty($_SESSION['admin_session'])) {
+        echo json_encode(['status' => 'error', 'message' => 'Session expired. Please refresh the page.']);
+        exit;
+    }
+
+    $token_bal = (int)($get_logged_admin_details['ai_token_balance'] ?? 0);
+    $per_tx_cost = (int)($get_logged_admin_details['ai_per_tx_cost'] ?? 2);
+    if ($token_bal < $per_tx_cost) {
+        echo json_encode(['status' => 'error', 'message' => 'Insufficient AI tokens. Please top up in AI Suite.']);
+        exit;
+    }
+
+    $action = $_GET['action'];
+    $raw_input = trim($_POST['content'] ?? '');
+    if (empty($raw_input)) {
+        echo json_encode(['status' => 'error', 'message' => $action === 'ai_write' ? 'Please describe what you want to promote.' : 'There is no content to refine yet.']);
+        exit;
+    }
+
+    $safe_input = bc_firewall_prompt($raw_input);
+    if ($safe_input === false) {
+        echo json_encode(['status' => 'error', 'message' => 'Your request contains content that cannot be processed. Please describe a VTU business promotion.']);
+        exit;
+    }
+
+    if ($action === 'ai_write') {
+        $prompt = "You are a professional VTU marketing copywriter for '$biz_name' (website: {$get_logged_admin_details['website_url']}).
+Write compelling marketing email copy for this brief: \"$safe_input\"
+Respond with a catchy subject line on the very first line, prefixed exactly with \"SUBJECT:\", then a blank line, then the email body.
+Keep the body engaging and mobile-friendly, with a clear call to action pointing to the website. Use light formatting only
+(short paragraphs, <b> for emphasis) — do not output a full HTML document, just the body content.";
+    } else {
+        $refine_instructions = [
+            'shorter'    => 'Make this significantly shorter and punchier while keeping the core message and call to action.',
+            'persuasive' => 'Rewrite this to be more persuasive and urgent, while staying honest and professional.',
+            'tone'       => 'Rewrite this with a warmer, more conversational tone.',
+            'improve'    => 'Improve the clarity, grammar, and persuasiveness of this content without changing its meaning.',
+        ];
+        $refine_mode = trim($_POST['refine_mode'] ?? 'improve');
+        $instruction = $refine_instructions[$refine_mode] ?? $refine_instructions['improve'];
+        $prompt = "You are a professional marketing editor. $instruction
+If a line starting with \"SUBJECT:\" is present, keep that same format at the top of your response. Return only the revised content, with no explanations before or after it.
+
+Content to revise:
+$safe_input";
+    }
+
+    $start_time = microtime(true);
+    $result = $ai_engine->chat($assigned_model, $prompt, ['temperature' => 0.85]);
+    $duration = round((microtime(true) - $start_time) * 1000);
+
+    if ($result['status'] === 'success') {
+        $generated = trim($result['response']);
+        $tokens = strlen($prompt . $generated) / 4;
+        $esc_res = mysqli_real_escape_string($connection_server, $generated);
+        $esc_label = mysqli_real_escape_string($connection_server, ($action === 'ai_write' ? 'Marketing Write' : 'Marketing Refine') . ': ' . substr($safe_input, 0, 150));
+        mysqli_query($connection_server, "INSERT INTO sas_ai_transactions (vendor_id, username, prompt, response, tokens_burned, status, duration_ms) VALUES ('$vendor_id', 'admin_{$get_logged_admin_details['email']}', '$esc_label', '$esc_res', '$tokens', 'success', '$duration')");
+
+        mysqli_query($connection_server, "UPDATE sas_vendors SET ai_token_balance = ai_token_balance - $per_tx_cost WHERE id='$vendor_id'");
+        $get_logged_admin_details['ai_token_balance'] = $token_bal - $per_tx_cost;
+
+        // Split off a leading "SUBJECT:" line if the model produced one, so the client can
+        // route it straight into the subject field instead of leaving it in the body.
+        $subject_out = '';
+        $body_out = $generated;
+        if (preg_match('/^\s*SUBJECT:\s*(.+)$/mi', $generated, $m)) {
+            $subject_out = trim($m[1]);
+            $body_out = trim(preg_replace('/^\s*SUBJECT:\s*.+$/mi', '', $generated, 1));
+        }
+
+        echo json_encode([
+            'status'           => 'success',
+            'subject'          => $subject_out,
+            'body'             => $body_out,
+            'tokens_remaining' => $get_logged_admin_details['ai_token_balance'],
+        ]);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'AI Error: ' . ($result['message'] ?? 'Unable to connect to AI engine.')]);
+    }
+    exit;
+}
+
+// ─── AJAX: live campaign progress (polled by the report panel) ──────────────
+if (isset($_GET['action']) && $_GET['action'] === 'campaign_progress') {
+    header('Content-Type: application/json');
+    $cid = (int)($_GET['campaign_id'] ?? 0);
+    $progress = bc_get_mail_campaign_progress($connection_server, $cid, $vendor_id);
+    echo json_encode($progress ?: ['status' => 'error', 'message' => 'Campaign not found.']);
+    exit;
+}
+
 if (isset($_POST['set-bg'])) {
     $new_bg = bc_sanitize($_POST['bg_name'] ?? 'midnight');
     mysqli_query($connection_server, "UPDATE sas_vendors SET ai_marketing_bg='$new_bg' WHERE id='$vendor_id'");
@@ -22,89 +117,27 @@ if (isset($_POST['set-bg'])) {
     exit;
 }
 
-if (isset($_POST['generate-ad'])) {
-    $service = bc_sanitize($_POST['service'] ?? 'Airtime');
-    $tone    = bc_sanitize($_POST['tone'] ?? 'Professional');
-    $target  = bc_sanitize($_POST['target'] ?? 'Customers');
-    $platform = bc_sanitize($_POST['platform'] ?? 'Push Notification');
-
-    $token_bal = (int)($get_logged_admin_details['ai_token_balance'] ?? 0);
-    $per_tx_cost = (int)($get_logged_admin_details['ai_per_tx_cost'] ?? 2);
-
-    if ($token_bal < $per_tx_cost) {
-        $generated_copy = "❌ Insufficient AI Tokens! Please top up your AI balance in settings.";
-    } else {
-        $prompt = "You are a professional VTU Marketing Strategist.
-               Generate a high-converting $platform ad copy for a business called '$biz_name'.
-               Service being promoted: $service. 
-               Tone: $tone. 
-               Target Audience: $target.
-               Include attractive emojis, a catchy headline, and a clear Call to Action (CTA) pointing to our website: {$get_logged_admin_details['website_url']}.
-               The design vibe for this ad is '$current_bg'.
-               Keep it extremely engaging and concise for mobile readers.";
-    
-    $start_time = microtime(true);
-    $ai = ai_engine();
-    $result = $ai->chat($assigned_model, $prompt, ['temperature' => 0.85]);
-    $duration = round((microtime(true) - $start_time) * 1000);
-
-    if ($result['status'] === 'success') {
-        $generated_copy = $result['response'];
-        $tokens = strlen($prompt . $generated_copy) / 4; 
-        $esc_res = mysqli_real_escape_string($connection_server, $generated_copy);
-        mysqli_query($connection_server, "INSERT INTO sas_ai_transactions (vendor_id, username, prompt, response, tokens_burned, status, duration_ms) VALUES ('$vendor_id', 'admin_{$get_logged_admin_details['email']}', 'Marketing Ad ($platform): $service', '$esc_res', '$tokens', 'success', '$duration')");
-
-        // Debit the vendor
-        mysqli_query($connection_server, "UPDATE sas_vendors SET ai_token_balance = ai_token_balance - $per_tx_cost WHERE id='$vendor_id'");
-        // Refresh local details for balance display
-        $get_logged_admin_details['ai_token_balance'] -= $per_tx_cost;
-    } else {
-        $generated_copy = '❌ AI Error: ' . ($result['message'] ?? 'Unable to connect to AI engine.');
-    }
-    }
-}
-
 if (isset($_POST['send-campaign'])) {
     $subject = trim($_POST["subject"] ?? '');
-    $body = trim($_POST["body"] ?? ''); 
-    $mailto = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["mailto"] ?? ''))));
-
-    $external_emails = [];
-    if (!empty($_POST['paste_emails'])) {
-        $pasted = preg_split('/[\s,]+/', $_POST['paste_emails'], -1, PREG_SPLIT_NO_EMPTY);
-        foreach ($pasted as $email) {
-            if (filter_var(trim($email), FILTER_VALIDATE_EMAIL)) $external_emails[] = trim($email);
-        }
-    }
-    
-    $external_emails = array_unique($external_emails);
+    $body    = trim($_POST["body"] ?? '');
+    $status_cohort = trim($_POST['status_cohort'] ?? '');
+    $account_level = (int)($_POST['account_level'] ?? 0);
+    $external_raw  = [$_POST['paste_emails'] ?? ''];
 
     if (!empty($subject) && !empty($body)) {
-        $success_count = 0;
-        
-        // Internal targets
-        if (!empty($mailto) && $mailto !== 'none') {
-            $res = sendVendorEmailSpecific($mailto, $subject, $body);
-            if ($res == "success") $success_count++;
-        }
-
-        // External targets
-        if (!empty($external_emails)) {
-            foreach ($external_emails as $ext_email) {
-                sendVendorEmail($ext_email, $subject, $body);
-            }
-            $success_count += count($external_emails);
-        }
-
-        if ($success_count > 0) {
-            $_SESSION["product_purchase_response"] = "Campaign Dispatch Successful! (Targets reached: $success_count)";
+        $recipients = bc_resolve_campaign_recipients($connection_server, $vendor_id, $status_cohort, $account_level, $external_raw);
+        if (!empty($recipients)) {
+            $campaign_id = bc_enqueue_mail_campaign($connection_server, $vendor_id, $subject, $body, $recipients, 'aimarketing', $biz_name, $get_logged_admin_details['website_url']);
+            $_SESSION["product_purchase_response"] = "Campaign queued! Sending to " . count($recipients) . " recipient(s) in the background — no need to wait here.";
+            header("Location: AIMarketing.php?campaign=$campaign_id");
         } else {
-            $_SESSION["product_purchase_response"] = "Error: No targets selected or dispatch failed.";
+            $_SESSION["product_purchase_response"] = "Error: No valid recipients found for the selected targeting.";
+            header("Location: AIMarketing.php");
         }
     } else {
         $_SESSION["product_purchase_response"] = "Error: Subject and Marketing Content are required.";
+        header("Location: AIMarketing.php");
     }
-    header("Location: AIMarketing.php");
     exit;
 }
 
@@ -117,6 +150,20 @@ $bg_templates = [
     'glass'    => ['name' => 'Glass', 'css' => 'rgba(255,255,255,0.1)', 'blur' => 'backdrop-filter: blur(10px); color: #000;']
 ];
 
+// Preset "help me write" chips — one per service the platform actually sells (matches the
+// $service_map in web/ai-handler.php: airtime, data, electricity, cable, betting, exam), plus
+// two general campaign types.
+$prompt_chips = [
+    'Weekend data promo'      => 'Promote a weekend discount on data bundles running from Friday to Sunday',
+    'New service announcement'=> 'Announce that we now support a new VTU service and invite users to try it',
+    'Win back dormant users'  => "Re-engage users who haven't made a purchase in a while with a welcome-back offer",
+    'Referral bonus push'     => 'Encourage users to refer friends and earn a referral bonus for every signup',
+    'Price drop alert'        => 'Announce a price drop on airtime and data rates effective immediately',
+    'Festive greeting'        => 'Send a warm festive/holiday greeting to customers with a special seasonal offer',
+];
+
+$recent_campaigns = bc_get_recent_mail_campaigns($connection_server, $vendor_id, 10);
+$active_campaign_id = (int)($_GET['campaign'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -136,6 +183,13 @@ $bg_templates = [
         .flyer-overlay { background: rgba(255,255,255,0.1); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.2); border-radius: 1.5rem; padding: 1.5rem; height: 80%; display: flex; flex-direction: column; justify-content: space-between; }
         .nav-pills-studio .nav-link { border-radius: 2rem; padding: 0.8rem 2rem; font-weight: 700; color: #64748b; }
         .nav-pills-studio .nav-link.active { background: #6366f1 !important; color: white !important; }
+        .prompt-chip { border: 1.5px solid #e2e8f0; background: #fff; border-radius: 2rem; padding: 0.4rem 1rem; font-size: 0.8rem; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; }
+        .prompt-chip:hover { border-color: #6366f1; color: #6366f1; background: #f5f3ff; }
+        .refine-btn { border-radius: 2rem; font-size: 0.78rem; font-weight: 700; }
+        .campaign-progress-bar { height: 10px; border-radius: 1rem; }
+        .campaign-row { font-size: 0.85rem; }
+        .ai-spinner { display: inline-block; width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: ai-spin 0.7s linear infinite; }
+        @keyframes ai-spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -147,7 +201,7 @@ $bg_templates = [
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h2 class="fw-bold mb-0">Marketing Intelligence Hub</h2>
             <div class="bg-white bg-opacity-20 rounded-pill px-4 py-2 small fw-bold">
-                <i class="bi bi-coin me-1"></i> <?php echo number_format($get_logged_admin_details['ai_token_balance'] ?? 0); ?> Tokens
+                <i class="bi bi-coin me-1"></i> <span id="tokenBalanceLabel"><?php echo number_format($get_logged_admin_details['ai_token_balance'] ?? 0); ?></span> Tokens
             </div>
         </div>
         <p class="opacity-75 mb-0">Harness the power of generative AI to create viral campaigns for <strong><?php echo $biz_name; ?></strong></p>
@@ -157,41 +211,17 @@ $bg_templates = [
         <div class="col-lg-5">
             <div class="card fintech-card mb-4">
                 <div class="card-body p-4">
-                    <h5 class="fw-bold mb-4">Campaign Creator</h5>
-                    <form method="post">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Platform</label>
-                            <select name="platform" class="form-select rounded-4 p-3 bg-light border-0">
-                                <option>Push Notification</option>
-                                <option>In-App Banner</option>
-                                <option>Facebook Post</option>
-                                <option>Twitter/X Ad</option>
-                                <option>Instagram Reel Script</option>
-                                <option>SMS Marketing</option>
-                                <option>Email Campaign</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Service</label>
-                            <select name="service" class="form-select rounded-4 p-3 bg-light border-0">
-                                <option>Cheapest Data Bundles</option>
-                                <option>Airtime to Cash</option>
-                                <option>Electricity Tokens</option>
-                                <option>Cable TV Subscriptions</option>
-                                <option>Reseller Program</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Brand Tone</label>
-                            <select name="tone" class="form-select rounded-4 p-3 bg-light border-0">
-                                <option>Professional</option>
-                                <option>Energetic</option>
-                                <option>Funny/Witty</option>
-                                <option>Urgent</option>
-                            </select>
-                        </div>
-                        <button name="generate-ad" class="btn btn-primary w-100 rounded-pill py-3 fw-bold">Generate Magic 🪄</button>
-                    </form>
+                    <h5 class="fw-bold mb-3">Help Me Write</h5>
+                    <div class="mb-3 d-flex flex-wrap gap-2">
+                        <?php foreach ($prompt_chips as $label => $chip_prompt): ?>
+                        <button type="button" class="prompt-chip" onclick="document.getElementById('briefInput').value = <?php echo json_encode($chip_prompt); ?>; document.getElementById('briefInput').focus();"><?php echo htmlspecialchars($label); ?></button>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">What do you want to promote?</label>
+                        <textarea id="briefInput" class="form-control rounded-4 p-3 bg-light border-0" rows="4" placeholder="e.g. Promote our new 1GB data plan at a discounted weekend rate"></textarea>
+                    </div>
+                    <button type="button" id="btnGenerate" class="btn btn-primary w-100 rounded-pill py-3 fw-bold">Generate Magic 🪄</button>
                 </div>
             </div>
 
@@ -215,47 +245,107 @@ $bg_templates = [
         </div>
 
         <div class="col-lg-7">
-            <?php if(isset($generated_copy)): ?>
-            <div class="card fintech-card mb-4 animate__animated animate__fadeIn">
+            <div class="card fintech-card mb-4">
                 <div class="card-body p-4">
-                    <div class="d-flex justify-content-between mb-3">
-                        <h5 class="fw-bold">Ad Copy</h5>
-                        <button class="btn btn-light btn-sm rounded-pill px-3" onclick="navigator.clipboard.writeText(document.getElementById('adText').value); alert('Copied!')"><i class="bi bi-clipboard"></i></button>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0">Ad Copy</h5>
+                        <button type="button" class="btn btn-light btn-sm rounded-pill px-3" onclick="navigator.clipboard.writeText(document.getElementById('adText').value); this.innerHTML='<i class=\'bi bi-check2\'></i> Copied'; setTimeout(()=>this.innerHTML='<i class=\'bi bi-clipboard\'></i>',1500)"><i class="bi bi-clipboard"></i></button>
                     </div>
-                    
-                    <form method="post" action="">
-                        <div class="mb-4">
-                            <textarea class="gen-box form-control shadow-none" id="adText" name="body" rows="8" style="width: 100%; resize: vertical;"><?php echo htmlspecialchars($generated_copy); ?></textarea>
+
+                    <form method="post" action="" id="campaignForm">
+                        <div class="mb-3 d-flex flex-wrap gap-2" id="refineBar" style="display:none !important;">
+                            <button type="button" class="btn btn-outline-secondary refine-btn" data-refine="shorter">✂️ Shorter</button>
+                            <button type="button" class="btn btn-outline-secondary refine-btn" data-refine="persuasive">🔥 More Persuasive</button>
+                            <button type="button" class="btn btn-outline-secondary refine-btn" data-refine="tone">😊 Warmer Tone</button>
+                            <button type="button" class="btn btn-outline-secondary refine-btn" data-refine="improve">✨ Improve</button>
                         </div>
-                        
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Email Subject</label>
+                            <input type="text" id="genSubject" name="subject" class="form-control rounded-3 py-2" placeholder="e.g. Exciting Offers Inside!">
+                        </div>
+
+                        <div class="mb-4">
+                            <textarea class="gen-box form-control shadow-none" id="adText" name="body" rows="8" style="width: 100%; resize: vertical;" placeholder="Your generated ad copy will appear here — or write your own."></textarea>
+                        </div>
+
                         <div class="p-4 bg-light rounded-4 border border-dashed mb-3">
                             <h6 class="fw-bold text-primary mb-3"><i class="bi bi-send-fill me-2"></i>Campaign Dispatch</h6>
-                            
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Email Subject</label>
-                                <input type="text" name="subject" class="form-control rounded-3 py-2" placeholder="e.g. Exciting Offers Inside!" required>
-                            </div>
-                            
+
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label small fw-bold">Registered Users</label>
-                                    <select name="mailto" class="form-select rounded-3 py-2">
-                                        <option value="none">-- Do not send to internal users --</option>
+                                    <select name="status_cohort" class="form-select rounded-3 py-2">
+                                        <option value="">-- Do not send to internal users --</option>
                                         <option value="all">All Users</option>
-                                        <option value="api">API Users Only</option>
-                                        <option value="smart">Smart Users Only</option>
-                                        <option value="agent">Agent Users Only</option>
+                                        <option value="active">Active Users Only</option>
+                                        <option value="blocked">Blocked Users Only</option>
+                                        <option value="deleted">Deleted Users Only</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label small fw-bold">External Emails (comma separated)</label>
-                                    <textarea name="paste_emails" class="form-control rounded-3" rows="1" placeholder="user1@email.com, user2@email.com"></textarea>
+                                    <label class="form-label small fw-bold">Account Level</label>
+                                    <select name="account_level" class="form-select rounded-3 py-2">
+                                        <option value="0">Any Level</option>
+                                        <option value="1">Smart Users Only</option>
+                                        <option value="2">Agent Users Only</option>
+                                        <option value="3">API Users Only</option>
+                                    </select>
                                 </div>
                             </div>
-                            
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">External Emails (comma or space separated)</label>
+                                <textarea name="paste_emails" class="form-control rounded-3" rows="1" placeholder="user1@email.com, user2@email.com"></textarea>
+                            </div>
+
                             <button type="submit" name="send-campaign" class="btn btn-success w-100 rounded-pill py-3 fw-bold mt-2 shadow-sm"><i class="bi bi-envelope-paper-fill me-2"></i> Launch Email Campaign</button>
                         </div>
                     </form>
+                </div>
+            </div>
+
+            <div class="card fintech-card mb-4 <?php echo $active_campaign_id ? '' : 'd-none'; ?>" id="progressCard">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="bi bi-broadcast-pin me-2"></i>Live Send Report</h6>
+                        <span class="badge bg-primary-subtle text-primary" id="progressStatus">—</span>
+                    </div>
+                    <div class="progress campaign-progress-bar mb-2">
+                        <div class="progress-bar bg-success" id="progressBarSent" style="width:0%"></div>
+                        <div class="progress-bar bg-danger" id="progressBarFailed" style="width:0%"></div>
+                    </div>
+                    <div class="small text-muted">
+                        <span id="progressSent">0</span> sent &middot;
+                        <span id="progressFailed">0</span> failed &middot;
+                        <span id="progressPending">0</span> pending of
+                        <span id="progressTotal">0</span> total
+                    </div>
+                </div>
+            </div>
+
+            <div class="card fintech-card mb-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Recent Campaigns</h6>
+                    <?php if (empty($recent_campaigns)): ?>
+                        <p class="text-muted small mb-0">No campaigns sent yet.</p>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm campaign-row align-middle mb-0">
+                                <thead class="text-muted"><tr><th>Subject</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th></tr></thead>
+                                <tbody>
+                                <?php foreach ($recent_campaigns as $c): ?>
+                                    <tr>
+                                        <td class="text-truncate" style="max-width:220px;"><?php echo htmlspecialchars($c['subject']); ?></td>
+                                        <td><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($c['status']); ?></span></td>
+                                        <td><?php echo (int)$c['sent_count']; ?></td>
+                                        <td><?php echo (int)$c['failed_count']; ?></td>
+                                        <td><?php echo (int)$c['total_count']; ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -264,26 +354,124 @@ $bg_templates = [
                     <div class="flyer-overlay">
                         <h4 class="fw-bold"><?php echo strtoupper($biz_name); ?></h4>
                         <div class="flex-grow-1 d-flex align-items-center justify-content-center overflow-hidden my-3">
-                            <p class="small mb-0" style="font-size: <?php echo strlen($generated_copy) > 300 ? '0.75rem' : '0.9rem'; ?>; line-height: 1.4;">
-                                <?php echo nl2br(htmlspecialchars(mb_strimwidth($generated_copy, 0, 600, "..."))); ?>
+                            <p class="small mb-0" id="flyerText" style="font-size: 0.9rem; line-height: 1.4;">
+                                Generate professional marketing assets in seconds.
                             </p>
                         </div>
                         <div class="bg-white text-dark py-2 rounded-4 fw-bold small" style="word-break: break-all;"><?php echo $get_logged_admin_details['website_url']; ?></div>
                     </div>
                 </div>
             </div>
-            <?php else: ?>
-            <div class="card fintech-card text-center py-5">
-                <div class="card-body">
-                    <i class="bi bi-megaphone display-1 text-primary opacity-25"></i>
-                    <h4 class="fw-bold mt-4">Viral Content starts here.</h4>
-                    <p class="text-muted">Generate professional marketing assets in seconds.</p>
-                </div>
-            </div>
-            <?php endif; ?>
         </div>
     </div>
 </section>
 <?php include("../func/bc-admin-footer.php"); ?>
+<script>
+(function() {
+    const briefInput = document.getElementById('briefInput');
+    const adText = document.getElementById('adText');
+    const genSubject = document.getElementById('genSubject');
+    const btnGenerate = document.getElementById('btnGenerate');
+    const refineBar = document.getElementById('refineBar');
+    const flyerText = document.getElementById('flyerText');
+    const tokenLabel = document.getElementById('tokenBalanceLabel');
+
+    function updateFlyer() {
+        const text = adText.value.trim();
+        flyerText.textContent = text ? text.substring(0, 600) : 'Generate professional marketing assets in seconds.';
+    }
+    adText.addEventListener('input', updateFlyer);
+
+    function toggleRefineBar() {
+        refineBar.style.setProperty('display', adText.value.trim() ? 'flex' : 'none', 'important');
+    }
+    adText.addEventListener('input', toggleRefineBar);
+    toggleRefineBar();
+
+    function setBusy(btn, busy, busyLabel) {
+        if (busy) {
+            btn.dataset.originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="ai-spinner me-2"></span>' + busyLabel;
+            btn.disabled = true;
+        } else {
+            btn.innerHTML = btn.dataset.originalHtml || btn.innerHTML;
+            btn.disabled = false;
+        }
+    }
+
+    function callAI(action, body, btn, busyLabel) {
+        setBusy(btn, true, busyLabel);
+        const form = new URLSearchParams(body);
+        fetch('AIMarketing.php?action=' + action, { method: 'POST', body: form })
+            .then(r => r.json())
+            .then(data => {
+                setBusy(btn, false);
+                if (data.status === 'success') {
+                    if (data.subject) genSubject.value = data.subject;
+                    adText.value = data.body;
+                    updateFlyer();
+                    toggleRefineBar();
+                    if (typeof data.tokens_remaining !== 'undefined') tokenLabel.textContent = data.tokens_remaining;
+                } else {
+                    alert(data.message || 'Something went wrong. Please try again.');
+                }
+            })
+            .catch(() => {
+                setBusy(btn, false);
+                alert('Network error. Please try again.');
+            });
+    }
+
+    btnGenerate.addEventListener('click', function() {
+        const brief = briefInput.value.trim();
+        if (!brief) { briefInput.focus(); return; }
+        callAI('ai_write', { content: brief }, btnGenerate, 'Writing...');
+    });
+
+    document.querySelectorAll('.refine-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const content = adText.value.trim();
+            if (!content) return;
+            callAI('ai_refine', { content: content, refine_mode: btn.dataset.refine }, btn, 'Refining...');
+        });
+    });
+
+    // ─── Live campaign progress polling ──────────────────────────────────
+    const activeCampaignId = <?php echo (int)$active_campaign_id; ?>;
+    if (activeCampaignId > 0) {
+        const progressCard = document.getElementById('progressCard');
+        const barSent = document.getElementById('progressBarSent');
+        const barFailed = document.getElementById('progressBarFailed');
+        const elSent = document.getElementById('progressSent');
+        const elFailed = document.getElementById('progressFailed');
+        const elPending = document.getElementById('progressPending');
+        const elTotal = document.getElementById('progressTotal');
+        const elStatus = document.getElementById('progressStatus');
+
+        function poll() {
+            fetch('AIMarketing.php?action=campaign_progress&campaign_id=' + activeCampaignId)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || data.status === 'error') return;
+                    const total = data.total || 0;
+                    const sentPct = total ? (data.sent / total * 100) : 0;
+                    const failedPct = total ? (data.failed / total * 100) : 0;
+                    barSent.style.width = sentPct + '%';
+                    barFailed.style.width = failedPct + '%';
+                    elSent.textContent = data.sent;
+                    elFailed.textContent = data.failed;
+                    elPending.textContent = data.pending;
+                    elTotal.textContent = total;
+                    elStatus.textContent = data.status;
+                    if (data.status !== 'completed') {
+                        setTimeout(poll, 3000);
+                    }
+                })
+                .catch(() => setTimeout(poll, 5000));
+        }
+        poll();
+    }
+})();
+</script>
 </body>
 </html>

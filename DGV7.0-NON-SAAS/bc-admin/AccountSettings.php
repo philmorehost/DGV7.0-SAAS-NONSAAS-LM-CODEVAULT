@@ -2,6 +2,10 @@
 include ("../func/bc-admin-config.php");
 include_once(__DIR__ . "/../func/bc-integrity.php");
 
+// Used by the Developer tab's mail-queue cron entry below.
+$mail_queue_batch_size = (int)getSuperAdminOption('mail_queue_batch_size', 5);
+$mail_queue_cron_secret = bc_get_or_create_cron_secret($connection_server);
+
 // AJAX: quick PIN-only save for the forced-setup modal (func/bc-admin-header.php).
 // Deliberately touches ONLY security_pin — the full "update-security-settings"
 // handler further down also writes SMTP/2FA/SSO fields together in one UPDATE,
@@ -22,6 +26,24 @@ if (isset($_POST['action']) && $_POST['action'] === 'quick_set_pin') {
     mysqli_query($connection_server, "UPDATE sas_vendors SET security_pin='$hashed_pin_esc' WHERE id='" . $get_logged_admin_details["id"] . "'");
     echo json_encode(['ok' => true, 'msg' => 'Security PIN set successfully!']);
     exit();
+}
+
+if (isset($_POST['set-mail-batch-size'])) {
+    // Existence-checked UPDATE/INSERT rather than INSERT ... ON DUPLICATE KEY UPDATE:
+    // sas_super_admin_options has an older schema variant in the wild without a unique
+    // constraint on option_name (see the license_key/license_domain fix in
+    // DGV7.0-SAAS/func/bc-levelup.php — that file doesn't exist in this edition, so this
+    // stays inlined here rather than depending on a helper only the other edition has).
+    $new_batch_size = max(1, min(100, (int)($_POST['mail_queue_batch_size'] ?? 5)));
+    $existing = mysqli_query($connection_server, "SELECT option_name FROM sas_super_admin_options WHERE option_name='mail_queue_batch_size' LIMIT 1");
+    if ($existing && mysqli_num_rows($existing) > 0) {
+        mysqli_query($connection_server, "UPDATE sas_super_admin_options SET option_value='$new_batch_size' WHERE option_name='mail_queue_batch_size'");
+    } else {
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('mail_queue_batch_size', '$new_batch_size')");
+    }
+    $_SESSION["product_purchase_response"] = "Mail queue batch size updated to $new_batch_size per run.";
+    header("Location: " . $_SERVER["REQUEST_URI"] . "#tab-developer");
+    exit;
 }
 
 $license_code = bc_read_activation();
@@ -1729,6 +1751,32 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                     <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
                                 </div>
                                 <div class="small text-muted mt-1">Run this once daily (e.g., at midnight) to automatically download and apply system updates with email report logs.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Bulk Email Queue Processor Cron Path</label>
+                                <div class="input-group">
+                                    <input type="text" value="php <?php echo realpath(__DIR__ . '/../cron/process_mail_queue.php'); ?>" class="form-control bg-light" readonly />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    Run this every 1 minute so campaigns queued from AI Marketing Studio / Send Mail keep sending in the background at
+                                    <?php echo (int)$mail_queue_batch_size; ?> email(s) per run, without the admin waiting on the page.
+                                    Unlike CLI cron, hitting this over HTTP requires a secret key — use the URL below instead if your host only supports HTTP-triggered cron.
+                                </div>
+                                <div class="input-group mt-2">
+                                    <input type="text" value="wget -qO- &quot;<?php echo $web_http_host; ?>/cron/process_mail_queue.php?key=<?php echo htmlspecialchars($mail_queue_cron_secret); ?>&quot;" class="form-control bg-light" readonly />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="small text-muted mt-1">This key is auto-generated and unique to your platform — keep it private; anyone with it could trigger your outbound mail queue.</div>
+
+                                <form method="post" class="d-flex align-items-end gap-2 mt-3" style="max-width: 320px;">
+                                    <div class="flex-grow-1">
+                                        <label class="form-label small fw-bold text-muted text-uppercase mb-1">Emails Per Run</label>
+                                        <input type="number" name="mail_queue_batch_size" min="1" max="100" value="<?php echo (int)$mail_queue_batch_size; ?>" class="form-control form-control-sm" />
+                                    </div>
+                                    <button type="submit" name="set-mail-batch-size" class="btn btn-primary btn-sm fw-bold">Save</button>
+                                </form>
                             </div>
 
                             <div class="mb-1">

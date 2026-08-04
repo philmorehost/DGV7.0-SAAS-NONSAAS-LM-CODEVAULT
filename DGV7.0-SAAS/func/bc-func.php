@@ -1991,7 +1991,6 @@ function sendVendorEmailSpecific($mailto_type, $email_subject, $email_body)
 					$raw_reg_template_subject = str_replace($array_key, $array_val, $raw_reg_template_subject);
 					$raw_reg_template_body = str_replace($array_key, $array_val, $raw_reg_template_body);
 				}
-				fwrite(fopen("email.txt", "a++"), "\n" . $raw_reg_template_body);
 				sendVendorEmail($each_user["email"], $raw_reg_template_subject, $raw_reg_template_body);
 			}
 			return "success";

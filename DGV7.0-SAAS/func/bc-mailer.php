@@ -56,7 +56,12 @@ function customBCMailSender($from,$to,$subject,$message,$headers, $background = 
 		$smtpMAIL->Password = $smtp_pass;
 		
 		 //Sender and recipient settings
-		$smtpMAIL->setFrom($smtp_user, "System Notification");
+		// $from was accepted but never used — every email looked like it came from a
+		// generic "System Notification" regardless of caller. Callers that care about a
+		// proper display name (e.g. a marketing campaign, which should show the vendor's
+		// own site name) now get it; existing callers that still pass '' keep the old
+		// default unchanged.
+		$smtpMAIL->setFrom($smtp_user, !empty($from) ? $from : "System Notification");
 		$smtpMAIL->addAddress($to);
 		$smtpMAIL->addReplyTo($smtp_user);
 
