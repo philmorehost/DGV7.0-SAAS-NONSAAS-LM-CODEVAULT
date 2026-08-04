@@ -158,6 +158,24 @@ function bc_enqueue_mail_campaign($connection_server, $vendor_id, $subject, $bod
     mysqli_query($connection_server, "INSERT INTO sas_mail_campaigns (vendor_id, subject, body_html, source, total_count, status) VALUES ('$vendor_id_esc', '$subject_esc', '$body_raw_esc', '$source_esc', " . count($recipients) . ", 'queued')");
     $campaign_id = mysqli_insert_id($connection_server);
 
+    // mailDesignTemplate() runs a vendor lookup plus a service-list query on every call — the
+    // branded shell it produces (logo, active-services block, footer) is identical for every
+    // recipient of the same campaign, only the subject/body inside it differ. Calling it once
+    // per recipient (as this used to) meant a bulk send to hundreds/thousands of users did that
+    // many redundant DB round trips synchronously inside this HTTP request — that's what made
+    // "submit" hang instead of returning instantly. Render the shell ONCE with placeholder
+    // tokens standing in for subject/body, then substitute the real per-recipient content with
+    // a cheap in-memory str_replace — zero extra queries per recipient.
+    $is_full_document = (strpos($body_html, '<html') !== false || strpos($body_html, '<body') !== false);
+    $shell_html = null;
+    $subject_token = '';
+    $body_token = '';
+    if (!$is_full_document) {
+        $subject_token = '%%BCMAILQ_SUBJECT_' . bin2hex(random_bytes(6)) . '%%';
+        $body_token = '%%BCMAILQ_BODY_' . bin2hex(random_bytes(6)) . '%%';
+        $shell_html = mailDesignTemplate($subject_token, $body_token, [], true);
+    }
+
     $rows = [];
     foreach ($recipients as $r) {
         $placeholders = [
@@ -169,7 +187,12 @@ function bc_enqueue_mail_campaign($connection_server, $vendor_id, $subject, $bod
         ];
         $personal_subject = strtr($subject, $placeholders);
         $personal_body = strtr($body_html, $placeholders);
-        $rendered_html = mailDesignTemplate($personal_subject, $personal_body, [], true);
+
+        // Full HTML documents (e.g. GrapesJS output) are what mailDesignTemplate() would have
+        // passed through untouched anyway (see its own full-document check) — skip calling it.
+        $rendered_html = $is_full_document
+            ? $personal_body
+            : str_replace([$subject_token, $body_token], [$personal_subject, $personal_body], $shell_html);
 
         $rows[] = "(" . implode(',', [
             $campaign_id,
