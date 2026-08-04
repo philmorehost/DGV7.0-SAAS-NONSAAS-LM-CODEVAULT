@@ -300,7 +300,7 @@ $prompt_chips = [
                 <label class="form-label small fw-bold text-muted text-uppercase mb-2">Help Me Write</label>
                 <div class="mb-2 d-flex flex-wrap gap-2">
                     <?php foreach ($prompt_chips as $label => $chip_prompt): ?>
-                    <button type="button" class="prompt-chip" onclick="document.getElementById('briefInput').value = <?php echo json_encode($chip_prompt); ?>; document.getElementById('briefInput').focus();"><?php echo htmlspecialchars($label); ?></button>
+                    <button type="button" class="prompt-chip" data-prompt="<?php echo htmlspecialchars($chip_prompt, ENT_QUOTES); ?>"><?php echo htmlspecialchars($label); ?></button>
                     <?php endforeach; ?>
                 </div>
                 <div class="d-flex gap-2">
@@ -492,6 +492,13 @@ $prompt_chips = [
             const refineBar = document.getElementById('refineBar');
             const subjectInput = document.getElementById('subject');
             const tokenBalanceLabel = document.getElementById('tokenBalanceLabel');
+
+            document.querySelectorAll('.prompt-chip').forEach(function(chip) {
+                chip.addEventListener('click', function() {
+                    briefInput.value = chip.dataset.prompt;
+                    briefInput.focus();
+                });
+            });
 
             function toggleRefineBar() {
                 refineBar.style.setProperty('display', quill.getText().trim() ? 'flex' : 'none', 'important');

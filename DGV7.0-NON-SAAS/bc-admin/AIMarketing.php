@@ -214,7 +214,7 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
                     <h5 class="fw-bold mb-3">Help Me Write</h5>
                     <div class="mb-3 d-flex flex-wrap gap-2">
                         <?php foreach ($prompt_chips as $label => $chip_prompt): ?>
-                        <button type="button" class="prompt-chip" onclick="document.getElementById('briefInput').value = <?php echo json_encode($chip_prompt); ?>; document.getElementById('briefInput').focus();"><?php echo htmlspecialchars($label); ?></button>
+                        <button type="button" class="prompt-chip" data-prompt="<?php echo htmlspecialchars($chip_prompt, ENT_QUOTES); ?>"><?php echo htmlspecialchars($label); ?></button>
                         <?php endforeach; ?>
                     </div>
                     <div class="mb-3">
@@ -375,6 +375,13 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
     const refineBar = document.getElementById('refineBar');
     const flyerText = document.getElementById('flyerText');
     const tokenLabel = document.getElementById('tokenBalanceLabel');
+
+    document.querySelectorAll('.prompt-chip').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            briefInput.value = chip.dataset.prompt;
+            briefInput.focus();
+        });
+    });
 
     function updateFlyer() {
         const text = adText.value.trim();
