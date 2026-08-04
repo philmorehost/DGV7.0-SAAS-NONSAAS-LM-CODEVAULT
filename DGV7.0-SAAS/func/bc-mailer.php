@@ -82,9 +82,13 @@ function customBCMailSender($from,$to,$subject,$message,$headers, $background = 
 		$smtpMAIL->AltBody = strip_tags($message);
 		$sent = $smtpMAIL->send();
 	} catch (Exception $e) {
-        // Fallback to Inbuilt Mail Functions
-	    $sent = mail($to,$subject,$message,$headers);
-
+        // Fallback to Inbuilt Mail Functions. Raw mail() applies no Content-Transfer-Encoding
+        // at all, so a message with any long line (the full HTML template rendered onto one
+        // line, or a long marketing paragraph with no manual line breaks) reproduces the exact
+        // "message has lines too long for transport" rejection the Encoding='base64' setting
+        // above exists to prevent on the primary SMTP path — base64-encode it here too, so this
+        // fallback can't hit the same failure.
+	    $sent = mail($to, $subject, chunk_split(base64_encode($message)), $headers . "Content-Transfer-Encoding: base64\r\n");
 	}
     return $sent;
 }
@@ -149,12 +153,15 @@ function sendEmailWithAttachments($to, $subject, $message, $from_name, $from_ema
 
         $sent = $smtpMAIL->send();
     } catch (Exception $e) {
-        // Fallback
-        $boundary = md5(time());
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "From: $from_name <$from_email>\r\n";
-        $headers .= "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n";
-        $sent = mail($to, $subject, $message, $headers);
+        // Fallback. Same "lines too long for transport" risk as customBCMailSender()'s
+        // fallback above — base64-encode the body here too. Note: attachments are not included
+        // in this fallback (pre-existing limitation, unrelated to this fix) — if SMTP fails,
+        // the email still goes out via mail() but without its attachments.
+        $fallback_headers = "MIME-Version: 1.0\r\n";
+        $fallback_headers .= "From: $from_name <$from_email>\r\n";
+        $fallback_headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $fallback_headers .= "Content-Transfer-Encoding: base64\r\n";
+        $sent = mail($to, $subject, chunk_split(base64_encode($message)), $fallback_headers);
 
     }
     return $sent;
