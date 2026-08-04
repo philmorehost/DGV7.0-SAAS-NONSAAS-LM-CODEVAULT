@@ -14,6 +14,7 @@ $site_data = mysqli_fetch_assoc($site_q);
 $biz_name = $get_logged_admin_details['company_name'] ?? ($site_data['site_title'] ?? 'Our VTU Platform');
 
 $current_bg = $get_logged_admin_details['ai_marketing_bg'] ?? 'midnight';
+$copilot_cost_display = (int)getSuperAdminOption('ai_marketing_copilot_cost', 3);
 
 // ─── AJAX: AI "Help me write" / "Refine content" ─────────────────────────────
 if (isset($_GET['action']) && in_array($_GET['action'], ['ai_write', 'ai_refine'], true)) {
@@ -25,9 +26,11 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['ai_write', 'ai_refine'
     }
 
     $token_bal = (int)($get_logged_admin_details['ai_token_balance'] ?? 0);
-    $per_tx_cost = (int)($get_logged_admin_details['ai_per_tx_cost'] ?? 2);
+    // Flat platform-wide rate set by the super admin (AI Management > Economics), separate
+    // from ai_per_tx_cost (the general per-vendor chat fee used elsewhere, e.g. AI Assistant).
+    $per_tx_cost = $copilot_cost_display;
     if ($token_bal < $per_tx_cost) {
-        echo json_encode(['status' => 'error', 'message' => 'Insufficient AI tokens. Please top up in AI Suite.']);
+        echo json_encode(['status' => 'error', 'message' => "Insufficient AI tokens. The Marketing Copilot costs $per_tx_cost token(s) per use — please top up in AI Suite.", 'copilot_cost' => $per_tx_cost, 'tokens_remaining' => $token_bal]);
         exit;
     }
 
@@ -94,6 +97,7 @@ $safe_input";
             'subject'          => $subject_out,
             'body'             => $body_out,
             'tokens_remaining' => $get_logged_admin_details['ai_token_balance'],
+            'tokens_charged'   => $per_tx_cost,
         ]);
     } else {
         echo json_encode(['status' => 'error', 'message' => 'AI Error: ' . ($result['message'] ?? 'Unable to connect to AI engine.')]);
@@ -222,6 +226,7 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
                         <textarea id="briefInput" class="form-control rounded-4 p-3 bg-light border-0" rows="4" placeholder="e.g. Promote our new 1GB data plan at a discounted weekend rate"></textarea>
                     </div>
                     <button type="button" id="btnGenerate" class="btn btn-primary w-100 rounded-pill py-3 fw-bold">Generate Magic 🪄</button>
+                    <div class="text-center text-muted small mt-2"><i class="bi bi-coin me-1"></i>Copilot costs <strong><?php echo $copilot_cost_display; ?> token<?php echo $copilot_cost_display == 1 ? '' : 's'; ?></strong> per generate or refine</div>
                 </div>
             </div>
 

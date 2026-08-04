@@ -10,6 +10,7 @@ $assigned_model = $ai_engine->isModelCompatible($assigned_model_raw) ? $assigned
 $site_q = mysqli_query($connection_server, "SELECT site_title FROM sas_site_details WHERE vendor_id='$vid' LIMIT 1");
 $site_data = mysqli_fetch_assoc($site_q);
 $biz_name = $get_logged_admin_details['company_name'] ?? ($site_data['site_title'] ?? 'Our VTU Platform');
+$copilot_cost_display = (int)getSuperAdminOption('ai_marketing_copilot_cost', 3);
 
 // AJAX Handler for Drafts / AI / Live Progress
 if (isset($_GET['action'])) {
@@ -79,9 +80,11 @@ if (isset($_GET['action'])) {
         header('Content-Type: application/json');
 
         $token_bal = (int)($get_logged_admin_details['ai_token_balance'] ?? 0);
-        $per_tx_cost = (int)($get_logged_admin_details['ai_per_tx_cost'] ?? 2);
+        // Flat platform-wide rate set by the super admin (AI Management > Economics), separate
+        // from ai_per_tx_cost (the general per-vendor chat fee used elsewhere, e.g. AI Assistant).
+        $per_tx_cost = $copilot_cost_display;
         if ($token_bal < $per_tx_cost) {
-            echo json_encode(['status' => 'error', 'message' => 'Insufficient AI tokens. Please top up in AI Suite.']);
+            echo json_encode(['status' => 'error', 'message' => "Insufficient AI tokens. The Marketing Copilot costs $per_tx_cost token(s) per use — please top up in AI Suite.", 'copilot_cost' => $per_tx_cost, 'tokens_remaining' => $token_bal]);
             exit;
         }
 
@@ -145,6 +148,7 @@ $safe_input";
                 'subject'          => $subject_out,
                 'body'             => $body_out,
                 'tokens_remaining' => $get_logged_admin_details['ai_token_balance'],
+                'tokens_charged'   => $per_tx_cost,
             ]);
         } else {
             echo json_encode(['status' => 'error', 'message' => 'AI Error: ' . ($result['message'] ?? 'Unable to connect to AI engine.')]);
@@ -303,6 +307,7 @@ $prompt_chips = [
                     <input id="briefInput" type="text" class="form-control" placeholder="e.g. Announce a new referral bonus program">
                     <button type="button" id="btnGenerate" class="btn btn-primary fw-bold px-4 text-nowrap">Generate 🪄</button>
                 </div>
+                <div class="text-muted small mt-2"><i class="bi bi-coin me-1"></i>Copilot costs <strong><?php echo $copilot_cost_display; ?> token<?php echo $copilot_cost_display == 1 ? '' : 's'; ?></strong> per generate or refine · You have <strong id="tokenBalanceLabel"><?php echo number_format($get_logged_admin_details['ai_token_balance'] ?? 0); ?></strong> tokens</div>
             </div>
 
             <form id="mainForm" method="post" enctype="multipart/form-data">
@@ -486,6 +491,7 @@ $prompt_chips = [
             const btnGenerate = document.getElementById('btnGenerate');
             const refineBar = document.getElementById('refineBar');
             const subjectInput = document.getElementById('subject');
+            const tokenBalanceLabel = document.getElementById('tokenBalanceLabel');
 
             function toggleRefineBar() {
                 refineBar.style.setProperty('display', quill.getText().trim() ? 'flex' : 'none', 'important');
@@ -515,6 +521,7 @@ $prompt_chips = [
                             if (data.subject) subjectInput.value = data.subject;
                             quill.root.innerHTML = data.body;
                             toggleRefineBar();
+                            if (typeof data.tokens_remaining !== 'undefined' && tokenBalanceLabel) tokenBalanceLabel.textContent = data.tokens_remaining;
                         } else {
                             alert(data.message || 'Something went wrong. Please try again.');
                         }

@@ -95,9 +95,10 @@ if (isset($_POST["update-ai-pricing"])) {
     $exec_fee  = (int)($_POST["execution_fee"] ?? 0);
     $voice_thr = (int)($_POST["voice_threshold"] ?? 100);
     $token_bonus = (int)($_POST["token_bonus"] ?? 1000);
-    
+    $copilot_cost = max(0, (int)($_POST["marketing_copilot_cost"] ?? 3));
+
     $opts = [
-        'ai_price_per_request' => $per_tx, 
+        'ai_price_per_request' => $per_tx,
         'ai_execution_fee_tokens' => $exec_fee,
         'ai_voice_unlock_threshold' => $voice_thr,
         'ai_default_token_bonus' => $token_bonus
@@ -107,6 +108,11 @@ if (isset($_POST["update-ai-pricing"])) {
         $esc_v = mysqli_real_escape_string($connection_server, $v);
         mysqli_query($connection_server, "REPLACE INTO sas_super_admin_options (option_name, option_value) VALUES ('$esc_k','$esc_v')");
     }
+    // Marketing Copilot fee is a flat platform-wide rate read directly via getSuperAdminOption()
+    // by AIMarketing.php/SendMail.php (not copied into every sas_vendors row like the others
+    // above) — setSuperAdminOption() upserts correctly regardless of which sas_super_admin_options
+    // schema variant is live (see its doc comment in bc-func.php).
+    setSuperAdminOption('ai_marketing_copilot_cost', $copilot_cost);
     mysqli_query($connection_server, "UPDATE sas_vendors SET ai_price_per_1k_tokens='$price_1k', ai_per_tx_cost='$per_tx', ai_voice_fee_tokens='$exec_fee', voice_tx_threshold='$voice_thr'");
     $_SESSION["response"] = "✅ AI pricing updated for all vendors.";
     unset($_SESSION['super_admin_options_cache']);
@@ -293,6 +299,11 @@ $blocked_count = ($blocked_q && $row_b = mysqli_fetch_assoc($blocked_q)) ? $row_
                     <div class="mb-3"><label class="form-label small fw-bold text-muted">Price per 1k Tokens (₦)</label><input type="number" name="price_per_1k" class="form-control rounded-3" value="<?php echo getSuperAdminOption('ai_price_per_1k_tokens', '100'); ?>" step="0.01"></div>
                     <div class="mb-3"><label class="form-label small fw-bold text-muted">General Chat Fee (Tokens)</label><input type="number" name="per_tx_cost" class="form-control rounded-3" value="<?php echo getSuperAdminOption('ai_price_per_request', '2'); ?>"></div>
                     <div class="mb-3"><label class="form-label small fw-bold text-muted">Successful Execution Fee (Tokens)</label><input type="number" name="execution_fee" class="form-control rounded-3" value="<?php echo getSuperAdminOption('ai_execution_fee_tokens', '0'); ?>"></div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Marketing AI Copilot Fee (Tokens)</label>
+                        <input type="number" name="marketing_copilot_cost" min="0" class="form-control rounded-3" value="<?php echo getSuperAdminOption('ai_marketing_copilot_cost', '3'); ?>">
+                        <div class="form-text x-small">Charged per "Help me write" / "Refine content" use on AI Marketing Studio and the Mail Sender composer — a flat platform-wide rate, separate from the General Chat Fee above.</div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold text-muted">Approval Bonus Tokens</label>
                         <input type="number" name="token_bonus" class="form-control rounded-3" value="<?php echo getSuperAdminOption('ai_default_token_bonus', '1000'); ?>">

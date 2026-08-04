@@ -5391,6 +5391,39 @@ function getSuperAdminOption($name, $default = '') {
 }
 
 /**
+ * Writes a single sas_super_admin_options row. Deliberately check-then-write instead of
+ * REPLACE INTO / INSERT ... ON DUPLICATE KEY UPDATE — both of those only behave as an upsert
+ * when option_name actually carries a UNIQUE/PRIMARY key, and an older schema variant of this
+ * table with a separate `id` column and no such constraint is already known to exist in the
+ * wild (see the license_key fix in bc-levelup.php). On that variant those statements silently
+ * append duplicate rows instead of updating, and since every read is an unordered
+ * "WHERE option_name=X LIMIT 1", a stale duplicate can win — the value looks like it was never
+ * saved. This is correct on either schema.
+ */
+function setSuperAdminOption($name, $value) {
+    global $connection_server;
+    if (!$connection_server) return false;
+
+    $name_esc  = mysqli_real_escape_string($connection_server, $name);
+    $value_esc = mysqli_real_escape_string($connection_server, $value);
+
+    $existing = mysqli_query($connection_server, "SELECT option_name FROM sas_super_admin_options WHERE option_name='$name_esc' LIMIT 1");
+    if ($existing === false) return false;
+
+    $ok = (mysqli_num_rows($existing) > 0)
+        ? mysqli_query($connection_server, "UPDATE sas_super_admin_options SET option_value='$value_esc' WHERE option_name='$name_esc'")
+        : mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('$name_esc', '$value_esc')");
+
+    // getSuperAdminOption()'s in-process cache is function-local (static), so it can't be
+    // cleared from here — only matters for the rest of THIS request, and every caller in
+    // this codebase that writes an option already re-reads it fresh on the next request.
+    if ($ok && isset($_SESSION['super_admin_options_cache'][$name])) {
+        unset($_SESSION['super_admin_options_cache'][$name]);
+    }
+    return (bool) $ok;
+}
+
+/**
  * Fetch BVN profile from identity provider (Dojah or QoreID).
  */
 function fetchBVNProfile($bvn, $vid) {
