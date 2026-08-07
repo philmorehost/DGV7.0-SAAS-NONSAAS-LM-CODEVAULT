@@ -1412,7 +1412,8 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                     <!-- 5. Sitemap & Robots -->
                                     <div class="tab-pane fade" id="seo-sitemap" role="tabpanel">
                                         <?php
-                                            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://';
+                                            $is_secure_acc = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') || (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
+                                            $protocol = $is_secure_acc ? 'https://' : 'http://';
                                             $sitemap_url = $protocol . $_SERVER['HTTP_HOST'] . '/sitemap.xml';
                                             $robots_url = $protocol . $_SERVER['HTTP_HOST'] . '/robots.txt';
                                         ?>

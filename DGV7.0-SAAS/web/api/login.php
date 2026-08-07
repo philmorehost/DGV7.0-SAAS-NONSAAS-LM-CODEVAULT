@@ -50,7 +50,7 @@ if (mysqli_num_rows($check_user) == 1) {
             }
 
             $is_kyc_compliant = ($user_detail['kyc_status'] == 2);
-            $pin_set = !empty($user_detail['security_pin']);
+            $pin_set = !empty($user_detail['security_pin']) || (!empty($user_detail['transaction_pin']) && $user_detail['transaction_pin'] !== '0' && $user_detail['transaction_pin'] !== 0);
 
             echo json_encode([
                 "status" => "success",

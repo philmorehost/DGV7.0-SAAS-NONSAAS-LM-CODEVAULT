@@ -23,10 +23,28 @@ if (!$select_vendor_table) {
     exit;
 }
 
-$api_key = mysqli_real_escape_string($connection_server, $_GET['api_key'] ?? '');
+// Support both JSON body and standard $_POST
+$get_api_post_info = json_decode(file_get_contents('php://input'), true);
+if (empty($get_api_post_info)) {
+    $get_api_post_info = $_POST;
+}
+
+$api_key = mysqli_real_escape_string($connection_server, $get_api_post_info['api_key'] ?? ($_GET['api_key'] ?? ''));
 if(empty($api_key)) exit(json_encode(["status" => "failed", "desc" => "Missing API Key"]));
 
-$purchase_method = ((isset($api_post_info_from_app) && is_array($api_post_info_from_app)) || (($_SERVER['HTTP_X_APP_SOURCE'] ?? '') === 'dgv6-android')) ? "app" : "api";
+// Check X-App-Source case-insensitively
+$app_source = $_SERVER['HTTP_X_APP_SOURCE'] ?? '';
+if (empty($app_source) && function_exists('getallheaders')) {
+    $headers = getallheaders();
+    foreach ($headers as $key => $val) {
+        if (strcasecmp($key, 'X-App-Source') === 0) {
+            $app_source = $val;
+            break;
+        }
+    }
+}
+
+$purchase_method = ((isset($api_post_info_from_app) && is_array($api_post_info_from_app)) || ($app_source === 'dgv6-android')) ? "app" : "api";
 $api_status_clause = ($purchase_method == "app") ? "" : "AND api_status=1";
 $user_q = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$v_id' AND api_key='$api_key' $api_status_clause AND status=1");
 $user = mysqli_fetch_assoc($user_q);
@@ -35,15 +53,18 @@ if(!$user) exit(json_encode(["status" => "failed", "desc" => "Unauthorized"]));
 // For chargeUser to work correctly, we might need some session-like variables or global user details
 $get_logged_user_details = $user;
 
-if (!requireTransactionPin($select_vendor_table, $get_logged_user_details, $_POST, $__pin_error)) {
-    exit(json_encode(["status" => "failed", "desc" => $__pin_error]));
+// Only require transaction PIN for APP purchases
+if ($purchase_method === "app") {
+    if (!requireTransactionPin($select_vendor_table, $get_logged_user_details, $get_api_post_info, $__pin_error)) {
+        exit(json_encode(["status" => "failed", "desc" => $__pin_error]));
+    }
 }
 
-$network = mysqli_real_escape_string($connection_server, $_POST['network'] ?? '');
-$service_type = mysqli_real_escape_string($connection_server, $_POST['service_type'] ?? 'data');
-$data_type = mysqli_real_escape_string($connection_server, $_POST['data_type'] ?? '');
-$plan_code = mysqli_real_escape_string($connection_server, $_POST['plan_code'] ?? '');
-$quantity = (int)($_POST['quantity'] ?? 0);
+$network = mysqli_real_escape_string($connection_server, $get_api_post_info['network'] ?? '');
+$service_type = mysqli_real_escape_string($connection_server, $get_api_post_info['service_type'] ?? 'data');
+$data_type = mysqli_real_escape_string($connection_server, $get_api_post_info['data_type'] ?? '');
+$plan_code = mysqli_real_escape_string($connection_server, $get_api_post_info['plan_code'] ?? '');
+$quantity = (int)($get_api_post_info['quantity'] ?? 0);
 
 if(empty($network) || empty($plan_code) || $quantity < 1 || $quantity > 40){
     exit(json_encode(["status" => "failed", "desc" => "Missing or invalid parameters. Max qty 40."]));

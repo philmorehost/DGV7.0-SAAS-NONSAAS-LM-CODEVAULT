@@ -181,6 +181,23 @@ function bc_verify_integrity() {
     $cache_file = $cache_dir . '/bc-core.cache';
 
     $now = time();
+
+    // 1. Session Cache Check (bulletproof fallback against slow disk I/O and remote hits)
+    if (isset($_SESSION['license_integrity_cache']) && is_array($_SESSION['license_integrity_cache'])) {
+        $sc = $_SESSION['license_integrity_cache'];
+        if (($sc['domain'] ?? '') === $domain && ($sc['code'] ?? '') === $code) {
+            if (($now - ($sc['last_check'] ?? 0)) < 21600) { // 6 hours
+                if (($sc['status'] ?? 0) == 1) {
+                    $GLOBALS['bc_integrity_fail'] = false;
+                    return true;
+                } else {
+                    $GLOBALS['bc_integrity_fail'] = true;
+                    return false;
+                }
+            }
+        }
+    }
+
     $cache = null;
 
     if (file_exists($cache_file)) {
@@ -195,6 +212,7 @@ function bc_verify_integrity() {
         if ($cache['domain'] === $domain && $cache['code'] === $code) {
             // Check if within 6 hours (21600 seconds)
             if (($now - $cache['last_check']) < 21600) {
+                $_SESSION['license_integrity_cache'] = $cache;
                 if ($cache['status'] == 1) {
                     $GLOBALS['bc_integrity_fail'] = false;
                     return true;
@@ -237,6 +255,7 @@ function bc_verify_integrity() {
                 'code' => $code
             ];
             @file_put_contents($cache_file, json_encode($new_cache));
+            $_SESSION['license_integrity_cache'] = $new_cache;
 
             if ($status === 1 || (isset($res_decoded['message']) && stripos($res_decoded['message'], 'Limit exceeded') !== false)) {
                 $GLOBALS['bc_integrity_fail'] = false;

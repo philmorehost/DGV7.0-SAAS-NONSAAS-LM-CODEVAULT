@@ -354,6 +354,7 @@ function base64url_encode($data) {
  * Handles both modern hashed security_pin and legacy numeric transaction_pin.
  */
 function verifyUserPIN($input_pin, $user_details) {
+    $input_pin = (string)($input_pin ?? '');
     if (empty($input_pin) && $input_pin !== '0' && $input_pin !== '0000') return false;
 
     $db_security_pin = $user_details['security_pin'] ?? '';

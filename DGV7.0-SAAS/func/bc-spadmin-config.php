@@ -1,9 +1,6 @@
 <?php
-	if(isset($_SERVER["HTTPS"]) && ($_SERVER["HTTPS"] == "on")){
-		$web_http_host = "https://".$_SERVER["HTTP_HOST"];
-	}else{
-		$web_http_host = "http://".$_SERVER["HTTP_HOST"];
-	}
+	$is_secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') || (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
+	$web_http_host = ($is_secure ? "https://" : "http://") . $_SERVER["HTTP_HOST"];
 
 	// Standardize session_start across the platform
 	if (session_status() === PHP_SESSION_NONE) {
