@@ -20,7 +20,7 @@ if (in_array($purchase_method, $purchase_method_array)) {
 
     $exam_type_array = array("waec", "neco", "nabteb", "jamb");
     if (in_array($epp, $exam_type_array)) {
-        if (in_array($purchase_method, array("API", "APP")) && !requireTransactionPin($get_vendor_details ?? array(), $get_logged_user_details, ($get_api_post_info ?? array()), $__pin_error)) {
+        if (in_array($purchase_method, array("APP")) && !requireTransactionPin($get_vendor_details ?? array(), $get_logged_user_details, ($get_api_post_info ?? array()), $__pin_error)) {
             $json_response_array = array("status" => "failed", "desc" => $__pin_error);
             $json_response_encode = json_encode($json_response_array, true);
         } elseif ($get_logged_user_details["status"] != 1) {

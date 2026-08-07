@@ -101,20 +101,13 @@
     }
 
     // Define the web host
-    if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-        $protocol = "https://";
-    } else {
-        $protocol = "http://";
-    }
+    $is_secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') || (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
+    $protocol = $is_secure ? "https://" : "http://";
     $web_http_host = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 	
 	$get_requested_website_domain_url = $_SERVER["HTTP_HOST"] ?? 'localhost';
     if (substr($get_requested_website_domain_url, 0, 4) === "www.") {
         $non_www = substr($get_requested_website_domain_url, 4);
-		if(isset($_SERVER["HTTPS"]) && ($_SERVER["HTTPS"] == "on")){
-			header("Location: https://" . $non_www . $_SERVER["REQUEST_URI"]);
-		}else{
-			header("Location: http://" . $non_www . $_SERVER["REQUEST_URI"]);
-		}
+		header("Location: " . $protocol . $non_www . $_SERVER["REQUEST_URI"]);
         exit();
 	}

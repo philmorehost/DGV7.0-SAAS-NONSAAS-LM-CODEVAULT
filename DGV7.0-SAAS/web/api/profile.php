@@ -39,7 +39,7 @@ if (mysqli_num_rows($check_user) == 1) {
     $vtu_details = get_user_vtu_details($user['username']);
 
     $is_kyc_compliant = ($user['kyc_status'] == 2);
-    $pin_set = !empty($user['security_pin']);
+    $pin_set = !empty($user['security_pin']) || (!empty($user['transaction_pin']) && $user['transaction_pin'] !== '0' && $user['transaction_pin'] !== 0);
     $kyc_names = [0 => "Unverified", 1 => "Under Review", 2 => "Verified", 3 => "Rejected"];
 
     echo json_encode([
