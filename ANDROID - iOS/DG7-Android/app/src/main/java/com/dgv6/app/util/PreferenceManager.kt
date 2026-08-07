@@ -25,7 +25,8 @@ class PreferenceManager(context: Context) {
 
     fun saveLoginData(
         apiKey: String, username: String, firstname: String, lastname: String,
-        email: String, phone: String, balance: Double, accountLevel: Int, pinSet: Boolean
+        email: String, phone: String, balance: Double, accountLevel: Int, pinSet: Boolean,
+        pinRequired: Boolean = false
     ) {
         prefs.edit().apply {
             putString(Constants.KEY_API_KEY, apiKey)
@@ -37,6 +38,7 @@ class PreferenceManager(context: Context) {
             putString(Constants.KEY_BALANCE, balance.toString())
             putString(Constants.KEY_ACCOUNT_LEVEL, accountLevel.toString())
             putBoolean(Constants.KEY_PIN_SET, pinSet)
+            putBoolean(Constants.KEY_PIN_REQUIRED, pinRequired)
             putBoolean(Constants.KEY_IS_LOGGED_IN, true)
         }.apply()
     }
