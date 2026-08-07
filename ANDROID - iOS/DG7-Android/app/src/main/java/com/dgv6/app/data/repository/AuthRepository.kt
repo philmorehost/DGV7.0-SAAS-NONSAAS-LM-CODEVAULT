@@ -28,7 +28,8 @@ class AuthRepository(private val context: Context) {
                         phone = data["phone"] as? String ?: "",
                         balance = (data["balance"] as? String)?.toDoubleOrNull() ?: 0.0,
                         accountLevel = (data["account_level"] as? Double)?.toInt() ?: 1,
-                        pinSet = data["security_pin_set"] as? Boolean ?: false
+                        pinSet = data["security_pin_set"] as? Boolean ?: false,
+                        pinRequired = data["pin_required"] as? Boolean ?: false
                     )
                     ApiResult.Success(data)
                 } else {

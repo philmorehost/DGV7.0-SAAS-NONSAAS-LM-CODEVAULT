@@ -68,6 +68,7 @@ if (mysqli_num_rows($check_user) == 1) {
                     "kyc_verified" => $is_kyc_compliant ? "Yes" : "No",
                     "kyc_status" => (int)$user_detail['kyc_status'],
                     "security_pin_set" => $pin_set,
+                    "pin_required" => ((int)($get_vendor['force_security_pin'] ?? 0) === 1),
                     "ai_status" => (int)$get_vendor['ai_status']
                 ]
             ]);
