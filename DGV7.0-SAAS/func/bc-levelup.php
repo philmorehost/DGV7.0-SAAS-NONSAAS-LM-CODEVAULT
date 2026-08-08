@@ -193,9 +193,6 @@ function bc_verify_integrity() {
                 if (($sc['status'] ?? 0) == 1) {
                     $GLOBALS['bc_integrity_fail'] = false;
                     return true;
-                } else {
-                    $GLOBALS['bc_integrity_fail'] = true;
-                    return false;
                 }
             }
         }
