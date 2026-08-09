@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace 'com.dgv6.app'
-    compileSdk 33
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.dgv6.app"
         minSdk 24
-        targetSdk 33
+        targetSdk 36
         versionCode 1
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

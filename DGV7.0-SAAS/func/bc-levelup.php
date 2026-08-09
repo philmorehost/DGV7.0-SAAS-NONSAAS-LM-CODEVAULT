@@ -104,6 +104,9 @@ function bc_store_license_option($conn, $name, $value) {
  * Verifies system integrity against the validation API
  */
 function bc_verify_integrity() {
+    if (session_status() === PHP_SESSION_NONE) {
+        @session_start();
+    }
     // Avoid double validation in the same execution
     if (isset($GLOBALS['bc_integrity_checked'])) {
         return !$GLOBALS['bc_integrity_fail'];
@@ -190,9 +193,6 @@ function bc_verify_integrity() {
                 if (($sc['status'] ?? 0) == 1) {
                     $GLOBALS['bc_integrity_fail'] = false;
                     return true;
-                } else {
-                    $GLOBALS['bc_integrity_fail'] = true;
-                    return false;
                 }
             }
         }
