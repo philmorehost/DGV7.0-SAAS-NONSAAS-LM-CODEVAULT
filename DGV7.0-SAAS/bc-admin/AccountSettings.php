@@ -1246,7 +1246,7 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                         <label class="form-label small fw-bold text-muted">SELECT LANDING PAGE TEMPLATE</label>
                                         <select name="template-name" class="form-select rounded-3 mb-3">
                                             <?php foreach($style_templates as $tmpl):
-                                                $selected = ($current_theme['template_name'] == $tmpl) ? 'selected' : '';
+                                                $selected = (($current_theme['template_name'] ?? '') == $tmpl) ? 'selected' : '';
                                             ?>
                                                 <option value="<?php echo $tmpl; ?>" <?php echo $selected; ?>><?php echo str_replace(".css", "", strtoupper($tmpl)); ?></option>
                                             <?php endforeach; ?>
@@ -1412,8 +1412,7 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                     <!-- 5. Sitemap & Robots -->
                                     <div class="tab-pane fade" id="seo-sitemap" role="tabpanel">
                                         <?php
-                                            $is_secure_acc = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') || (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
-                                            $protocol = $is_secure_acc ? 'https://' : 'http://';
+                                            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://';
                                             $sitemap_url = $protocol . $_SERVER['HTTP_HOST'] . '/sitemap.xml';
                                             $robots_url = $protocol . $_SERVER['HTTP_HOST'] . '/robots.txt';
                                         ?>
