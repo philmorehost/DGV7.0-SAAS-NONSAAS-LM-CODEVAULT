@@ -11,7 +11,6 @@ import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.ActivitySplashBinding
 import com.dgv6.app.ui.MainActivity
 import com.dgv6.app.ui.auth.LoginActivity
-import com.dgv6.app.util.AppUpdateManager
 import com.dgv6.app.util.PreferenceManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

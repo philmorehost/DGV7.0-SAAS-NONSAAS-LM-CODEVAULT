@@ -16,7 +16,6 @@ import androidx.navigation.ui.setupWithNavController
 import com.dgv6.app.R
 import com.dgv6.app.databinding.ActivityMainBinding
 import com.dgv6.app.ui.auth.LoginActivity
-import com.dgv6.app.util.AppUpdateManager
 import com.dgv6.app.util.Constants
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.snackbar.Snackbar
@@ -56,12 +55,6 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNav.setupWithNavController(navController)
 
         setupNetworkMonitoring()
-
-        // Check for app updates in the background (non-blocking).
-        // Also triggered if a push notification set the pending-update flag.
-        val pendingUpdate = prefs.getBoolean(Constants.KEY_PENDING_UPDATE_CHECK, false)
-        if (pendingUpdate) prefs.saveBoolean(Constants.KEY_PENDING_UPDATE_CHECK, false)
-        AppUpdateManager(this).checkForUpdate(lifecycleScope)
     }
 
     private fun setupNetworkMonitoring() {

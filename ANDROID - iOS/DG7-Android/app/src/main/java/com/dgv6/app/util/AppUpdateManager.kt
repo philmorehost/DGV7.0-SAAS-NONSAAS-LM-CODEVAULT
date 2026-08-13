@@ -29,38 +29,13 @@ import java.io.File
 class AppUpdateManager(private val context: Context) {
 
     fun checkForUpdate(scope: CoroutineScope) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val resp = RetrofitClient.getService().checkAppUpdate()
-                if (!resp.isSuccessful) return@launch
-                val body = resp.body() ?: return@launch
-                if ((body["status"] as? String) != "update_available") return@launch
-
-                val latestCode = (body["version_code"] as? Number)?.toInt() ?: return@launch
-                val latestName = body["version_name"] as? String ?: return@launch
-                val apkUrl = body["apk_url"] as? String ?: return@launch
-                val changelog = body["changelog"] as? String ?: ""
-
-                val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.packageManager.getPackageInfo(
-                        context.packageName,
-                        android.content.pm.PackageManager.PackageInfoFlags.of(0)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.packageManager.getPackageInfo(context.packageName, 0)
-                }
-                val currentCode = PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
-
-                if (latestCode > currentCode) {
-                    withContext(Dispatchers.Main) {
-                        promptUpdate(latestName, apkUrl, changelog)
-                    }
-                }
-            } catch (_: Exception) {
-                // Silent — do not disrupt the user experience on network errors
-            }
-        }
+        // Intentionally disabled (no-op) to comply with Google Play policy.
+        // Google Play blocks the REQUEST_INSTALL_PACKAGES permission (sideloading APKs to
+        // update is not allowed without a declaration, and such declarations are typically
+        // rejected — the Play In-App Updates API is required instead). Updates are delivered
+        // through the Play Store, so this custom APK download-and-install flow is removed.
+        // The remaining private helpers below are left unused (dead code) and are never invoked.
+        return
     }
 
     private fun promptUpdate(versionName: String, apkUrl: String, changelog: String) {
