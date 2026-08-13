@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentBulkSmsBinding
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -214,7 +215,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
     }
 
     private fun doSend(senderId: String, network: String, recipients: String, message: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Sending your message...")
         binding.btnSend.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -233,7 +234,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
                 val msg = body?.get("desc") as? String ?: body?.get("message") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnSend.isEnabled = true
                     if (status.contains("success", true)) {
                         MaterialAlertDialogBuilder(requireContext()).setTitle("✅ SMS Sent").setMessage(msg)
@@ -243,7 +244,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnSend.isEnabled = true
                     snack(e.message ?: "Error")
                 }

@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentElectricBinding
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -238,7 +239,7 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
     }
 
     private fun doPurchase(meter: String, amount: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -259,7 +260,7 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
                 val token = resp.body()?.get("token") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     if (status.contains("success", true)) {
                         val resultMsg = if (token.isNotEmpty()) "$msg\n\nToken: $token" else msg
@@ -276,7 +277,7 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack(e.message ?: "Error")
                 }

@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentVirtualCardBinding
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.dgv6.app.util.copyToClipboard
 import com.dgv6.app.util.toNaira
@@ -206,7 +207,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun issueCard(productId: String, cardName: String, amountUsd: Double, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Issuing your card...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -225,7 +226,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
                         showSuccessDialog("Card Issued ✅", msg)
                         loadData()
@@ -236,7 +237,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }
@@ -284,7 +285,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun fundCard(reference: String, amountUsd: Double, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Funding your card...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -302,7 +303,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
                         showSuccessDialog("Card Funded ✅", msg)
                         loadData()
@@ -313,7 +314,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }
@@ -342,7 +343,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun revealCard(reference: String, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Revealing card details...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -358,7 +359,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
                         @Suppress("UNCHECKED_CAST")
                         val data = body?.get("data") as? Map<String, Any> ?: emptyMap()
@@ -370,7 +371,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }
@@ -442,7 +443,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun withdrawCard(reference: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing withdrawal...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -458,7 +459,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
                         showSuccessDialog("Withdrawal Successful ✅", msg)
                         loadData()
@@ -469,7 +470,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }

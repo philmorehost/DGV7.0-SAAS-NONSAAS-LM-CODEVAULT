@@ -16,6 +16,7 @@ jobs:
         project:
           # Only the currently-updated apps are built to keep the pipeline fast.
           - "ANDROID - iOS/MZEEVTU-Android"
+          - "ANDROID - iOS/DG7-Android"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -107,6 +108,7 @@ jobs:
         project:
           # Only the currently-updated apps are built to keep the pipeline fast.
           - "ANDROID - iOS/MZEEVTU-iOS"
+          - "ANDROID - iOS/DG7-iOS"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4

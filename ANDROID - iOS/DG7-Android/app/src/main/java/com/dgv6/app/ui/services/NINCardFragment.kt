@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentNinCardBinding
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -47,7 +48,7 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
     }
 
     private fun doLookup(nin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Fetching your NIN details...")
         binding.btnLookup.isEnabled = false
         binding.cardResult.visibility = View.GONE
 
@@ -62,7 +63,7 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnLookup.isEnabled = true
                     if (status == "success") {
                         @Suppress("UNCHECKED_CAST")
@@ -75,7 +76,7 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnLookup.isEnabled = true
                     snack("Error: ${e.message}")
                 }

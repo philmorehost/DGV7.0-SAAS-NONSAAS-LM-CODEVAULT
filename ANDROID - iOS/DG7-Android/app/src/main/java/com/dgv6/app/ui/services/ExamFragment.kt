@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentExamBinding
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -136,7 +137,7 @@ class ExamFragment : Fragment(R.layout.fragment_exam) {
     }
 
     private fun doPurchase() {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -157,7 +158,7 @@ class ExamFragment : Fragment(R.layout.fragment_exam) {
                 val ref = body?.get("ref") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     when {
                         status.contains("success", ignoreCase = true) -> showResult(ref, responseDesc.ifEmpty { desc })
@@ -168,7 +169,7 @@ class ExamFragment : Fragment(R.layout.fragment_exam) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack(e.message ?: "Error")
                 }

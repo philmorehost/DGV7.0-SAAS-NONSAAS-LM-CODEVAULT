@@ -21,6 +21,7 @@ import androidx.navigation.fragment.findNavController
 import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentPrintHubBinding
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.dgv6.app.util.safeNavigate
 import com.google.android.material.button.MaterialButton
@@ -354,7 +355,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
     }
 
     private fun doPurchase(plan: PrintPlanItem, quantity: Int) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -377,7 +378,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
                 val cards = body?.get("cards") as? List<Map<String, Any>>
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     if (status == "success" && cards != null) {
                         displayGeneratedCards(plan, cards)
@@ -388,7 +389,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack("Error: ${e.message}")
                 }

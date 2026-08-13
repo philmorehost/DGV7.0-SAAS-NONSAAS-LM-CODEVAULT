@@ -12,6 +12,7 @@ import com.dgv6.app.R
 import com.dgv6.app.api.RetrofitClient
 import com.dgv6.app.databinding.FragmentDataBinding
 import com.dgv6.app.util.PinPromptHelper
+import com.dgv6.app.util.LoadingOverlay
 import com.dgv6.app.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -236,7 +237,7 @@ class DataFragment : Fragment(R.layout.fragment_data) {
     }
 
     private fun doPurchase(phone: String, plan: DataPlanItem, pin: String? = null) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -256,14 +257,14 @@ class DataFragment : Fragment(R.layout.fragment_data) {
                     ?: resp.body()?.get("desc") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     showResult(status, msg)
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack(e.message ?: "Error")
                 }
