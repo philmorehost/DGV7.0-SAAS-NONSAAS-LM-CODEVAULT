@@ -35,20 +35,33 @@
 	if($select_vendor_table && $select_vendor_table["status"] == 1){
         $vendor_id = $select_vendor_table["id"];
         $GLOBALS['vendor_id'] = $vendor_id;
+        $GLOBALS['select_vendor_table'] = $select_vendor_table;
+        $host = $_SERVER['HTTP_HOST'] ?? 'APP';
 		$paystack_keys = mysqli_fetch_assoc(mysqli_query($connection_server,"SELECT * FROM sas_payment_gateways WHERE vendor_id='$vendor_id' && gateway_name='paystack'"));
+        if ($paystack_keys && !empty($paystack_keys['secret_key']) && strpos(trim($paystack_keys['secret_key']), 'pk_') === 0) {
+            error_log("Paystack CRITICAL: vendor " . $vendor_id . " secret_key is a PUBLIC key (pk_). Verification will fail. Ref: $transaction_ref");
+        }
 
-        // Verify Signature
+        // Verify Signature (HMAC-SHA512) — reject forged webhooks. Enforcement only kicks in
+        // when a real secret key (sk_) is stored; a misconfigured public key is left to the API
+        // verification so legitimate webhooks are never silently dropped.
         $client_sig = $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] ?? '';
-        $secret = $paystack_keys['secret_key'] ?? '';
-        if (!empty($secret) && !empty($client_sig)) {
+        $secret = trim((string)($paystack_keys['secret_key'] ?? ''));
+        if (!empty($secret) && strpos($secret, 'pk_') !== 0) {
+            if (empty($client_sig)) {
+                http_response_code(401);
+                exit("Invalid signature");
+            }
             $computed_sig = hash_hmac('sha512', $body, $secret);
-            if ($client_sig !== $computed_sig) {
-                 error_log("Paystack Signature Mismatch for vendor $vendor_id. Ref: $transaction_ref");
+            if (!hash_equals($computed_sig, $client_sig)) {
+                error_log("Paystack Signature Mismatch (rejected) for vendor $vendor_id. Ref: $transaction_ref");
+                http_response_code(401);
+                exit("Invalid signature");
             }
         }
 
-        // Verify via API
-		$paystack_verify_transaction = json_decode(confirmPaymentDeposited("GET","https://api.paystack.co/transaction/verify/".urlencode($transaction_ref),["Authorization: Bearer ".$paystack_keys["secret_key"]],""),true);
+        // Verify via API — the authoritative check that Paystack actually received the money.
+		$paystack_verify_transaction = json_decode(confirmPaymentDeposited("GET","https://api.paystack.co/transaction/verify/".urlencode($transaction_ref),["Authorization: Bearer ".$secret],""),true);
 
 		if(($paystack_verify_transaction["data"]["status"] ?? "") == "success") {
             $customer_email = $event_data["customer"]["email"];

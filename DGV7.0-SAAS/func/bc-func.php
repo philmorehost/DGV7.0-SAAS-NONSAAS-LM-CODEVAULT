@@ -354,7 +354,6 @@ function base64url_encode($data) {
  * Handles both modern hashed security_pin and legacy numeric transaction_pin.
  */
 function verifyUserPIN($input_pin, $user_details) {
-    $input_pin = (string)($input_pin ?? '');
     if (empty($input_pin) && $input_pin !== '0' && $input_pin !== '0000') return false;
 
     $db_security_pin = $user_details['security_pin'] ?? '';
@@ -1879,6 +1878,31 @@ function get_user_info($username_or_email, $column_name)
 }
 
 
+
+/**
+ * getSMTPUserForHeaders()
+ * Returns a valid smtp_user email address for use in From: headers.
+ * This ensures RFC 5322 compliance even in CLI/cron contexts where
+ * $_SERVER["HTTP_HOST"] is empty, which was causing Gmail 550 5.7.1 rejections.
+ */
+function getSMTPUserForHeaders($connection_server) {
+    // Try vendor SMTP first
+    $vid = resolveVendorID();
+    if ($vid > 0) {
+        $q = mysqli_query($connection_server, "SELECT smtp_user FROM sas_vendors WHERE id='$vid' LIMIT 1");
+        if ($q && ($r = mysqli_fetch_assoc($q)) && !empty($r['smtp_user'])) {
+            return $r['smtp_user'];
+        }
+    }
+    // Fall back to super admin SMTP
+    $q = mysqli_query($connection_server, "SELECT smtp_user FROM sas_super_admin LIMIT 1");
+    if ($q && ($r = mysqli_fetch_assoc($q)) && !empty($r['smtp_user'])) {
+        return $r['smtp_user'];
+    }
+    // Last resort default (same as bc-mailer.php)
+    return 'notification@cheaperdata.com.ng';
+}
+
 function beeMailer($recipient_email, $email_subject, $email_body)
 {
 
@@ -1889,15 +1913,26 @@ function beeMailer($recipient_email, $email_subject, $email_body)
 
 	// More headers
     $from_name = $get_all_site_details["site_title"] ?? $get_all_super_admin_site_details["site_title"] ?? "System Mailer";
-	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
-	$mail_headers .= 'Cc: ' . get_admin_info(1, "email") . "\r\n";
+    // Use smtp_user for From address so it is valid even in CLI/cron (HTTP_HOST is empty there)
+    $smtp_from_addr = getSMTPUserForHeaders($connection_server);
+	$mail_headers .= 'From: ' . $from_name . ' <' . $smtp_from_addr . '>' . "\r\n";
+	// Only add a Cc: when we actually have a valid admin address. get_admin_info(1, "email")
+	// returns the literal string "Error: Vendor not exists" when the lookup fails; that bogus
+	// value used to flow into PHPMailer's addCC() → "Invalid address" exception → every
+	// beeMailer() email (mobile login/register/forgot) silently fell back to the raw mail()
+	// path — exactly where the Gmail 550 5.7.1 "missing From" rejections come from.
+	$admin_cc = get_admin_info(1, "email");
+	if (!empty($admin_cc) && filter_var($admin_cc, FILTER_VALIDATE_EMAIL)) {
+		$mail_headers .= 'Cc: ' . $admin_cc . "\r\n";
+	}
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
 	$website_admin_phone_number = "234" . substr(get_admin_info(1, "phone_number"), 1, 11);
 	$details_array = array($website_admin_phone_number);
 	$mail_html_body = mailDesignTemplate($email_subject, $email_body, $details_array, true);
-	return customBCMailSender('', $recipient_email, $email_subject, $mail_html_body, $mail_headers);
-	fwrite(fopen("./email-msg.txt", "a++"), "\n" . $recipient_email . " || " . strtoupper($email_subject) . " || " . $email_body . "\n");
+	$sent = customBCMailSender('', $recipient_email, $email_subject, $mail_html_body, $mail_headers);
+	@fwrite(@fopen("./email-msg.txt", "a++"), "\n" . $recipient_email . " || " . strtoupper($email_subject) . " || " . $email_body . "\n");
+	return $sent;
 }
 
 function sendVendorEmail($recipient_email, $email_subject, $email_body)
@@ -1927,7 +1962,9 @@ function sendVendorEmail($recipient_email, $email_subject, $email_body)
 
 	// More headers
     $from_name = $get_all_site_details["site_title"] ?? $get_all_super_admin_site_details["site_title"] ?? "System Admin";
-	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
+    // Use smtp_user for From address so it is valid even in CLI/cron (HTTP_HOST is empty there)
+    $smtp_from_addr = getSMTPUserForHeaders($connection_server);
+	$mail_headers .= 'From: ' . $from_name . ' <' . $smtp_from_addr . '>' . "\r\n";
 	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
@@ -1963,7 +2000,9 @@ function sendSuperAdminEmail($recipient_email, $email_subject, $email_body)
 
 	// More headers
     $from_name = $get_all_super_admin_site_details["site_title"] ?? "Super Admin";
-	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
+    // Use smtp_user for From address so it is valid even in CLI/cron (HTTP_HOST is empty there)
+    $smtp_from_addr = getSMTPUserForHeaders($connection_server);
+	$mail_headers .= 'From: ' . $from_name . ' <' . $smtp_from_addr . '>' . "\r\n";
 	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
@@ -3433,27 +3472,18 @@ function isGatewayEnabled($gateway, $vid = null) {
 
     $gateway_search = mysqli_real_escape_string($connection_server, strtolower(trim($gateway)));
 
-    // Restriction: Plisio must use dedicated vendor keys if vid > 0 (no platform fallback)
-    $restricted_gateways = ['plisio'];
-    $is_restricted = in_array($gateway_search, $restricted_gateways);
-
-    // Check Vendor Local Config
+    // STRICT VENDOR ISOLATION (regression fix): a gateway is enabled for a vendor ONLY if that
+    // vendor has their own enabled record in sas_payment_gateways. The old super-admin global
+    // fallback leaked the platform's/v6.datagifting.com.ng gateways to every other vendor's
+    // web/Fund.php (and let brand-new vendors see gateways they never activated).
     if ($vid > 0) {
-        $q = mysqli_query($connection_server, "SELECT status FROM sas_payment_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
-        if ($q && $r = mysqli_fetch_assoc($q)) {
-            if ($r['status'] == 1) return true;
-        }
+        $q = mysqli_query($connection_server, "SELECT status FROM sas_payment_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') AND status=1 LIMIT 1");
+        return ($q && mysqli_num_rows($q) > 0);
     }
 
-    if ($is_restricted && $vid > 0) return false;
-
-    // Check Super Admin Global Config
-    $sq = mysqli_query($connection_server, "SELECT status FROM sas_super_admin_payment_gateways WHERE (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
-    if ($sq && $sr = mysqli_fetch_assoc($sq)) {
-        if ($sr['status'] == 1) return true;
-    }
-
-    return false;
+    // Platform / super-admin context (vid <= 0): use the platform's own global gateway config.
+    $sq = mysqli_query($connection_server, "SELECT status FROM sas_super_admin_payment_gateways WHERE (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') AND status=1 LIMIT 1");
+    return ($sq && mysqli_num_rows($sq) > 0);
 }
 
 function getGatewayDetails($gateway, $vid = null) {
@@ -3461,43 +3491,25 @@ function getGatewayDetails($gateway, $vid = null) {
     if ($vid === null) $vid = resolveVendorID();
     $gateway_search = mysqli_real_escape_string($connection_server, strtolower(trim($gateway)));
 
-    // Restriction: Plisio must use dedicated vendor keys if vid > 0 (no platform fallback)
-    $restricted_gateways = ['plisio'];
-    $is_restricted = in_array($gateway_search, $restricted_gateways);
-
-    $details = null;
-
-    // Check Vendor Local
+    // STRICT VENDOR ISOLATION (regression fix): a vendor's funding gateways must NEVER fall back
+    // to the platform's (sas_super_admin_payment_gateways) or Vendor 1's (sas_payment_gateways
+    // WHERE vendor_id='1') keys. Each vendor only sees/uses their OWN sas_payment_gateways
+    // record, so Vendor A's merchant keys can never be used to process Vendor B's deposits.
     if ($vid > 0) {
         $q = mysqli_query($connection_server, "SELECT * FROM sas_payment_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
         if ($q && $r = mysqli_fetch_assoc($q)) {
-            $details = $r;
+            return $r;
         }
+        return null;
     }
 
-    // Fallback to Super Admin if vendor has no configuration record or keys are empty.
-    if ((!$details || empty($details['secret_key'])) && !($is_restricted && $vid > 0)) {
-         $sq = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_payment_gateways WHERE (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
-         if ($sq && $sr = mysqli_fetch_assoc($sq)) {
-             if (!empty($sr['secret_key'])) {
-                $details = $sr;
-                $details['source_table'] = 'sas_super_admin_payment_gateways';
-             }
-         }
+    // Platform / super-admin context (vid <= 0): the platform's own global gateway config
+    // (used by spadmin sync, vendor self-funding that pays the platform, vendor reconciliation).
+    $sq = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_payment_gateways WHERE (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+    if ($sq && $sr = mysqli_fetch_assoc($sq)) {
+        return $sr;
     }
-
-    // Final Fallback: If still no keys (or keys are empty strings), check Vendor 1 (Primary Admin)
-    if ((!$details || empty($details['secret_key'])) && !($is_restricted && $vid > 0)) {
-        $q_v1 = mysqli_query($connection_server, "SELECT * FROM sas_payment_gateways WHERE vendor_id='1' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
-        if ($q_v1 && $r_v1 = mysqli_fetch_assoc($q_v1)) {
-            if (!empty($r_v1['secret_key'])) {
-                $details = $r_v1;
-                $details['source_table'] = 'sas_payment_gateways_v1';
-            }
-        }
-    }
-
-    return $details;
+    return null;
 }
 
 function getWithdrawalGatewayDetails($gateway, $vid = null) {
@@ -3505,36 +3517,32 @@ function getWithdrawalGatewayDetails($gateway, $vid = null) {
     if ($vid === null) $vid = resolveVendorID();
     $gateway_search = mysqli_real_escape_string($connection_server, strtolower(trim($gateway)));
 
-    $details = null;
-
-    // 1. Check Vendor Isolated Withdrawal Table
+    // STRICT VENDOR ISOLATION (security fix): withdrawals are ONLY allowed against the vendor's
+    // OWN withdrawal gateway record (sas_bank_transfer_gateways). There is NO fallback to the
+    // platform's super-admin record (vendor_id='0') and NO fallback to the vendor's funding/payment
+    // gateway config. If the vendor has not activated a withdrawal API, this returns null and the
+    // withdrawal is blocked — closing the loophole where an unactivated vendor's customers could
+    // be paid out via the platform's or another vendor's API.
     if ($vid > 0) {
         $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
         if ($q && $r = mysqli_fetch_assoc($q)) {
             if (!empty($r['secret_key'])) {
-                $details = $r;
-                $details['source_table'] = 'sas_bank_transfer_gateways';
+                $r['source_table'] = 'sas_bank_transfer_gateways';
+                return $r;
             }
         }
+        return null;
     }
 
-    // 1b. Fallback to Super Admin Isolated Withdrawal Table
-    if (!$details || empty($details['secret_key'])) {
-        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='0' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
-        if ($q && $r = mysqli_fetch_assoc($q)) {
-            if (!empty($r['secret_key'])) {
-                $details = $r;
-                $details['source_table'] = 'sas_bank_transfer_gateways_sa';
-            }
+    // Platform / super-admin context (vid <= 0): the platform's own withdrawal gateway config.
+    $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='0' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+    if ($q && $r = mysqli_fetch_assoc($q)) {
+        if (!empty($r['secret_key'])) {
+            $r['source_table'] = 'sas_bank_transfer_gateways_sa';
+            return $r;
         }
     }
-
-    // 2. Fallback to normal payment gateways if no isolated record exists
-    if (!$details || empty($details['secret_key'])) {
-        $details = getGatewayDetails($gateway, $vid);
-    }
-
-    return $details;
+    return null;
 }
 
 function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, $is_super = null, $is_withdrawal = false)
@@ -3704,7 +3712,11 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
 
 function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys, $username = "") {
     global $connection_server;
-    $log = function($m) {};
+    $log = function($m) {
+        $dir = __DIR__ . "/logs";
+        if (!is_dir($dir)) { @mkdir($dir, 0755, true); }
+        @file_put_contents($dir . "/payhub_webhook.log", "[" . date('Y-m-d H:i:s') . "] [processPayhubSuccess] " . $m . PHP_EOL, FILE_APPEND | LOCK_EX);
+    };
 
     $log("Starting processing for ref: $transaction_ref | Initial VID: $vendor_id | Initial User: $username");
 
@@ -3834,6 +3846,19 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
     } else {
         $log("CRITICAL: Could not resolve context. Aborting.");
         return false;
+    }
+
+    // 3.5 Final fallback: resolve the username from the checkout record using the actual
+    // webhook reference (PayHub sometimes echoes its own reference instead of ours, so the
+    // metadata reference matching above may miss). Without a username the USER branch below
+    // is skipped and the wallet is never credited — this closes that gap.
+    if (empty($username) && $vendor_id > 0 && !empty($transaction_ref)) {
+        $ref_esc3 = mysqli_real_escape_string($connection_server, $transaction_ref);
+        $q_c3 = mysqli_query($connection_server, "SELECT username FROM sas_user_payment_checkouts WHERE vendor_id='$vendor_id' AND reference='$ref_esc3' LIMIT 1");
+        if ($q_c3 && ($r_c3 = mysqli_fetch_assoc($q_c3)) && !empty($r_c3['username'])) {
+            $username = $r_c3['username'];
+            $log("Resolved username from checkout by webhook ref: $username");
+        }
     }
 
     // 4. Amount Calculation

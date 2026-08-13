@@ -156,6 +156,17 @@ $retry_amount = $_GET['amount'] ?? '';
             }, 0);
         }
 
+        // Confirms a Paystack payment with the server. The server re-verifies with Paystack's
+        // API BEFORE crediting (see finance-ajax.php?action=verify_paystack), so the wallet is
+        // funded immediately even if the webhook is delayed, and never from client-side data alone.
+        function verifyPaystackFunding(done) {
+            const reference = document.getElementById("num-ref").value;
+            fetch('finance-ajax.php?action=verify_paystack&reference=' + encodeURIComponent(reference) + '&is_vendor=0')
+            .then(r => r.json())
+            .then(() => { if (done) done(); })
+            .catch(() => { if (done) done(); });
+        }
+
         //PAYSTACK CHECKOUT GATEWAY
         function makePaymentPaystack() {
             setTimeout(() => {
@@ -168,7 +179,9 @@ $retry_amount = $_GET['amount'] ?? '';
                         currency: 'NGN',
                         ref: document.getElementById("num-ref").value,
                         onSuccess: function(transaction) {
-                            window.location.href = "/web/Dashboard.php";
+                            verifyPaystackFunding(function() {
+                                window.location.href = "/web/Dashboard.php";
+                            });
                         },
                         onCancel: function() {
                             // User closed the popup - re-enable button
@@ -213,12 +226,16 @@ $retry_amount = $_GET['amount'] ?? '';
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>PREPARING...';
             btn.style.pointerEvents = "none";
 
-            fetch('finance-ajax.php?action=gateway_redirect&gateway=payhub&reference=' + reference)
+            fetch('finance-ajax.php?action=gateway_redirect&gateway=payhub&reference=' + reference + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value))
             .then(response => response.json())
             .then(res => {
                 if (res.status === 'success') {
                     const url = new URL(res.checkout_url);
                     url.searchParams.set('embed', '1');
+                    // PayHub's initialize generates its own PH_... reference (it ignores ours) —
+                    // use it for status polling and the success redirect so the server verifies the
+                    // correct PayHub transaction.
+                    const payhubRef = (res.payhub_ref || '').trim();
 
                     // Create Modal for Inline Checkout
                     const modalId = 'payhubModal';
@@ -252,12 +269,35 @@ $retry_amount = $_GET['amount'] ?? '';
                     btn.style.pointerEvents = "auto";
 
                     window.addEventListener('message', function(event) {
+                        // The PayHub checkout iframe posts {type:'payhub_success', data:{reference,status:'success'}}.
                         if (event.origin.includes('merchant.payhub.com.ng')) {
-                            if (event.data === 'payment_success' || (event.data && event.data.status === 'success')) {
-                                window.location.href = "/web/Dashboard.php";
+                            const msg = event.data;
+                            const ok = msg && (msg === 'payment_success' || msg.type === 'payhub_success' || (msg.data && msg.data.status === 'success'));
+                            if (ok) {
+                                // Prefer the reference PayHub reported back; fall back to the one we stored.
+                                const phRef = (msg && msg.data && msg.data.reference) ? msg.data.reference : payhubRef;
+                                window.location.href = '/web/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(phRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
                             }
                         }
                     }, false);
+
+                    // PayHub's postMessage isn't reliable (the modal often just resets), so also
+                    // poll the server: it verifies the payment and credits the wallet, then we
+                    // redirect to the dashboard — same behaviour as Paystack.
+                    let payhubPollCount = 0;
+                    let payhubPoll = setInterval(() => {
+                        payhubPollCount++;
+                        if (payhubPollCount > 150) { clearInterval(payhubPoll); return; } // ~10 min cap
+                        fetch('finance-ajax.php?action=payhub_status&reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef))
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.status === 'paid') {
+                                    clearInterval(payhubPoll);
+                                    window.location.href = '/web/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
+                                }
+                            })
+                            .catch(() => {});
+                    }, 4000);
 
                 } else {
                     throw new Error(res.message || "Unknown API Error");
@@ -318,7 +358,9 @@ $retry_amount = $_GET['amount'] ?? '';
                 <div class="gateway-grid d-flex flex-wrap justify-content-center gap-3 mb-4">
                     <?php
                     foreach ($payment_gateway_array as $gateway_name) {
-                        if (!isServiceEnabled($gateway_name)) continue;
+                        // Strict vendor isolation: always evaluate against the logged-in user's
+                        // OWN vendor, never a resolved/fallback vendor.
+                        if (!isServiceEnabled($gateway_name, $get_logged_user_details["vendor_id"])) continue;
 
                         // Optimization DG6.7: Use robust gateway detection with platform fallback
                         $gw_details = getGatewayDetails($gateway_name, $get_logged_user_details["vendor_id"]);

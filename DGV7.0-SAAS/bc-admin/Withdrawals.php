@@ -44,14 +44,22 @@ if (isset($_POST['withdrawal_action'])) {
                     $narration = $hist['narration'];
 
                     $gate_cfg = getWithdrawalGatewayDetails($payout_provider, $vid);
-                    $using_platform_keys = ($gate_cfg && ($gate_cfg['vendor_id'] ?? -1) == 0);
 
-                    $can_proceed = true;
-                    if ($using_platform_keys) {
-                        $check_v = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='$vid' LIMIT 1"));
-                        if (($check_v['balance'] ?? 0) < $amount) {
-                            $can_proceed = false;
-                            $_SESSION["product_purchase_response"] = "Error: Insufficient platform balance to process this withdrawal.";
+                    // STRICT VENDOR ISOLATION: block the payout if this vendor has not activated
+                    // their own withdrawal API for this provider — never fall back to the
+                    // platform's or another vendor's keys.
+                    if (!$gate_cfg) {
+                        $can_proceed = false;
+                        $_SESSION["product_purchase_response"] = "Error: Withdrawal provider not activated for this vendor. Withdrawal cannot be processed.";
+                    } else {
+                        $using_platform_keys = ($gate_cfg['vendor_id'] ?? -1) == 0;
+                        $can_proceed = true;
+                        if ($using_platform_keys) {
+                            $check_v = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='$vid' LIMIT 1"));
+                            if (($check_v['balance'] ?? 0) < $amount) {
+                                $can_proceed = false;
+                                $_SESSION["product_purchase_response"] = "Error: Insufficient platform balance to process this withdrawal.";
+                            }
                         }
                     }
 

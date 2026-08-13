@@ -145,14 +145,22 @@ if (in_array($purchase_method, $purchase_method_array)) {
                             $res = ['status' => 'failed', 'message' => 'Internal processing error'];
 
                             $gate_cfg = getWithdrawalGatewayDetails($payout_provider, $vid);
-                            $using_platform_keys = ($gate_cfg && ($gate_cfg['vendor_id'] ?? -1) == 0);
 
-                            $can_proceed = true;
-                            if ($using_platform_keys) {
-                                $check_v = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='$vid' LIMIT 1"));
-                                if (($check_v['balance'] ?? 0) < $amount) {
-                                    $can_proceed = false;
-                                    $res['message'] = "Merchant insufficient platform balance";
+                            // STRICT VENDOR ISOLATION: block the withdrawal if this vendor has not
+                            // activated their own withdrawal API for this provider — never fall
+                            // back to the platform's or another vendor's keys.
+                            if (!$gate_cfg) {
+                                $can_proceed = false;
+                                $res['message'] = "Withdrawal is not enabled for this provider. Please contact support.";
+                            } else {
+                                $using_platform_keys = ($gate_cfg['vendor_id'] ?? -1) == 0;
+                                $can_proceed = true;
+                                if ($using_platform_keys) {
+                                    $check_v = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='$vid' LIMIT 1"));
+                                    if (($check_v['balance'] ?? 0) < $amount) {
+                                        $can_proceed = false;
+                                        $res['message'] = "Merchant insufficient platform balance";
+                                    }
                                 }
                             }
 

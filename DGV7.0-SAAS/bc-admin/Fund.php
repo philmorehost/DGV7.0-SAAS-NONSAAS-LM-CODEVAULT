@@ -142,6 +142,17 @@
             }, 0);
         }
 
+        // Confirms a Paystack payment with the server. The server re-verifies with Paystack's
+        // API BEFORE crediting (see web/finance-ajax.php?action=verify_paystack), so the wallet is
+        // funded immediately even if the webhook is delayed, and never from client-side data alone.
+        function verifyPaystackFunding(done) {
+            const reference = document.getElementById("num-ref").value;
+            fetch('../web/finance-ajax.php?action=verify_paystack&reference=' + encodeURIComponent(reference) + '&is_vendor=1')
+            .then(r => r.json())
+            .then(() => { if (done) done(); })
+            .catch(() => { if (done) done(); });
+        }
+
         //PAYSTACK CHECKOUT GATEWAY
         function makePaymentPaystack(){
             setTimeout(() => {
@@ -157,7 +168,9 @@
                     //window.location.href = "/bc-admin/Dashboard.php";
                 },
                 callback: function(response){
-                    window.location.href = "/bc-admin/Dashboard.php";
+                    verifyPaystackFunding(function() {
+                        window.location.href = "/bc-admin/Dashboard.php";
+                    });
                 }
                 });
                 handler.openIframe();
@@ -173,12 +186,16 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>PREPARING...';
             btn.style.pointerEvents = "none";
 
-            fetch('../web/finance-ajax.php?action=gateway_redirect&gateway=payhub&reference=' + reference)
+            fetch('../web/finance-ajax.php?action=gateway_redirect&gateway=payhub&reference=' + reference + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value))
             .then(response => response.json())
             .then(res => {
                 if (res.status === 'success') {
                     const url = new URL(res.checkout_url);
                     url.searchParams.set('embed', '1');
+                    // PayHub's initialize generates its own PH_... reference (it ignores ours) —
+                    // use it for status polling and the success redirect so the server verifies the
+                    // correct PayHub transaction.
+                    const payhubRef = (res.payhub_ref || '').trim();
 
                     // Create Modal for Inline Checkout
                     const modalId = 'payhubModal';
@@ -212,12 +229,35 @@
                     btn.style.pointerEvents = "auto";
 
                     window.addEventListener('message', function(event) {
+                        // The PayHub checkout iframe posts {type:'payhub_success', data:{reference,status:'success'}}.
                         if (event.origin.includes('merchant.payhub.com.ng')) {
-                            if (event.data === 'payment_success' || (event.data && event.data.status === 'success')) {
-                                window.location.href = "/bc-admin/Dashboard.php";
+                            const msg = event.data;
+                            const ok = msg && (msg === 'payment_success' || msg.type === 'payhub_success' || (msg.data && msg.data.status === 'success'));
+                            if (ok) {
+                                // Prefer the reference PayHub reported back; fall back to the one we stored.
+                                const phRef = (msg && msg.data && msg.data.reference) ? msg.data.reference : payhubRef;
+                                window.location.href = '/bc-admin/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(phRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
                             }
                         }
                     }, false);
+
+                    // PayHub's postMessage isn't reliable (the modal often just resets), so also
+                    // poll the server: it verifies the payment and credits the wallet, then we
+                    // redirect to the dashboard — same behaviour as Paystack.
+                    let payhubPollCount = 0;
+                    let payhubPoll = setInterval(() => {
+                        payhubPollCount++;
+                        if (payhubPollCount > 150) { clearInterval(payhubPoll); return; } // ~10 min cap
+                        fetch('../web/finance-ajax.php?action=payhub_status&reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef) + '&is_vendor=1')
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.status === 'paid') {
+                                    clearInterval(payhubPoll);
+                                    window.location.href = '/bc-admin/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
+                                }
+                            })
+                            .catch(() => {});
+                    }, 4000);
 
                 } else {
                     throw new Error(res.message || "Unknown API Error");
