@@ -5,6 +5,7 @@ struct AirtimeView: View {
     @State private var amount: String = ""
     @State private var selectedNetwork: String = "MTN"
     @State private var isLoading = false
+    @State private var isProcessing = false
     @State private var message: String = ""
 
     let networks = ["MTN", "Airtel", "Glo", "9mobile"]
@@ -47,6 +48,7 @@ struct AirtimeView: View {
             }
         }
         .navigationTitle("Airtime")
+        .blockingProgress(isVisible: isProcessing, message: "Processing your purchase...")
     }
 
     func purchaseAirtime() {
@@ -56,6 +58,7 @@ struct AirtimeView: View {
         }
 
         isLoading = true
+        isProcessing = true
         let params: [String: Any] = [
             "phone": phoneNumber,
             "amount": amount,
@@ -65,6 +68,7 @@ struct AirtimeView: View {
 
         AppNetworkService.shared.request("purchase.php", params: params) { (result: Result<APIResponse, Error>) in
             isLoading = false
+            isProcessing = false
             switch result {
             case .success(let response):
                 message = response.desc ?? response.message ?? "Transaction status: \(response.status)"

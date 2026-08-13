@@ -6,6 +6,7 @@ struct DataView: View {
     @State private var selectedPlan: String = ""
     @State private var plans: [DataPlan] = []
     @State private var isLoading = false
+    @State private var isProcessing = false
     @State private var message: String = ""
 
     let networks = ["MTN", "Airtel", "Glo", "9mobile"]
@@ -52,6 +53,7 @@ struct DataView: View {
             }
         }
         .navigationTitle("Data Bundles")
+        .blockingProgress(isVisible: isProcessing, message: "Processing your purchase...")
         .onAppear(perform: fetchPlans)
     }
 
@@ -72,6 +74,7 @@ struct DataView: View {
 
     func purchaseData() {
         isLoading = true
+        isProcessing = true
         let params: [String: Any] = [
             "phone": phoneNumber,
             "plan": selectedPlan,
@@ -81,6 +84,7 @@ struct DataView: View {
 
         AppNetworkService.shared.request("purchase.php", params: params) { (result: Result<APIResponse, Error>) in
             isLoading = false
+            isProcessing = false
             switch result {
             case .success(let response):
                 message = response.desc ?? response.message ?? "Status: \(response.status)"

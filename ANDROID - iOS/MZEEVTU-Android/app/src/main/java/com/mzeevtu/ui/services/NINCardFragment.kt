@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentNinCardBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -42,7 +43,7 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
     }
 
     private fun doLookup(nin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Fetching your NIN details...")
         binding.btnLookup.isEnabled = false
         binding.cardResult.visibility = View.GONE
 
@@ -57,7 +58,7 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnLookup.isEnabled = true
                     if (status == "success") {
                         @Suppress("UNCHECKED_CAST")
@@ -70,7 +71,7 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnLookup.isEnabled = true
                     snack("Error: ${e.message}")
                 }
@@ -87,12 +88,12 @@ class NINCardFragment : Fragment(R.layout.fragment_nin_card) {
             data["middlename"] as? String ?: "",
             data["lastname"] as? String ?: ""
         ).filter { it.isNotBlank() }.joinToString(" ")
-        binding.tvDob.text = data["birthdate"] as? String ?: "Ã¢â¬”"
-        binding.tvGender.text = data["gender"] as? String ?: "Ã¢â¬”"
-        binding.tvPhone.text = data["phone"] as? String ?: "Ã¢â¬”"
-        binding.tvAddress.text = data["address"] as? String ?: "Ã¢â¬”"
-        binding.tvState.text = data["residence_state"] as? String ?: "Ã¢â¬”"
-        binding.tvOrigin.text = data["state_of_origin"] as? String ?: "Ã¢â¬”"
+        binding.tvDob.text = data["birthdate"] as? String ?: "\u2014"
+        binding.tvGender.text = data["gender"] as? String ?: "\u2014"
+        binding.tvPhone.text = data["phone"] as? String ?: "\u2014"
+        binding.tvAddress.text = data["address"] as? String ?: "\u2014"
+        binding.tvState.text = data["residence_state"] as? String ?: "\u2014"
+        binding.tvOrigin.text = data["state_of_origin"] as? String ?: "\u2014"
 
         val photoB64 = data["photo"] as? String ?: ""
         if (photoB64.isNotEmpty()) {

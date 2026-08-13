@@ -21,6 +21,7 @@ import androidx.navigation.fragment.findNavController
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentPrintHubBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.mzeevtu.util.safeNavigate
 import com.google.android.material.button.MaterialButton
@@ -354,7 +355,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
     }
 
     private fun doPurchase(plan: PrintPlanItem, quantity: Int) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -377,7 +378,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
                 val cards = body?.get("cards") as? List<Map<String, Any>>
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     if (status == "success" && cards != null) {
                         displayGeneratedCards(plan, cards)
@@ -388,7 +389,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack("Error: ${e.message}")
                 }
@@ -402,8 +403,8 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
         val serviceLabel = serviceTypeLabel(plan.serviceType)
         val provOrNet = getCurrentProviderOrNetwork()
         cards.forEach { card ->
-            val epin = card["epin"] as? String ?: "Ã¢â¬”"
-            val sn = card["sn"] as? String ?: "Ã¢â¬”"
+            val epin = card["epin"] as? String ?: "\u2014"
+            val sn = card["sn"] as? String ?: "\u2014"
             val cardView = layoutInflater.inflate(R.layout.item_generated_card, binding.containerCards, false)
 
             val ivLogo = cardView.findViewById<ImageView>(R.id.iv_network_logo)
@@ -418,7 +419,7 @@ class PrintHubFragment : Fragment(R.layout.fragment_print_hub) {
             networkLogoMap[provOrNet]?.let { ivLogo.setImageResource(it) }
             tvNetwork.text = "${provOrNet.uppercase()} $serviceLabel"
             tvPlan.text = plan.planCode
-            tvPrice.text = "Ã¢âÂ¦${"%.2f".format(plan.amount)}"
+            tvPrice.text = "\u20A6${"%.2f".format(plan.amount)}"
             tvSn.text = sn
             tvPin.text = epin
             tvValidity.text = if (plan.duration.isNotEmpty()) "Valid: ${plan.duration}" else ""

@@ -7,6 +7,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentShareFundBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -44,7 +45,7 @@ class ShareFundFragment : Fragment(R.layout.fragment_share_fund) {
     }
 
     private fun doSend(recipient: String, amount: String, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Sending funds...")
         binding.btnSend.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -55,14 +56,14 @@ class ShareFundFragment : Fragment(R.layout.fragment_share_fund) {
                 val status = resp.body()?.get("status") as? String ?: "failed"
                 val msg = resp.body()?.get("message") as? String ?: resp.body()?.get("desc") as? String ?: ""
                 activity?.runOnUiThread {
-                    binding.progressBar.visibility = View.GONE; binding.btnSend.isEnabled = true
+                    LoadingOverlay.dismiss(); binding.btnSend.isEnabled = true
                     if (status.contains("success", true)) {
                         MaterialAlertDialogBuilder(requireContext()).setTitle("\u2714 Fund Sent").setMessage(msg)
                             .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }.show()
                     } else snack(msg)
                 }
             } catch (e: Exception) {
-                activity?.runOnUiThread { binding.progressBar.visibility = View.GONE; binding.btnSend.isEnabled = true; snack(e.message ?: "Error") }
+                activity?.runOnUiThread { LoadingOverlay.dismiss(); binding.btnSend.isEnabled = true; snack(e.message ?: "Error") }
             }
         }
     }

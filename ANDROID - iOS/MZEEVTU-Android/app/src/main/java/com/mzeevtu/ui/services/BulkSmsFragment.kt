@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentBulkSmsBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -214,7 +215,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
     }
 
     private fun doSend(senderId: String, network: String, recipients: String, message: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Sending your message...")
         binding.btnSend.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -233,17 +234,17 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
                 val msg = body?.get("desc") as? String ?: body?.get("message") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnSend.isEnabled = true
                     if (status.contains("success", true)) {
-                        MaterialAlertDialogBuilder(requireContext()).setTitle("Ã¢Å… SMS Sent").setMessage(msg)
+                        MaterialAlertDialogBuilder(requireContext()).setTitle("\u2705 SMS Sent").setMessage(msg)
                             .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }.show()
                     } else snack(if (msg.isNotEmpty()) msg else "Transaction failed")
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnSend.isEnabled = true
                     snack(e.message ?: "Error")
                 }

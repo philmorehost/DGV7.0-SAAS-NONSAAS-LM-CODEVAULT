@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentCryptoBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.mzeevtu.util.copyToClipboard
 import com.mzeevtu.util.toNaira
@@ -566,7 +567,7 @@ class CryptoFragment : Fragment(R.layout.fragment_crypto) {
     }
 
     private fun doSwap(from: String, to: String, amount: Double, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing swap...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -585,7 +586,7 @@ class CryptoFragment : Fragment(R.layout.fragment_crypto) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
                         showSuccessDialog("Swap Successful ✓", msg)
                         loadData()
@@ -594,7 +595,7 @@ class CryptoFragment : Fragment(R.layout.fragment_crypto) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }

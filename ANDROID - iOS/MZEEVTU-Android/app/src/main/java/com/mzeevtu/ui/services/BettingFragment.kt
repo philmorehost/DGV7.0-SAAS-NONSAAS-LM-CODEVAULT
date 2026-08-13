@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentBettingBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -129,7 +130,7 @@ class BettingFragment : Fragment(R.layout.fragment_betting) {
                     binding.btnVerify.isEnabled = true
                     if (name.isNotEmpty()) {
                         verifiedCustomerName = name
-                        binding.tvVerifiedName.text = "Ã¢Å“ $name"
+                        binding.tvVerifiedName.text = "\u2713 $name"
                         binding.tvVerifiedName.visibility = View.VISIBLE
                     } else if (status.contains("failed", true) || status.contains("error", true)) {
                         val msg = resp.body()?.get("desc") as? String ?: resp.body()?.get("message") as? String ?: "Verification failed"
@@ -165,7 +166,7 @@ class BettingFragment : Fragment(R.layout.fragment_betting) {
     }
 
     private fun doPurchase(customerId: String, amount: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnPay.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -181,11 +182,11 @@ class BettingFragment : Fragment(R.layout.fragment_betting) {
                 val msg = resp.body()?.get("message") as? String ?: resp.body()?.get("desc") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnPay.isEnabled = true
                     if (status.contains("success", true)) {
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Ã¢Å… Deposit Successful")
+                            .setTitle("\u2705 Deposit Successful")
                             .setMessage(msg)
                             .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }
                             .show()
@@ -194,7 +195,7 @@ class BettingFragment : Fragment(R.layout.fragment_betting) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnPay.isEnabled = true
                     snack(e.message ?: "Error")
                 }

@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentVirtualCardBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.mzeevtu.util.copyToClipboard
 import com.mzeevtu.util.toNaira
@@ -185,7 +186,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
         })
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Ã°Å¸’Â³ Issue New Virtual Card")
+            .setTitle("\uD83D\uDCB3 Issue New Virtual Card")
             .setView(dv)
             .setPositiveButton("Issue Card") { _, _ ->
                 val idx = productLabels.indexOf(spinnerProduct.text.toString())
@@ -206,7 +207,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun issueCard(productId: String, cardName: String, amountUsd: Double, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Issuing your card...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -225,9 +226,9 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
-                        showSuccessDialog("Card Issued Ã¢Å…", msg)
+                        showSuccessDialog("Card Issued \u2705", msg)
                         loadData()
                     } else {
                         snack(msg)
@@ -236,7 +237,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }
@@ -267,7 +268,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
         })
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Ã°Å¸’Â° Fund Virtual Card")
+            .setTitle("\uD83D\uDCB0 Fund Virtual Card")
             .setView(dv)
             .setPositiveButton("Fund") { _, _ ->
                 val amountUsd = etAmount.text?.toString()?.toDoubleOrNull() ?: 0.0
@@ -284,7 +285,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun fundCard(reference: String, amountUsd: Double, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Funding your card...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -302,9 +303,9 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
-                        showSuccessDialog("Card Funded Ã¢Å…", msg)
+                        showSuccessDialog("Card Funded \u2705", msg)
                         loadData()
                     } else {
                         snack(msg)
@@ -313,7 +314,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }
@@ -327,7 +328,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
         val etPin = dv.findViewById<TextInputEditText>(R.id.et_pin)
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Ã°Å¸”Â Reveal Card Details")
+            .setTitle("\uD83D\uDD0D Reveal Card Details")
             .setView(dv)
             .setPositiveButton("Reveal") { _, _ ->
                 val pin = etPin.text?.toString() ?: ""
@@ -342,7 +343,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun revealCard(reference: String, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Revealing card details...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -358,7 +359,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
                         @Suppress("UNCHECKED_CAST")
                         val data = body?.get("data") as? Map<String, Any> ?: emptyMap()
@@ -370,7 +371,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }
@@ -378,10 +379,10 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun showCardDetailsDialog(data: Map<String, Any>) {
-        val maskedPan = data["masked_pan"] as? String ?: "Ã¢â¬”"
-        val cvv = data["cvv"] as? String ?: "Ã¢â¬”"
-        val expMonth = data["expiry_month"] as? String ?: "Ã¢â¬”"
-        val expYear = data["expiry_year"] as? String ?: "Ã¢â¬”"
+        val maskedPan = data["masked_pan"] as? String ?: "\u2014"
+        val cvv = data["cvv"] as? String ?: "\u2014"
+        val expMonth = data["expiry_month"] as? String ?: "\u2014"
+        val expYear = data["expiry_year"] as? String ?: "\u2014"
 
         val details = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -434,7 +435,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Withdraw Card Funds")
             .setMessage(
-                "This will return $${"%.2f".format(balanceUsd)} USD (Ã¢â°Ë ${approxNgn.toNaira()}) to your NGN wallet and terminate the card.\n\nAre you sure?"
+                "This will return ${"%.2f".format(balanceUsd)} USD (\u2248 ${approxNgn.toNaira()}) to your NGN wallet and terminate the card.\n\nAre you sure?"
             )
             .setPositiveButton("Withdraw & Terminate") { _, _ -> withdrawCard(reference) }
             .setNegativeButton("Cancel", null)
@@ -442,7 +443,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
     }
 
     private fun withdrawCard(reference: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing withdrawal...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -458,9 +459,9 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status == "success") {
-                        showSuccessDialog("Withdrawal Successful Ã¢Å…", msg)
+                        showSuccessDialog("Withdrawal Successful \u2705", msg)
                         loadData()
                     } else {
                         snack(msg)
@@ -469,7 +470,7 @@ class VirtualCardFragment : Fragment(R.layout.fragment_virtual_card) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Network error: ${e.message}")
                 }
             }

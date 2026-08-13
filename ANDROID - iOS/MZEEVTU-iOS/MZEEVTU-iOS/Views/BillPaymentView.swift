@@ -7,6 +7,7 @@ struct BillPaymentView: View {
     @State private var selectedProvider: String = ""
     @State private var providers: [BillProvider] = []
     @State private var isLoading = false
+    @State private var isProcessing = false
     @State private var message: String = ""
 
     let categories = ["Electricity", "Cable TV"]
@@ -58,6 +59,7 @@ struct BillPaymentView: View {
             }
         }
         .navigationTitle("Bills Payment")
+        .blockingProgress(isVisible: isProcessing, message: "Processing your payment...")
         .onAppear(perform: fetchProviders)
     }
 
@@ -78,6 +80,7 @@ struct BillPaymentView: View {
 
     func payBill() {
         isLoading = true
+        isProcessing = true
         let params: [String: Any] = [
             "number": meterNumber,
             "amount": amount,
@@ -88,6 +91,7 @@ struct BillPaymentView: View {
 
         AppNetworkService.shared.request("purchase.php", params: params) { (result: Result<APIResponse, Error>) in
             isLoading = false
+            isProcessing = false
             switch result {
             case .success(let response):
                 message = response.desc ?? response.message ?? "Status: \(response.status)"

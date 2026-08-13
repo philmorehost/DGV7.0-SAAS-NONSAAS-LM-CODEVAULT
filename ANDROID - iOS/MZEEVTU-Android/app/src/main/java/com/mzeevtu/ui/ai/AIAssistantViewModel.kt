@@ -65,7 +65,7 @@ class AIAssistantViewModel(application: Application) : AndroidViewModel(applicat
                         _error.postValue(errorMsg)
                         
                         val updatedList = _messages.value.orEmpty().toMutableList()
-                        updatedList.add(ChatMessage("âš ï¸ Error: $errorMsg", false, isError = true))
+                        updatedList.add(ChatMessage("\u26A0\uFE0F Error: $errorMsg", false, isError = true))
                         _messages.postValue(updatedList)
                     }
                 } else {
@@ -74,7 +74,7 @@ class AIAssistantViewModel(application: Application) : AndroidViewModel(applicat
                     _error.postValue(errMsg)
                     
                     val updatedList = _messages.value.orEmpty().toMutableList()
-                    updatedList.add(ChatMessage("âš ï¸ Error: $errMsg", false, isError = true))
+                    updatedList.add(ChatMessage("\u26A0\uFE0F Error: $errMsg", false, isError = true))
                     _messages.postValue(updatedList)
                 }
             } catch (e: com.google.gson.JsonSyntaxException) {
@@ -89,7 +89,7 @@ class AIAssistantViewModel(application: Application) : AndroidViewModel(applicat
                 _error.postValue(errMsg)
                 
                 val updatedList = _messages.value.orEmpty().toMutableList()
-                updatedList.add(ChatMessage("âš ï¸ Error: $errMsg", false, isError = true))
+                updatedList.add(ChatMessage("\u26A0\uFE0F Error: $errMsg", false, isError = true))
                 _messages.postValue(updatedList)
             } finally {
                 _isLoading.postValue(false)

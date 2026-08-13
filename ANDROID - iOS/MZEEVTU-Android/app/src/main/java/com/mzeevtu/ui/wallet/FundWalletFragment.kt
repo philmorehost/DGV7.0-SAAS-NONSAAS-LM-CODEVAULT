@@ -366,7 +366,7 @@ window.onload = function() {
         fun onSuccess(reference: String) {
             activity?.runOnUiThread {
                 showForm()
-                snack("Payment received Ã¢â¬” verifying with server...")
+                snack("Payment received \u2014 verifying with server...")
             }
             // Server-side verification to ensure the wallet is credited
             val gateway = activeGateway
@@ -382,7 +382,7 @@ window.onload = function() {
                     val msg = resp.body()?.get("message") as? String ?: ""
                     activity?.runOnUiThread {
                         if (status == "success" || status == "pending") {
-                            snack(if (status == "success") "Ã¢Å… Wallet funded successfully!" else "Payment submitted. Wallet will be funded shortly.")
+                            snack(if (status == "success") "\u2705 Wallet funded successfully!" else "Payment submitted. Wallet will be funded shortly.")
                         } else if (msg.isNotEmpty()) {
                             snack("Payment recorded: $msg")
                         }

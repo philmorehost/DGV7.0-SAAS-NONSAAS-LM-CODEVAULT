@@ -7,6 +7,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentBvnVerifyBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -40,7 +41,7 @@ class BVNVerifyFragment : Fragment(R.layout.fragment_bvn_verify) {
     }
 
     private fun doVerify(bvn: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Verifying your details...")
         binding.btnVerify.isEnabled = false
         binding.cardResult.visibility = View.GONE
 
@@ -55,7 +56,7 @@ class BVNVerifyFragment : Fragment(R.layout.fragment_bvn_verify) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnVerify.isEnabled = true
                     if (status == "success") {
                         displayResult(body ?: emptyMap())
@@ -66,7 +67,7 @@ class BVNVerifyFragment : Fragment(R.layout.fragment_bvn_verify) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnVerify.isEnabled = true
                     snack("Error: ${e.message}")
                 }
@@ -82,11 +83,11 @@ class BVNVerifyFragment : Fragment(R.layout.fragment_bvn_verify) {
             data["middlename"] as? String ?: "",
             data["lastname"] as? String ?: ""
         ).filter { it.isNotBlank() }.joinToString(" ")
-        binding.tvDob.text = "Date of Birth: ${data["date_of_birth"] as? String ?: "Ã¢â¬”"}"
-        binding.tvGender.text = "Gender: ${data["gender"] as? String ?: "Ã¢â¬”"}"
-        binding.tvPhone.text = "Phone: ${data["phone"] as? String ?: "Ã¢â¬”"}"
-        binding.tvBank.text = "Bank of Enrolment: ${data["bank_of_enrolment"] as? String ?: "Ã¢â¬”"}"
-        binding.tvLevel.text = "Account Level: ${data["level_of_account"] as? String ?: "Ã¢â¬”"}"
+        binding.tvDob.text = "Date of Birth: ${data["date_of_birth"] as? String ?: "\u2014"}"
+        binding.tvGender.text = "Gender: ${data["gender"] as? String ?: "\u2014"}"
+        binding.tvPhone.text = "Phone: ${data["phone"] as? String ?: "\u2014"}"
+        binding.tvBank.text = "Bank of Enrolment: ${data["bank_of_enrolment"] as? String ?: "\u2014"}"
+        binding.tvLevel.text = "Account Level: ${data["level_of_account"] as? String ?: "\u2014"}"
     }
 
     private fun snack(msg: String) = Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG).show()

@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentCableBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -217,7 +218,7 @@ class CableFragment : Fragment(R.layout.fragment_cable) {
                     if (name.isNotEmpty() && status.equals("success", ignoreCase = true)) {
                         verifiedAccountName = name
                         verifiedSmartcard = number
-                        binding.tvVerifiedName.text = "Ã¢Å“ $name"
+                        binding.tvVerifiedName.text = "\u2713 $name"
                         binding.tvVerifiedSmartcard.text = "IUC / SmartCard: $number"
                         binding.layoutVerifiedInfo.visibility = View.VISIBLE
                     } else {
@@ -263,7 +264,7 @@ class CableFragment : Fragment(R.layout.fragment_cable) {
     }
 
     private fun doPurchase(smartcard: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnPay.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -282,14 +283,14 @@ class CableFragment : Fragment(R.layout.fragment_cable) {
                     ?: resp.body()?.get("desc") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnPay.isEnabled = true
                     if (status.contains("success", true)) showSuccess(msg) else snack(msg.ifEmpty { "Payment failed" })
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnPay.isEnabled = true
                     snack(e.message ?: "Error")
                 }
@@ -299,7 +300,7 @@ class CableFragment : Fragment(R.layout.fragment_cable) {
 
     private fun showSuccess(msg: String) {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Ã¢Å… Subscription Successful")
+            .setTitle("\u2705 Subscription Successful")
             .setMessage(msg)
             .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }
             .show()

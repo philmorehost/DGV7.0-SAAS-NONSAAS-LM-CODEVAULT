@@ -19,6 +19,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.appcompat.widget.Toolbar
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.mzeevtu.util.safeNavigate
 import kotlinx.coroutines.delay
@@ -172,7 +173,7 @@ class BulkOperationsFragment : Fragment() {
         val list = rawNumbers.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         
         btnSubmitBatch.isEnabled = false
-        progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing batch...")
 
         lifecycleScope.launch {
             try {
@@ -217,7 +218,7 @@ class BulkOperationsFragment : Fragment() {
             } finally {
                 btnSubmitBatch.isEnabled = true
                 btnSubmitBatch.text = "PROCESS BATCH"
-                progressBar.visibility = View.GONE
+                LoadingOverlay.dismiss()
             }
         }
     }

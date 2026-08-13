@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentGiftcardBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -245,7 +246,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
 
     private fun updatePricePreview() {
         if (selectedAmount > 0 && selectedProductId > 0) {
-            binding.tvPricePreview.text = "Ã¢â°Ë $selectedProductCurrency ${selectedAmount.toInt()} (Rate applies at checkout)"
+            binding.tvPricePreview.text = "\u2248 $selectedProductCurrency ${selectedAmount.toInt()} (Rate applies at checkout)"
             binding.tvPricePreview.visibility = View.VISIBLE
         } else {
             binding.tvPricePreview.visibility = View.GONE
@@ -302,7 +303,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
     }
 
     private fun doPurchase(pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -324,7 +325,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
 
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     if (status.contains("success", true)) {
                         val result = buildString {
@@ -333,7 +334,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
                             if (cardPin.isNotEmpty()) append("\nCard PIN: $cardPin")
                         }
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Ã¢Å… Purchase Successful")
+                            .setTitle("\u2705 Purchase Successful")
                             .setMessage(result)
                             .setPositiveButton("View My Cards") { _, _ -> showTab(1) }
                             .setNegativeButton("Done") { _, _ ->
@@ -347,7 +348,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack("Error: ${e.message}")
                 }
@@ -561,7 +562,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
             setPadding(16, 16, 16, 16)
         }
 
-        inner.addView(textView("$product Ã¢â¬” $currency ${value.toInt()}", 16f, bold = true))
+        inner.addView(textView("$product \u2014 $currency ${value.toInt()}", 16f, bold = true))
         inner.addView(textView("Seller: @$seller", 13f, colorRes = R.color.text_secondary))
         inner.addView(textView("Price: \u20A6${priceNgn.toLong()}", 14f, colorRes = R.color.primary))
 
@@ -595,7 +596,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
         val etPin = pinView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.et_pin)
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Confirm P2P Purchase")
-            .setMessage("$productName Ã¢â¬” Ã¢âÂ¦${priceNgn.toLong()}")
+            .setMessage("$productName \u2014 \u20A6${priceNgn.toLong()}")
             .setView(pinView)
             .setPositiveButton("Confirm") { _, _ ->
                 val pin = etPin?.text?.toString()?.trim() ?: ""
@@ -607,7 +608,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
     }
 
     private fun doP2PBuy(listingId: Int, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         lifecycleScope.launch {
             try {
                 val prefs = PreferenceManager(requireContext())
@@ -624,10 +625,10 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
                 val msg = resp.body()?.get("message") as? String ?: "Unknown error"
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     if (status.contains("success", true)) {
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Ã¢Å… Purchase Successful")
+                            .setTitle("\u2705 Purchase Successful")
                             .setMessage(msg)
                             .setPositiveButton("View My Cards") { _, _ -> showTab(1) }
                             .setNegativeButton("Close", null)
@@ -640,7 +641,7 @@ class GiftCardFragment : Fragment(R.layout.fragment_giftcard) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     snack("Error: ${e.message}")
                 }
             }

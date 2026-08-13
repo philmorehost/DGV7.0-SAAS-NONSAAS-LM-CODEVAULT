@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentElectricBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -190,7 +191,7 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
                     if (name.isNotEmpty()) {
                         verifiedCustomerName = name
                         verifiedMeterNumber = meter
-                        binding.tvVerifiedName.text = "Ã¢Å“ $name"
+                        binding.tvVerifiedName.text = "\u2713 $name"
                         binding.tvVerifiedMeter.text = "Meter No: $meter"
                         binding.layoutVerifiedInfo.visibility = View.VISIBLE
                     } else {
@@ -238,7 +239,7 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
     }
 
     private fun doPurchase(meter: String, amount: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -259,12 +260,12 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
                 val token = resp.body()?.get("token") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     if (status.contains("success", true)) {
                         val resultMsg = if (token.isNotEmpty()) "$msg\n\nToken: $token" else msg
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Ã¢Å… Electricity Token")
+                            .setTitle("\u2705 Electricity Token")
                             .setMessage(resultMsg)
                             .setPositiveButton("Done") { _, _ ->
                                 requireActivity().onBackPressedDispatcher.onBackPressed()
@@ -276,7 +277,7 @@ class ElectricFragment : Fragment(R.layout.fragment_electric) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnBuy.isEnabled = true
                     snack(e.message ?: "Error")
                 }

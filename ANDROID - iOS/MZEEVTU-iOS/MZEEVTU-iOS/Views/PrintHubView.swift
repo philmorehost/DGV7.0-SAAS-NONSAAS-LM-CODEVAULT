@@ -58,6 +58,7 @@ struct PrintHubView: View {
     @State private var allPlans: [String: [PrintPlan]] = [:]
     @State private var generatedCards: [PrintedCard] = []
     @State private var isLoading = false
+    @State private var isProcessing = false
     @State private var feedbackMessage = ""
     
     let networks = ["mtn", "glo", "airtel", "9mobile"]
@@ -245,6 +246,7 @@ struct PrintHubView: View {
             .padding(.top)
         }
         .navigationTitle("Print Hub")
+        .blockingProgress(isVisible: isProcessing, message: "Generating your cards...")
         .onAppear(perform: loadPlans)
     }
 
@@ -272,6 +274,7 @@ struct PrintHubView: View {
         }
 
         isLoading = true
+        isProcessing = true
         feedbackMessage = ""
         generatedCards = []
 
@@ -288,6 +291,7 @@ struct PrintHubView: View {
 
         AppNetworkService.shared.request("databundle-card.php", params: params) { (result: Result<PrintCardPurchaseResponse, Error>) in
             isLoading = false
+            isProcessing = false
             switch result {
             case .success(let response):
                 if response.status == "success", let cards = response.cards {

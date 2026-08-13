@@ -82,13 +82,13 @@ class MainActivity : AppCompatActivity() {
             override fun onAvailable(network: Network) {
                 if (!isCurrentlyOnline) {
                     isCurrentlyOnline = true
-                    runOnUiThread { showNetworkSnack("Ã¢Å…  Internet connection restored", Color.parseColor("#2E7D32")) }
+                    runOnUiThread { showNetworkSnack("\u2705  Internet connection restored", Color.parseColor("#2E7D32")) }
                 }
             }
 
             override fun onLost(network: Network) {
                 isCurrentlyOnline = false
-                runOnUiThread { showNetworkSnack("Ã¢Å¡Â Ã¯Â¸Â  No internet connection", Color.parseColor("#C62828"), indefinite = true) }
+                runOnUiThread { showNetworkSnack("\u26A0\uFE0F  No internet connection", Color.parseColor("#C62828"), indefinite = true) }
             }
         }
         connectivityManager.registerNetworkCallback(request, networkCallback!!)

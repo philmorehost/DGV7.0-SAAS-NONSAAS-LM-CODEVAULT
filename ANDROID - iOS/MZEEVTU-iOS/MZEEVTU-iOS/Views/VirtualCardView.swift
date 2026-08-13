@@ -82,6 +82,7 @@ struct CreateCardView: View {
     @State private var amount: String = ""
     @State private var selectedProvider: String = "bsicards"
     @State private var isLoading = false
+    @State private var isProcessing = false
     @State private var message: String = ""
 
     var body: some View {
@@ -112,10 +113,12 @@ struct CreateCardView: View {
             }
         }
         .navigationTitle("New Card")
+        .blockingProgress(isVisible: isProcessing, message: "Creating your card...")
     }
 
     func createCard() {
         isLoading = true
+        isProcessing = true
         let params: [String: Any] = [
             "action": "create",
             "name": nameOnCard,
@@ -125,6 +128,7 @@ struct CreateCardView: View {
 
         AppNetworkService.shared.request("virtual-card.php", params: params) { (result: Result<APIResponse, Error>) in
             isLoading = false
+            isProcessing = false
             switch result {
             case .success(let response):
                 message = response.desc ?? response.message ?? "Status: \(response.status)"

@@ -50,7 +50,7 @@ class SetPinFragment : Fragment(R.layout.fragment_set_pin) {
                     if (status == "success") {
                         prefs.saveBoolean(com.mzeevtu.util.Constants.KEY_PIN_SET, true)
                         MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Ã¢Å… PIN Set Successfully")
+                            .setTitle("\u2705 PIN Set Successfully")
                             .setMessage("Your transaction PIN has been updated.")
                             .setPositiveButton("OK") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }.show()
                     } else snack(msg)

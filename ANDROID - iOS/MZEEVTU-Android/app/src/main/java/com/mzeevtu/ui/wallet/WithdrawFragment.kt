@@ -12,6 +12,7 @@ import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.data.model.Bank
 import com.mzeevtu.databinding.FragmentWithdrawBinding
+import com.mzeevtu.util.LoadingOverlay
 import com.mzeevtu.util.PreferenceManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
@@ -167,7 +168,7 @@ class WithdrawFragment : Fragment(R.layout.fragment_withdraw) {
     }
 
     private fun doWithdraw(accountNumber: String, amount: String, pin: String) {
-        binding.progressBar.visibility = View.VISIBLE
+        LoadingOverlay.show(requireContext(), "Processing withdrawal...")
         binding.btnWithdraw.isEnabled = false
         lifecycleScope.launch {
             try {
@@ -182,7 +183,7 @@ class WithdrawFragment : Fragment(R.layout.fragment_withdraw) {
                 val status = resp.body()?.get("status") as? String ?: "failed"
                 val msg = resp.body()?.get("message") as? String ?: resp.body()?.get("desc") as? String ?: ""
                 activity?.runOnUiThread {
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnWithdraw.isEnabled = true
                     if (status.contains("success", true)) {
                         MaterialAlertDialogBuilder(requireContext())
@@ -194,7 +195,7 @@ class WithdrawFragment : Fragment(R.layout.fragment_withdraw) {
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
-                    binding.progressBar.visibility = View.GONE
+                    LoadingOverlay.dismiss()
                     binding.btnWithdraw.isEnabled = true
                     snack("Error: ${e.message}")
                 }

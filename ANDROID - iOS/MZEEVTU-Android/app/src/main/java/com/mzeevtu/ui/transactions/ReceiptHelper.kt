@@ -78,14 +78,14 @@ object ReceiptHelper {
             setTextColor(statusColor(tx.status))
         }
         view.findViewById<TextView>(R.id.tv_receipt_amount).text = tx.amount.toNaira()
-        view.findViewById<TextView>(R.id.tv_receipt_reference).text = tx.reference.ifEmpty { "Ã¢â¬”" }
-        view.findViewById<TextView>(R.id.tv_receipt_type).text = tx.type.ifEmpty { "Ã¢â¬”" }
-        view.findViewById<TextView>(R.id.tv_receipt_description).text = tx.description.ifEmpty { "Ã¢â¬”" }
+        view.findViewById<TextView>(R.id.tv_receipt_reference).text = tx.reference.ifEmpty { "\u2014" }
+        view.findViewById<TextView>(R.id.tv_receipt_type).text = tx.type.ifEmpty { "\u2014" }
+        view.findViewById<TextView>(R.id.tv_receipt_description).text = tx.description.ifEmpty { "\u2014" }
         view.findViewById<TextView>(R.id.tv_receipt_amount_paid).text = tx.discountedAmount.toNaira()
         view.findViewById<TextView>(R.id.tv_receipt_balance_before).text = tx.balanceBefore.toNaira()
         view.findViewById<TextView>(R.id.tv_receipt_balance_after).text = tx.balanceAfter.toNaira()
-        view.findViewById<TextView>(R.id.tv_receipt_mode).text = tx.mode.ifEmpty { "Ã¢â¬”" }
-        view.findViewById<TextView>(R.id.tv_receipt_date).text = tx.date.ifEmpty { "Ã¢â¬”" }
+        view.findViewById<TextView>(R.id.tv_receipt_mode).text = tx.mode.ifEmpty { "\u2014" }
+        view.findViewById<TextView>(R.id.tv_receipt_date).text = tx.date.ifEmpty { "\u2014" }
     }
 
     private fun shareReceiptAsImage(fragment: Fragment, receiptCard: View, reference: String) {
@@ -128,7 +128,7 @@ object ReceiptHelper {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, "Transaction Receipt Ã¢â¬” Ref: $reference")
+                putExtra(Intent.EXTRA_TEXT, "Transaction Receipt \u2014 Ref: $reference")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(intent, "Share Receipt"))
@@ -191,14 +191,14 @@ object ReceiptHelper {
                 y += 22f
             }
 
-            row("Reference:", tx.reference.ifEmpty { "Ã¢â¬”" })
-            row("Type:", tx.type.ifEmpty { "Ã¢â¬”" })
-            row("Description:", tx.description.ifEmpty { "Ã¢â¬”" })
+            row("Reference:", tx.reference.ifEmpty { "\u2014" })
+            row("Type:", tx.type.ifEmpty { "\u2014" })
+            row("Description:", tx.description.ifEmpty { "\u2014" })
             row("Amount Paid:", tx.discountedAmount.toNaira())
             row("Balance Before:", tx.balanceBefore.toNaira())
             row("Balance After:", tx.balanceAfter.toNaira())
-            row("Mode:", tx.mode.ifEmpty { "Ã¢â¬”" })
-            row("Date:", tx.date.ifEmpty { "Ã¢â¬”" })
+            row("Mode:", tx.mode.ifEmpty { "\u2014" })
+            row("Date:", tx.date.ifEmpty { "\u2014" })
 
             y += 10f
             canvas.drawLine(lx, y, rx, y, paintDivider); y += 20f
@@ -216,7 +216,7 @@ object ReceiptHelper {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, "Transaction Receipt Ã¢â¬” Ref: ${tx.reference}")
+                putExtra(Intent.EXTRA_TEXT, "Transaction Receipt \u2014 Ref: ${tx.reference}")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(intent, "Share Receipt PDF"))
