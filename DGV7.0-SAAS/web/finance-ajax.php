@@ -347,7 +347,11 @@ if (isset($_GET['action'])) {
         $tx_raw = json_decode($v_data['json_result'], true);
         $tx_data = (isset($tx_raw['data']) && is_array($tx_raw['data'])) ? $tx_raw['data'] : $tx_raw;
         $tx_status = strtolower($tx_data['status'] ?? '');
-        $is_paid = ($tx_status == 'success' || $tx_status == 'successful' || ($tx_raw['status'] ?? false) === true);
+        // NOTE: PayHub's verify returns a TOP-LEVEL status:true merely to mean "transaction
+        // retrieved" — the ACTUAL payment status lives in data.status ('pending'/'success').
+        // Never treat the top-level boolean as proof of payment (that let unpaid transactions
+        // get credited the moment the user clicked Pay).
+        $is_paid = ($tx_status == 'success' || $tx_status == 'successful');
 
         if (!$is_paid) {
             if (ob_get_length()) ob_clean();

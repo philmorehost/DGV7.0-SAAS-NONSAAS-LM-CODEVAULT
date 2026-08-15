@@ -21,7 +21,7 @@ if (!$catch) {
 }
 
 // Support both v2 (event object) and v1 (flat or direct data)
-$event = $catch['event'] ?? 'charge.success';
+$event = $catch['event'] ?? '';
 $data = $catch['data'] ?? $catch;
 $reference = $data['reference'] ?? '';
 
@@ -42,6 +42,22 @@ if ($event == 'charge.success' || ($catch['status'] ?? '') == 'success' || ($cat
     $meta = [];
     if (!empty($data['metadata'])) {
         $meta = is_array($data['metadata']) ? $data['metadata'] : json_decode($data['metadata'], true);
+    }
+
+    // Verify the payment with PayHub BEFORE crediting — webhook payloads can be forged.
+    $verify_res = makePayhubRequest("GET", "api/transaction/verify/" . urlencode($reference), "", 0, true);
+    $v_data = json_decode($verify_res, true);
+    $verified = false;
+    if (($v_data['status'] ?? '') == 'success') {
+        $v_tx_raw = json_decode($v_data['json_result'], true);
+        $v_tx_data = (isset($v_tx_raw['data']) && is_array($v_tx_raw['data'])) ? $v_tx_raw['data'] : $v_tx_raw;
+        $verified = in_array(strtolower($v_tx_data['status'] ?? ''), ['success', 'successful'], true);
+    }
+    if (!$verified) {
+        logPayhubVendor("Verification FAILED for $reference — ignored (possible forgery).");
+        http_response_code(200);
+        echo "Ignored";
+        exit;
     }
 
     $vid = (int)($meta['vendor_id'] ?? 0);
