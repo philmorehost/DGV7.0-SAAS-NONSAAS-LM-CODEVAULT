@@ -71,18 +71,23 @@ if (isset($_POST['withdrawal_action'])) {
                         } else if ($payout_provider == 'paystack') {
                             $raw_res = paystackResolveAccount($account_number, $bank_code, $vid);
                             if (($raw_res['status'] ?? '') == 'success') {
-                                $inner = json_decode($raw_res['json_result'] ?? '{}', true);
-                                $acc_name = $inner['data']['account_name'] ?? '';
+                                $acc_name = $raw_res['account_name'] ?? '';
+                                if (empty($acc_name)) {
+                                    $inner = json_decode($raw_res['json_result'] ?? '{}', true);
+                                    $acc_name = $inner['data']['account_name'] ?? '';
+                                }
                                 $rec = paystackCreateTransferRecipient($acc_name, $account_number, $bank_code, $vid);
-                                if (($rec['status'] ?? false) === true) {
-                                    $ps_res = paystackInitiateTransfer($amount * 100, $rec['data']['recipient_code'], $narration, $vid);
-                                    if (($ps_res['status'] ?? false) === true) {
-                                        $res = ['status' => 'success', 'data' => ['reference' => $ps_res['data']['reference']]];
+                                $rec_inner = json_decode($rec['json_result'] ?? '{}', true);
+                                if (($rec_inner['status'] ?? false) === true && !empty($rec_inner['data']['recipient_code'])) {
+                                    $ps_res = paystackInitiateTransfer($amount * 100, $rec_inner['data']['recipient_code'], $narration, $vid);
+                                    $ps_inner = json_decode($ps_res['json_result'] ?? '{}', true);
+                                    if (($ps_inner['status'] ?? false) === true) {
+                                        $res = ['status' => 'success', 'data' => ['reference' => $ps_inner['data']['reference'] ?? ($ps_inner['data']['transfer_code'] ?? 'N/A')]];
                                     } else {
-                                        $res['message'] = $ps_res['message'] ?? 'Transfer initiation failed';
+                                        $res['message'] = $ps_inner['message'] ?? ($ps_res['message'] ?? 'Transfer initiation failed');
                                     }
                                 } else {
-                                    $res['message'] = $rec['message'] ?? 'Recipient creation failed';
+                                    $res['message'] = $rec_inner['message'] ?? ($rec['message'] ?? 'Recipient creation failed');
                                 }
                             } else {
                                 $res['message'] = $raw_res['message'] ?? 'Account resolution failed';
