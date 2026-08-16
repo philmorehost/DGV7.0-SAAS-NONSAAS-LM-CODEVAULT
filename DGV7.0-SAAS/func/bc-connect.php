@@ -11,9 +11,9 @@
     if (file_exists($lock_file)) {
         $lock_data = json_decode(@file_get_contents($lock_file), true);
         if ($lock_data && isset($lock_data['suspended_at'])) {
-            // Recovery path: always keep the super-admin license management page and the
-            // installer reachable so a wrong/transient suspension can be corrected by
-            // re-entering a valid key. Everything else remains hard-locked.
+            // Recovery path: never lock the super-admin license page, its login, or the installer,
+            // and route any other super-admin request to the license page so the admin can
+            // re-enter a valid key (which removes this lock). Non-admin traffic stays hard-locked.
             $lock_req_uri = $_SERVER['REQUEST_URI'] ?? '';
             $lock_script = $_SERVER['SCRIPT_NAME'] ?? '';
             $is_license_mgmt = (
@@ -26,7 +26,16 @@
                 stripos($lock_req_uri, '/install/') !== false ||
                 stripos($lock_script, '/install/') !== false
             );
+            $is_spadmin_area = (
+                stripos($lock_req_uri, '/bc-spadmin/') !== false ||
+                stripos($lock_script, '/bc-spadmin/') !== false
+            );
             if (!$is_license_mgmt && !$is_installer) {
+                if ($is_spadmin_area) {
+                    // Super admin: send them straight to the license page instead of a dead-end.
+                    header("Location: /bc-spadmin/AccountSettings.php");
+                    exit;
+                }
                 $reason = htmlspecialchars($lock_data['reason'] ?? 'License revoked by administrator.');
                 header("HTTP/1.1 503 Service Temporarily Unavailable");
                 echo '<!DOCTYPE html><html><head><title>System Suspended</title><meta name="viewport" content="width=device-width, initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet"><style>body{background:#0b0f19;color:#f3f4f6;font-family:\'Outfit\',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;text-align:center;box-sizing:border-box}.card{background:#111827;border:1px solid #dc3545;border-radius:12px;padding:40px;max-width:500px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5)}.icon{font-size:48px;color:#dc3545;margin-bottom:20px}h1{font-size:24px;margin:0 0 10px 0;font-weight:600}p{color:#9ca3af;font-size:15px;line-height:1.6;margin:0 0 20px 0}</style></head><body><div class="card"><div class="icon">⚠️</div><h1>System Suspended</h1><p>' . $reason . '</p><p>Please contact the software provider to resolve this issue.</p></div></body></html>';
