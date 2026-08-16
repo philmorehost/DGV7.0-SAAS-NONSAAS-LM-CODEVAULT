@@ -49,9 +49,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($response !== false && $http_code === 200) {
                 $res = @json_decode($response, true);
-                if (isset($res['status']) && (int)$res['status'] === 1) {
+                $res_status = $res['status'] ?? '';
+                $is_valid = ($res_status === 'active' || $res_status === 'valid' || (int)$res_status === 1);
+                if (isset($res['status']) && $is_valid) {
                     include_once('../func/bc-levelup.php');
                     if (bc_write_activation($code)) {
+                        // Keep the validated license key/domain in the session so step 3 can
+                        // persist it into sas_super_admin_options (the DB doesn't exist yet here).
+                        $_SESSION['install_license_key'] = $code;
+                        $_SESSION['install_license_domain'] = $domain;
                         header("Location: ?step=2");
                         exit;
                     } else {
@@ -131,7 +137,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (mysqli_stmt_execute($stmt)) {
                     // Pre-fill required settings for super admin
                     mysqli_query($conn, "INSERT IGNORE INTO sas_super_admin_options (option_name, option_value) VALUES ('system_migration_version', '6.9.11-ai')");
-                    
+
+                    // Persist the license key validated in step 1 into sas_super_admin_options.
+                    // The activation file alone is not enough: AccountSettings' license checks and
+                    // the 48h grace-period lock both read license_key/license_status from the DB.
+                    // A missing DB row made a fresh, valid install look unlicensed and get
+                    // "suspended" the moment the license status was refreshed.
+                    include_once('../func/bc-levelup.php');
+                    $install_license_key = isset($_SESSION['install_license_key']) ? trim($_SESSION['install_license_key']) : '';
+                    $install_license_domain = isset($_SESSION['install_license_domain']) ? trim($_SESSION['install_license_domain']) : ($_SERVER['HTTP_HOST'] ?? 'localhost');
+                    if (!empty($install_license_key)) {
+                        bc_store_license_option($conn, 'license_key', $install_license_key);
+                        bc_store_license_option($conn, 'license_domain', $install_license_domain);
+                        bc_store_license_option($conn, 'license_status', 'valid');
+                        bc_store_license_option($conn, 'license_last_check', date('Y-m-d H:i:s'));
+                    }
+                    unset($_SESSION['install_license_key'], $_SESSION['install_license_domain']);
+
                     header("Location: ?step=4");
                     exit;
                 } else {

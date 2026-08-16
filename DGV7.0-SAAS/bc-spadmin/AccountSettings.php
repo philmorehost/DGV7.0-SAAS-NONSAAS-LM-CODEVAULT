@@ -34,28 +34,25 @@
         
         $lock_file = __DIR__ . '/../func/.license.lock';
         if (is_array($data) && isset($data['status'])) {
-            $is_valid = ($data['status'] === 'active' || $data['status'] === 'valid' || (int)$data['status'] === 1);
+            // "Limit exceeded" from the licensing server is a rate/request cap, not a revoked
+            // license — treat it as a pass so a transient API limit never bricks the platform.
+            $limit_exceeded = isset($data['message']) && stripos($data['message'], 'Limit exceeded') !== false;
+            $is_valid = ($data['status'] === 'active' || $data['status'] === 'valid' || (int)$data['status'] === 1 || $limit_exceeded);
             $message = $data['message'] ?? ($is_valid ? "License is active and verified." : "License is invalid.");
             $expiry = $data['expiry'] ?? "Lifetime";
             $license_type = $data['type'] ?? "Enterprise SaaS Edition";
-            
+
+            // ONLY an explicit server-side 'suspended' status may activate the hard kill switch.
+            // A generic invalid/error response must NOT brick the system — it falls back to the
+            // 48-hour grace period so the admin can correct the key/domain via the UI.
             if ($data['status'] === 'suspended') {
-                $lock_data = json_encode([
+                file_put_contents($lock_file, json_encode([
                     'suspended_at' => time(),
                     'reason' => $data['message'] ?? 'License suspended by administrator.'
-                ]);
-                file_put_contents($lock_file, $lock_data);
-            } else {
-                if ($is_valid) {
-                    if (file_exists($lock_file)) {
-                        @unlink($lock_file);
-                    }
-                } else {
-                    $lock_data = json_encode([
-                        'suspended_at' => time(),
-                        'reason' => 'License verification failed. Status: ' . ($data['status'] ?? 'unknown')
-                    ]);
-                    file_put_contents($lock_file, $lock_data);
+                ]));
+            } elseif ($is_valid) {
+                if (file_exists($lock_file)) {
+                    @unlink($lock_file);
                 }
             }
         } else {
@@ -68,25 +65,21 @@
                 }
             } else {
                 $message = "No valid license key format provided.";
-                $lock_data = json_encode([
-                    'suspended_at' => time(),
-                    'reason' => 'Invalid license key format.'
-                ]);
-                file_put_contents($lock_file, $lock_data);
+                // Do NOT write a hard lock here — the 48h grace period is the soft fallback.
             }
         }
-        
+
         $status_str = $is_valid ? 'valid' : 'invalid';
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_status', '$status_str') ON DUPLICATE KEY UPDATE option_value='$status_str'");
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_last_check', '" . date('Y-m-d H:i:s') . "') ON DUPLICATE KEY UPDATE option_value='" . date('Y-m-d H:i:s') . "'");
-        
+        bc_store_license_option($connection_server, 'license_status', $status_str);
+        bc_store_license_option($connection_server, 'license_last_check', date('Y-m-d H:i:s'));
+
         if ($is_valid) {
             mysqli_query($connection_server, "DELETE FROM sas_super_admin_options WHERE option_name='license_invalid_since'");
         } else {
             // Only set if not already set, to prevent reset on subsequent checks
             $invalid_check = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='license_invalid_since' LIMIT 1");
             if ($invalid_check && mysqli_num_rows($invalid_check) == 0) {
-                mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_invalid_since', '" . time() . "')");
+                bc_store_license_option($connection_server, 'license_invalid_since', time());
             }
         }
         
@@ -678,8 +671,11 @@
         $license_key = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["license_key"])));
         $license_domain = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["license_domain"])));
 
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_key', '$license_key') ON DUPLICATE KEY UPDATE option_value='$license_key'");
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_domain', '$license_domain') ON DUPLICATE KEY UPDATE option_value='$license_domain'");
+        // Use the existence-checked upsert so the value actually sticks on both schema
+        // variants of sas_super_admin_options (plain INSERT ... ON DUPLICATE KEY UPDATE
+        // silently appends duplicates on the older non-unique-key layout).
+        bc_store_license_option($connection_server, 'license_key', $license_key);
+        bc_store_license_option($connection_server, 'license_domain', $license_domain);
 
         // Persist to activation file as well
         bc_write_activation($license_key);
@@ -710,17 +706,33 @@
         if ($http_code === 200 && !empty($response)) {
             $data = json_decode($response, true);
         }
+        $lock_file = __DIR__ . '/../func/.license.lock';
         if (is_array($data) && isset($data['status'])) {
-            $is_valid = ($data['status'] === 'active' || $data['status'] === 'valid' || (int)$data['status'] === 1);
+            $limit_exceeded = isset($data['message']) && stripos($data['message'], 'Limit exceeded') !== false;
+            $is_valid = ($data['status'] === 'active' || $data['status'] === 'valid' || (int)$data['status'] === 1 || $limit_exceeded);
+
+            // Hard lock ONLY on an explicit server-side suspension. Any other invalid status
+            // falls back to the 48h grace period so the admin can still correct the key.
+            if ($data['status'] === 'suspended') {
+                file_put_contents($lock_file, json_encode([
+                    'suspended_at' => time(),
+                    'reason' => $data['message'] ?? 'License suspended by administrator.'
+                ]));
+            } elseif ($is_valid && file_exists($lock_file)) {
+                @unlink($lock_file);
+            }
         } else {
             if (!empty($license_key) && strlen($license_key) >= 10) {
                 $is_valid = true;
+                if (file_exists($lock_file)) {
+                    @unlink($lock_file);
+                }
             }
         }
         
         $status_str = $is_valid ? 'valid' : 'invalid';
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_status', '$status_str') ON DUPLICATE KEY UPDATE option_value='$status_str'");
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_last_check', '" . date('Y-m-d H:i:s') . "') ON DUPLICATE KEY UPDATE option_value='" . date('Y-m-d H:i:s') . "'");
+        bc_store_license_option($connection_server, 'license_status', $status_str);
+        bc_store_license_option($connection_server, 'license_last_check', date('Y-m-d H:i:s'));
         
         if ($is_valid) {
             mysqli_query($connection_server, "DELETE FROM sas_super_admin_options WHERE option_name='license_invalid_since'");
@@ -729,7 +741,7 @@
             // Only set if not already set, to prevent reset on subsequent checks
             $invalid_check = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='license_invalid_since' LIMIT 1");
             if ($invalid_check && mysqli_num_rows($invalid_check) == 0) {
-                mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('license_invalid_since', '" . time() . "')");
+                bc_store_license_option($connection_server, 'license_invalid_since', time());
             }
             $_SESSION["product_purchase_response"] = "⚠️ License saved, but status is INVALID. Please verify key/domain.";
         }
