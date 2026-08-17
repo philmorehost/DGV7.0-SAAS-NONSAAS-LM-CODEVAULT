@@ -1343,70 +1343,19 @@
                     </div>
 
                     <div class="card shadow-sm border-0 rounded-4 mb-4">
-                        <div class="card-header bg-white py-3 border-0"><h5 class="fw-bold mb-0">Cron Job Configurations</h5></div>
+                        <div class="card-header bg-white py-3 border-0"><h5 class="fw-bold mb-0">Cron Jobs</h5></div>
                         <div class="card-body p-4">
                             <div class="bg-light p-4 rounded-4 border mb-4">
                                 <div class="d-flex align-items-center mb-3">
                                     <div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3">
                                         <i class="bi bi-clock-history text-primary fs-4"></i>
                                     </div>
-                                    <h6 class="fw-bold mb-0">Automated Subscription Checking</h6>
+                                    <h6 class="fw-bold mb-0">Platform Cron Jobs</h6>
                                 </div>
-                                <p class="small text-muted mb-4">To automate vendor subscription status updates and renewals, please set up a cron job on your server to execute once every 24 hours (e.g., at 00:00).</p>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase">Recommended Command Path</label>
-                                    <div class="input-group mb-2 shadow-sm">
-                                        <input type="text" class="form-control bg-white font-monospace small" value="/usr/local/bin/php <?php echo realpath(dirname(__FILE__) . '/../cron/check_expirations.php'); ?>" readonly id="cronPath1">
-                                        <button class="btn btn-primary" type="button" onclick="copyText('Cron path copied', document.getElementById('cronPath1').value)">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2 text-primary small">
-                                        <i class="bi bi-info-circle"></i>
-                                        <span>Ensure the PHP binary path matches your server environment.</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-light p-4 rounded-4 border">
-                                <div class="d-flex align-items-center mb-3">
-                                    <div class="bg-info bg-opacity-10 p-2 rounded-3 me-3">
-                                        <i class="bi bi-envelope-at text-info fs-4"></i>
-                                    </div>
-                                    <h6 class="fw-bold mb-0">Subscription Reminders</h6>
-                                </div>
-                                <p class="small text-muted mb-4">Send automatic email notifications to vendors before their subscription expires (e.g., 7 days, 3 days, and 1 day remaining).</p>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase">Recommended Command Path</label>
-                                    <div class="input-group mb-2 shadow-sm">
-                                        <input type="text" class="form-control bg-white font-monospace small" value="/usr/local/bin/php <?php echo realpath(dirname(__FILE__) . '/../cron/subscription_reminders.php'); ?>" readonly id="cronPath2">
-                                        <button class="btn btn-info text-white" type="button" onclick="copyText('Reminder path copied', document.getElementById('cronPath2').value)">
-                                            <i class="bi bi-clipboard text-white"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-light p-4 rounded-4 border mb-4 mt-4">
-                                <div class="d-flex align-items-center mb-3">
-                                    <div class="bg-primary bg-opacity-10 p-2 rounded-3 me-3">
-                                        <i class="bi bi-cloud-arrow-down text-primary fs-4"></i>
-                                    </div>
-                                    <h6 class="fw-bold mb-0">System Automated Updates (OTA)</h6>
-                                </div>
-                                <p class="small text-muted mb-4">To automate super admin over-the-air platform update installations with email notifications, set up a cron job on your server to execute once every 24 hours.</p>
-
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase">Recommended Command Path</label>
-                                    <div class="input-group mb-2 shadow-sm">
-                                        <input type="text" class="form-control bg-white font-monospace small" value="php <?php echo realpath(dirname(__FILE__) . '/cron_update.php'); ?>" readonly id="cronPathUpdates">
-                                        <button class="btn btn-primary" type="button" onclick="copyText('Update cron path copied', document.getElementById('cronPathUpdates').value)">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                </div>
+                                <p class="small text-muted mb-3">All platform cron jobs — requery, bulk queue, crypto, notifications, subscriptions, updates and AI automation — are managed in one place with their schedules and copyable crontab entries.</p>
+                                <a href="CronJobs.php" class="btn btn-primary rounded-pill fw-bold px-4 py-2">
+                                    <i class="bi bi-clock-history me-1"></i> Manage Cron Jobs
+                                </a>
                             </div>
 
                             <div class="bg-light p-4 rounded-4 border mt-4">
