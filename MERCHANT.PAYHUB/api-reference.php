@@ -180,7 +180,7 @@ include 'includes/header.php';
                 <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg font-bold text-[10px] sm:text-xs">POST</span>
                 <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Initialize Transaction</h2>
             </div>
-            <p class="text-slate-600 mb-8 leading-relaxed">Start a transaction from your server to get a checkout URL. Optionally provide customer details to automate Virtual Account generation.</p>
+            <p class="text-slate-600 mb-8 leading-relaxed">Start a transaction from your server to get a checkout URL. Optionally provide customer details to automate Virtual Account generation. <strong>Amount is in kobo</strong> (e.g. <code>500000</code> = ₦5,000).</p>
             <div class="bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
                 <pre>curl <?php echo BASE_URL; ?>api/transaction/initialize \
 -H "Authorization: Bearer YOUR_SECRET_KEY" \
@@ -189,6 +189,17 @@ include 'includes/header.php';
 -d name="John Doe" \
 -d phone="08012345678"</pre>
             </div>
+            <div class="mt-4 bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
+<pre>{
+  "status": true,
+  "message": "Transaction initialized",
+  "data": {
+    "authorization_url": "https://merchant.payhub.com.ng/checkout.php?ref=PH_abc&amount=500000&email=customer@email.com",
+    "access_code": "PH_abc123",
+    "reference": "PH_abc123"
+  }
+}</pre>
+            </div>
         </section>
 
         <section id="verify" class="mb-20 scroll-mt-40 md:scroll-mt-24">
@@ -196,11 +207,36 @@ include 'includes/header.php';
                 <span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg font-bold text-[10px] sm:text-xs">GET</span>
                 <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Verify Transaction</h2>
             </div>
-            <p class="text-slate-600 mb-8 leading-relaxed">Confirm the status of a transaction using its reference.</p>
+            <p class="text-slate-600 mb-8 leading-relaxed">Confirm the status of a transaction using its reference. This endpoint also performs a real-time gateway check, so it is the authoritative source of truth for a payment's status.</p>
             <div class="bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
                 <pre>curl <?php echo BASE_URL; ?>api/transaction/verify/:reference \
 -H "Authorization: Bearer YOUR_SECRET_KEY"</pre>
             </div>
+            <div class="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
+                <p class="font-bold mb-2">⚠️ Important — read the status correctly</p>
+                <p>Top-level <code>status: true</code> only means <em>"transaction retrieved"</em> — it does NOT mean paid. Use the <code>paid</code> boolean or <code>data.status</code> to determine the real outcome:</p>
+            </div>
+            <div class="mt-4 bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
+<pre>{
+  "status": true,
+  "message": "Transaction retrieved",
+  "paid": true,
+  "data": {
+    "id": 1,
+    "status": "success",
+    "payment_status": "success",
+    "paid": true,
+    "reference": "PH_abc123",
+    "amount": 10000,
+    "currency": "NGN",
+    "customer": { "email": "customer@email.com" },
+    "gateway_response": "Successful",
+    "created_at": "2025-01-01T00:00:00.000000Z",
+    "metadata": []
+  }
+}</pre>
+            </div>
+            <p class="text-slate-500 text-xs mt-3">Status values: <code>success</code>, <code>pending</code>, <code>failed</code>. <code>amount</code> is in <strong>kobo</strong>.</p>
         </section>
 
         <section id="reconcile" class="mb-20 scroll-mt-40 md:scroll-mt-24">
@@ -222,12 +258,33 @@ include 'includes/header.php';
                 <span class="bg-rose-100 text-rose-700 px-3 py-1 rounded-lg font-bold text-[10px] sm:text-xs">POST</span>
                 <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Initialize Payout</h2>
             </div>
-            <p class="text-slate-600 mb-8 leading-relaxed">Withdraw funds from your Payhub wallet directly to your registered settlement bank account. Requests are subject to 24-hour rolling limits and administrative review policies.</p>
+            <p class="text-slate-600 mb-8 leading-relaxed">Withdraw funds from your Payhub wallet directly to your registered settlement bank account. Requests are subject to 24-hour rolling limits and administrative review policies. <strong>Amount is in naira</strong>.</p>
             <div class="bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
                 <pre>curl <?php echo BASE_URL; ?>api/payout/initialize \
 -H "Authorization: Bearer YOUR_SECRET_KEY" \
 -d amount=5000 \
 -d reason="Inventory Purchase"</pre>
+            </div>
+            <div class="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
+                <p class="font-bold mb-2">⚠️ Important — read the status correctly</p>
+                <p>Top-level <code>status: true</code> only means the request was accepted. A payout can be <strong>queued for review</strong> (<code>processed: false</code>) or actually <strong>executed</strong> (<code>processed: true</code>). Check the <code>processed</code> boolean or <code>data.status</code>.</p>
+            </div>
+            <div class="mt-4 bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
+<pre>{
+  "status": true,
+  "message": "Payout initiated successfully",
+  "processed": true,
+  "data": {
+    "id": 12,
+    "amount": 5100,
+    "fee": 100,
+    "net_amount": 5000,
+    "status": "processed",
+    "processed": true,
+    "bank": "GTBank",
+    "account": "0123456789"
+  }
+}</pre>
             </div>
         </section>
 
@@ -253,15 +310,38 @@ include 'includes/header.php';
                 <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg font-bold text-[10px] sm:text-xs">WEBHOOK</span>
                 <h2 class="text-xl sm:text-2xl font-bold text-slate-900">Webhooks & Callback</h2>
             </div>
-            <p class="text-slate-600 mb-8 leading-relaxed">Configure your server to listen for events from Payhub.</p>
+            <p class="text-slate-600 mb-8 leading-relaxed">Configure your server to listen for events from Payhub. Every webhook is signed so you can verify it genuinely came from Payhub before trusting it.</p>
             <div class="bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
                 <pre>{
   "event": "charge.success",
   "data": {
-    "reference": "ref_123",
+    "id": 1,
+    "reference": "PH_abc123",
     "amount": 10000,
-    "status": "success"
+    "status": "success",
+    "currency": "NGN",
+    "customer": { "email": "customer@email.com" },
+    "metadata": [],
+    "channel": "card",
+    "paid_at": "2025-01-01T00:00:00.000000Z"
   }
+}</pre>
+            </div>
+
+            <div class="mt-6 bg-blue-50 border border-blue-200 rounded-2xl p-5 text-sm text-blue-800">
+                <p class="font-bold mb-2">🔐 Verifying the webhook signature</p>
+                <p class="mb-3">Each webhook is signed with your secret key and the signature is sent in the <code class="font-mono">X-Payhub-Signature</code> header:</p>
+                <p class="font-mono bg-white rounded-lg p-3 text-xs">X-Payhub-Signature = HMAC-SHA256(raw JSON body, YOUR_SECRET_KEY)</p>
+                <p class="mt-3 mb-2">Always verify this signature before crediting a wallet, and reject any request whose signature does not match.</p>
+            </div>
+            <div class="mt-4 bg-slate-900 rounded-2xl p-6 sm:p-8 text-slate-300 font-mono text-xs sm:text-sm overflow-x-auto">
+<pre>// PHP — verify the webhook came from Payhub
+$body = file_get_contents('php://input');
+$signature = $_SERVER['HTTP_X_PAYHUB_SIGNATURE'] ?? '';
+$expected = hash_hmac('sha256', $body, 'YOUR_SECRET_KEY');
+if (!hash_equals($expected, $signature)) {
+    http_response_code(401);
+    exit('Invalid signature');
 }</pre>
             </div>
         </section>

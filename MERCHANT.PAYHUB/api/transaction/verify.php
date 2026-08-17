@@ -44,6 +44,8 @@ if (!$tx) {
     exit;
 }
 
+$response = null; // gateway verification response (set below only when a live check runs)
+
 // If local status is not success, check the gateway directly (Real-time reconciliation)
 if ($tx['status'] !== 'success') {
     $is_test = (bool)$tx['is_test'];
@@ -77,13 +79,17 @@ if ($tx['status'] !== 'success') {
 }
 
 echo json_encode([
-    'status' => true,
+    'status' => true,                         // = "transaction retrieved" (NOT "paid")
     'message' => 'Transaction retrieved',
+    'paid' => ($tx['status'] === 'success'),  // authoritative boolean: is this payment complete?
     'data' => [
         'id' => $tx['id'],
-        'status' => $tx['status'],
+        'status' => $tx['status'],                          // real status: success | pending | failed
+        'payment_status' => $tx['status'],                  // alias for clarity
+        'paid' => ($tx['status'] === 'success'),            // boolean mirror of the above
         'reference' => $tx['reference'],
-        'amount' => $tx['amount'] * 100,
+        'amount' => $tx['amount'] * 100,                    // amount in KOBO
+        'currency' => 'NGN',
         'customer' => [
             'email' => $tx['customer_email']
         ],

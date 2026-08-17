@@ -154,14 +154,16 @@ try {
     ");
 
     echo json_encode([
-        'status' => true,
+        'status' => true,               // = "request accepted" (NOT "money sent")
         'message' => $needs_review ? 'Payout request queued for review' : 'Payout initiated successfully',
+        'processed' => !$needs_review,  // boolean: false = queued for review, true = transfer executed
         'data' => [
             'id' => $payoutId,
-            'amount' => $total_deduction,
+            'amount' => $total_deduction,   // total (amount + fee) in NAIRA
             'fee' => $fee,
-            'net_amount' => $amount,
+            'net_amount' => $amount,        // amount in NAIRA
             'status' => $needs_review ? 'pending' : 'processed',
+            'processed' => !$needs_review,
             'bank' => $target_bank_name,
             'account' => $target_account_number
         ]

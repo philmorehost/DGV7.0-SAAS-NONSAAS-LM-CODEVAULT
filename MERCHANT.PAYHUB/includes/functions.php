@@ -670,7 +670,7 @@ function calculate_fees($amount, $is_international = false, $userId = null) {
 function trigger_merchant_webhook($transactionId) {
     try {
         $db = Database::connect();
-        $stmt = $db->prepare("SELECT t.*, u.webhook_url FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.id = ?");
+        $stmt = $db->prepare("SELECT t.*, u.webhook_url, u.secret_key, u.test_secret_key FROM transactions t JOIN users u ON t.user_id = u.id WHERE t.id = ?");
         $stmt->execute([$transactionId]);
         $tx = $stmt->fetch();
 
@@ -690,12 +690,27 @@ function trigger_merchant_webhook($transactionId) {
                 ]
             ];
 
+            $body = json_encode($payload);
+            // SECURITY: sign the webhook body so the merchant can verify it genuinely
+            // came from PayHub. Signature = HMAC-SHA256(raw JSON body, merchant secret key),
+            // sent in the X-Payhub-Signature header. Verify with the SAME secret key.
+            $secret = (string)($tx['secret_key'] ?? '');
+            if ($secret === '' && !empty($tx['test_secret_key'])) {
+                // Test-mode merchants may not have a live key yet — sign with the test key.
+                $secret = (string)$tx['test_secret_key'];
+            }
+            $signature = $secret !== '' ? hash_hmac('sha256', $body, $secret) : '';
+
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $tx['webhook_url']);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            $headers = ['Content-Type: application/json'];
+            if ($signature !== '') {
+                $headers[] = 'X-Payhub-Signature: ' . $signature;
+            }
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
             curl_setopt($ch, CURLOPT_TIMEOUT, 10);
             $res = curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -912,4 +927,36 @@ function sendEmail($to, $subject, $body) {
         error_log("sendEmail: PHPMailer error sending to {$to}: " . $e->getMessage());
         return false;
     }
+}
+
+/**
+ * Email address(es) that should receive administrative notifications.
+ * Combines admin users (users.role = 'admin') with the configured SMTP user
+ * (used elsewhere as the admin contact) as a fallback — deduplicated.
+ */
+function getAdminEmails() {
+    $emails = [];
+    try {
+        $db = Database::connect();
+        $rows = $db->query("SELECT email FROM users WHERE role = 'admin'")->fetchAll();
+        foreach ($rows as $r) {
+            if (!empty($r['email'])) $emails[] = strtolower(trim($r['email']));
+        }
+    } catch (Exception $e) {
+        error_log("getAdminEmails: " . $e->getMessage());
+    }
+    $fallback = getConfig('smtp_user');
+    if (!empty($fallback)) $emails[] = strtolower(trim($fallback));
+    return array_values(array_unique($emails));
+}
+
+/**
+ * Send an email notification to all platform administrators (best-effort).
+ */
+function notifyAdmins($subject, $body) {
+    $sent = false;
+    foreach (getAdminEmails() as $email) {
+        if (sendEmail($email, $subject, $body)) $sent = true;
+    }
+    return $sent;
 }

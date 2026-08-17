@@ -15,7 +15,7 @@ unset($_SESSION['compliance_notice']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_compliance') {
     // CSRF Validation
-    if (!isset($_POST['csrf_token']) || !validate_csrf_token($_POST['csrf_token'])) {
+    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
         $error_msg = "Security token mismatch. Please refresh and try again.";
     } else {
         $id_type = sanitize($_POST['id_type']);
@@ -120,8 +120,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $stmt->execute($params);
                 $success_msg = "Compliance documents submitted successfully! Our compliance team will review your application.";
                 $user = getAuthUser();
-            } catch (Exception $e) {
-                $error_msg = "Submission failed: " . $e->getMessage();
+            } catch (\Throwable $e) {
+                error_log("Compliance submission error (user {$user['id']}): " . $e->getMessage());
+                $error_msg = "Submission failed. Please try again or contact support.";
             }
         }
     }

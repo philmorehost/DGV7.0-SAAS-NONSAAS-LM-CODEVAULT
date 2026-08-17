@@ -44,6 +44,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $stmt->execute([$ticketId, $userId, $message]);
 
                 $db->commit();
+
+                // Notify admins about the new support request
+                notifyAdmins(
+                    "New Support Request: " . $subject,
+                    "<p>A new support request was submitted through the support form.</p>
+                     <p><strong>Email:</strong> " . htmlspecialchars($email) . "<br>
+                     <strong>Subject:</strong> " . htmlspecialchars($subject) . "<br>
+                     <strong>Message:</strong><br>" . nl2br(htmlspecialchars($message)) . "</p>"
+                );
+
                 $success_msg = "Message sent! Our team will get back to you shortly.";
                 // Reset captcha
                 $_SESSION['captcha_a'] = rand(1, 10);

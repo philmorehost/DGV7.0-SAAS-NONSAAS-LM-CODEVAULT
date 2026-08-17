@@ -129,11 +129,15 @@ try {
         if ($columnCheck && $columnCheck->rowCount() === 0) {
             $pdo->exec("ALTER TABLE `transactions` ADD COLUMN `license_id` INT NULL AFTER `id`");
         }
-        // Attempt to add foreign key constraint if not already present
-        try {
-            $pdo->exec("ALTER TABLE `transactions` ADD CONSTRAINT `fk_transactions_license` FOREIGN KEY (`license_id`) REFERENCES licenses(id) ON DELETE SET NULL");
-        } catch (PDOException $e) {
-            // Constraint may already exist; ignore safely
+        // Add the foreign key only if not already present — avoids running an
+        // unnecessary ALTER on every request (which competes for the metadata lock).
+        $fkCheck = $pdo->query("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'transactions' AND CONSTRAINT_NAME = 'fk_transactions_license'");
+        if ($fkCheck && (int)$fkCheck->fetchColumn() === 0) {
+            try {
+                $pdo->exec("ALTER TABLE `transactions` ADD CONSTRAINT `fk_transactions_license` FOREIGN KEY (`license_id`) REFERENCES licenses(id) ON DELETE SET NULL");
+            } catch (PDOException $e) {
+                // Constraint may already exist; ignore safely
+            }
         }
     } catch (PDOException $e) {
         // Migration may fail if table structure is unexpected; log and continue
@@ -185,9 +189,34 @@ try {
     ) ENGINE=InnoDB");
 
     // 3. Alter licenses table
-    // Alter licenses status column to allow suspended and expired
+    // Alter licenses status column to allow suspended and expired.
+    // IMPORTANT: only run the ALTER when the column is still the legacy ENUM type.
+    // Previously this ran unconditionally on EVERY request, so concurrent requests
+    // competed for the table's metadata lock and deadlocked (SQLSTATE 1213).
     try {
-        $pdo->exec("ALTER TABLE `licenses` MODIFY COLUMN `status` VARCHAR(50) DEFAULT 'active'");
+        $statusInfo = $pdo->query("SHOW COLUMNS FROM `licenses` WHERE Field = 'status'");
+        $statusCol = $statusInfo ? $statusInfo->fetch(PDO::FETCH_ASSOC) : null;
+        $statusType = strtolower(trim((string)($statusCol['Type'] ?? '')));
+        if ($statusCol && strpos($statusType, 'enum') === 0) {
+            // Retry a few times on deadlock (SQLSTATE 1213) — the ALTER competes with
+            // concurrent requests/transactions for the table's metadata lock.
+            $migrated = false;
+            for ($attempt = 0; $attempt < 3 && !$migrated; $attempt++) {
+                try {
+                    $pdo->exec("ALTER TABLE `licenses` MODIFY COLUMN `status` VARCHAR(50) DEFAULT 'active'");
+                    $migrated = true;
+                } catch (PDOException $e2) {
+                    $isDeadlock = (strpos($e2->getMessage(), '1213') !== false);
+                    if (!$isDeadlock || $attempt >= 2) {
+                        throw $e2;
+                    }
+                    usleep(200000); // 200ms backoff before retrying
+                }
+            }
+            if ($migrated) {
+                error_log("Database: licenses.status widened from ENUM to VARCHAR(50)");
+            }
+        }
     } catch (PDOException $e) {
         error_log("Database migration warning (licenses.status modify): " . $e->getMessage());
     }

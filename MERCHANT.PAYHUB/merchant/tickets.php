@@ -28,6 +28,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
             $db->commit();
             $success_msg = "Ticket opened successfully!";
+
+            // Notify admins when a merchant opens a new ticket
+            if ($user['role'] !== 'admin') {
+                notifyAdmins(
+                    "New Support Ticket: " . $subject,
+                    "<p><strong>Merchant:</strong> " . htmlspecialchars($user['business_name'] ?? $user['email']) . "<br>
+                     <strong>Priority:</strong> " . htmlspecialchars($priority) . "<br>
+                     <strong>Subject:</strong> " . htmlspecialchars($subject) . "<br>
+                     <strong>Message:</strong><br>" . nl2br(htmlspecialchars($message)) . "</p>"
+                );
+            }
         } catch (Exception $e) {
             $db->rollBack();
             $error_msg = "Failed to open ticket: " . $e->getMessage();
@@ -39,6 +50,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $db->prepare("INSERT INTO ticket_messages (ticket_id, user_id, message) VALUES (?, ?, ?)");
         if ($stmt->execute([$ticketId, $user['id'], $message])) {
             $success_msg = "Message sent!";
+
+            // Notify admins when a merchant replies to a ticket
+            if ($user['role'] !== 'admin') {
+                notifyAdmins(
+                    "New Reply on Ticket #" . $ticketId,
+                    "<p><strong>Merchant:</strong> " . htmlspecialchars($user['business_name'] ?? $user['email']) . "<br>
+                     <strong>Ticket ID:</strong> #" . (int)$ticketId . "<br>
+                     <strong>Message:</strong><br>" . nl2br(htmlspecialchars($message)) . "</p>"
+                );
+            }
         } else {
             $error_msg = "Failed to send message.";
         }
