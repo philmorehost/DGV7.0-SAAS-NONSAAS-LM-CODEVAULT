@@ -38,6 +38,7 @@
 			curl_setopt($curl_legigitdataway_user_request, CURLOPT_HTTPHEADER, $curl_legigitdataway_user_http_headers);
 			$curl_legigitdataway_user_result = curl_exec($curl_legigitdataway_user_request);
 			$curl_legigitdataway_user_json_result = json_decode($curl_legigitdataway_user_result, true);
+			if(!is_array($curl_legigitdataway_user_json_result)){ $curl_legigitdataway_user_json_result = array(); }
 			curl_close($curl_legigitdataway_user_request);
 
 			if($curl_legigitdataway_user_json_result["status"] == "success"){
@@ -59,6 +60,7 @@
 				curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
 				$curl_result = curl_exec($curl_request);
 				$curl_json_result = json_decode($curl_result, true);
+				if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 				
 
 				if(curl_errno($curl_request)){

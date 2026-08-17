@@ -31,6 +31,7 @@
     $api_response_status = 3;
    } else {
     $curl_json_result = json_decode($curl_result, true);
+    if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 
     if (isset($curl_json_result["statuscode"])) {
      $sc = $curl_json_result["statuscode"];

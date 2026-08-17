@@ -37,6 +37,7 @@ if (in_array($product_name, array_keys($sms_service_provider_alter_code))) {
         $curl_result     = curl_exec($curl_request);
         $http_code       = curl_getinfo($curl_request, CURLINFO_HTTP_CODE);
         $curl_json_result = json_decode($curl_result, true);
+        if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 
         // Log outcome for debugging
         $log_dir  = $_SERVER['DOCUMENT_ROOT'] . '/logs';

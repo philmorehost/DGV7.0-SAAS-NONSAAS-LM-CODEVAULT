@@ -32,6 +32,7 @@ $curl_postfields_data = json_encode(array("network" => $localserver_isp_code, "a
 curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
 $curl_result = curl_exec($curl_request);
 $curl_json_result = json_decode($curl_result, true);
+if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 
 
 if (curl_errno($curl_request)) {

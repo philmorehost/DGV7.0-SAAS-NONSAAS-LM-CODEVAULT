@@ -126,6 +126,7 @@ if (in_array($product_name, array_keys($sms_service_provider_alter_code))) {
                 $curl_json_result         = array();
             } else {
                 $curl_json_result = json_decode($curl_result, true);
+                if(!is_array($curl_json_result)){ $curl_json_result = array(); }
                 if (!is_array($curl_json_result)) {
                     sms_ls_log("ERROR: Response is not valid JSON", array("raw" => substr($curl_result, 0, 500)));
                     $api_response             = "failed";

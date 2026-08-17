@@ -31,10 +31,12 @@
     $api_response_status = 3;
    } else {
     $curl_json_result = json_decode($curl_result, true);
+    if(!is_array($curl_json_result)){ $curl_json_result = array(); }
     
     if (json_last_error() !== JSON_ERROR_NONE) {
         $clean_result = trim($curl_result, "\xEF\xBB\xBF");
         $curl_json_result = json_decode($clean_result, true);
+        if(!is_array($curl_json_result)){ $curl_json_result = array(); }
     }
     
     if (is_array($curl_json_result)) {

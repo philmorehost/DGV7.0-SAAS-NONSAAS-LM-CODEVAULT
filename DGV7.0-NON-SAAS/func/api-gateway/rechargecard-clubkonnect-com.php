@@ -34,10 +34,12 @@
 			curl_setopt($curl_request, CURLOPT_SSL_VERIFYPEER, true);
 			$curl_result = curl_exec($curl_request);
 			$curl_json_result = json_decode($curl_result, true);
+			if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 			*/
 			
 			/*$curl_json_result = '{"TXN_EPhIN":[ {"transactionid":"6329036611","transactiondate":"12/20/2019 9:08:00 PM","mobilenetwork":"MTN","amount":"100","batchno":"82057","sno":"00000003802132587","pin":"14819613681469920"},{"transactionid":"6329036611","transactiondate":"12/20/2019 9:08:00 PM","mobilenetwork":"MTN","amount":"100","batchno":"82057","sno":"00000003802132587","pin":"64819613681469920"}]}';
-			$curl_json_result = json_decode($curl_json_result, true);*/
+			$curl_json_result = json_decode($curl_json_result, true);
+			if(!is_array($curl_json_result)){ $curl_json_result = array(); }*/
 			var_dump($curl_url);
 			if(count($curl_json_result["TXN_EPIN"]) > 0){
 				$recharge_pin_stack = "";

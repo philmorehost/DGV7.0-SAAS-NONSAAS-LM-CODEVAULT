@@ -47,6 +47,7 @@ if (mysqli_num_rows($check_authorized_user_before_recharge) >= 1) {
 
   $GetrechargecardJSON = curl_exec($rechargecardPurchase);
   $rechargecardJSONObj = json_decode($GetrechargecardJSON, true);
+  if(!is_array($rechargecardJSONObj)){ $rechargecardJSONObj = array(); }
 
   //Debugger
   // fwrite(fopen("rechargecard-alrahuzdata.txt", "a"), $GetrechargecardJSON . "\n\n");

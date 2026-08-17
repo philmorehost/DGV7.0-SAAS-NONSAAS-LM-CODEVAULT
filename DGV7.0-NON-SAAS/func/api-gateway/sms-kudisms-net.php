@@ -29,6 +29,7 @@
    curl_setopt($curl_request, CURLOPT_SSL_VERIFYPEER, false);
    $curl_result = curl_exec($curl_request);
    $curl_json_result = json_decode($curl_result, true);
+   if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 
 
 			if(curl_errno($curl_request)){

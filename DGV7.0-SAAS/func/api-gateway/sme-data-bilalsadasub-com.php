@@ -36,6 +36,7 @@
    curl_setopt($curl_bilalsadasub_user_request, CURLOPT_HTTPHEADER, $curl_bilalsadasub_user_http_headers);
    $curl_bilalsadasub_user_result = curl_exec($curl_bilalsadasub_user_request);
    $curl_bilalsadasub_user_json_result = json_decode($curl_bilalsadasub_user_result, true);
+   if(!is_array($curl_bilalsadasub_user_json_result)){ $curl_bilalsadasub_user_json_result = array(); }
    curl_close($curl_bilalsadasub_user_request);
 
    if(curl_errno($curl_request)){
@@ -64,6 +65,7 @@
     curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
     $curl_result = curl_exec($curl_request);
     $curl_json_result = json_decode($curl_result, true);
+    if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 
 
     if(in_array($curl_json_result["status"],array("success"))){
