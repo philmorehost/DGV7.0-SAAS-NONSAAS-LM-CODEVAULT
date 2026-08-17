@@ -650,9 +650,18 @@ if ($create_daily_validated_product_tracker_table) {
     }
 }
 
+//Create Service Abuse Events Table (tracks per-user, per-number daily-limit hits to detect number-cycling abuse)
+$create_service_abuse_events_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_service_abuse_events (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, username VARCHAR(100) NOT NULL, product_id VARCHAR(50) NOT NULL, product_type VARCHAR(30) NOT NULL, date_created DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+
+if ($create_service_abuse_events_table) {
+    $check_idx_abuse = mysqli_query($connection_server, "SHOW INDEX FROM `sas_service_abuse_events` WHERE Key_name = 'idx_abuse_user_day'");
+    if (mysqli_num_rows($check_idx_abuse) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_service_abuse_events` ADD INDEX idx_abuse_user_day (vendor_id, username, date_created)");
+    }
+}
+
 //Create Daily Product Limit Table
 $create_daily_product_limit_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_daily_purchase_limit (vendor_id INT UNSIGNED NOT NULL, `limit` INT UNSIGNED NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-
 if ($create_daily_product_limit_table) {
     $existing_cols = [];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_daily_purchase_limit");

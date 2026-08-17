@@ -1503,6 +1503,26 @@ function productIDBlockChecker($item_id)
 	}
 }
 
+/**
+ * Lazily ensures the service-abuse tracking table exists (for existing installs
+ * where bc-tables.php already ran). Tracks per-user, per-number daily-limit hits
+ * so number-cycling abuse can be detected and escalated.
+ */
+function bc_ensure_service_abuse_table()
+{
+	global $connection_server;
+	static $done = false;
+	if ($done) return;
+	$done = true;
+	if (!$connection_server) return;
+
+	mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_service_abuse_events (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, username VARCHAR(100) NOT NULL, product_id VARCHAR(50) NOT NULL, product_type VARCHAR(30) NOT NULL, date_created DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+	$check_idx = mysqli_query($connection_server, "SHOW INDEX FROM `sas_service_abuse_events` WHERE Key_name = 'idx_abuse_user_day'");
+	if ($check_idx && mysqli_num_rows($check_idx) == 0) {
+		mysqli_query($connection_server, "ALTER TABLE `sas_service_abuse_events` ADD INDEX idx_abuse_user_day (vendor_id, username, date_created)");
+	}
+}
+
 function productIDPurchaseChecker($item_id, $product_type, $purchase_method = "WEB")
 {
 	global $connection_server, $get_logged_user_details;
@@ -1549,16 +1569,42 @@ function productIDPurchaseChecker($item_id, $product_type, $purchase_method = "W
 		} else {
             // Only block if it's an actual transaction attempt
             if ($purchase_method !== "WEB_CHECK") {
-                // Number-level lock only: do NOT suspend the account, disable the API,
-                // or block the IP. The daily-count check above already blocks further
-                // purchases on THIS phone number, while the user's account stays active
-                // for other numbers. The admin can allow this number again by whitelisting
-                // it (Validated IDs) or raising the daily limit.
+                // Record the over-limit attempt and detect number-cycling abuse.
+                bc_ensure_service_abuse_table();
+                $today_abuse = date("Y-m-d");
+                $item_id_esc = mysqli_real_escape_string($connection_server, $item_id);
+                $product_type_esc = mysqli_real_escape_string($connection_server, $product_type);
+                $uname_esc = mysqli_real_escape_string($connection_server, $uname);
 
-                // Report to the admin immediately for review.
-                $get_vendor_det = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='" . $get_logged_user_details["vendor_id"] . "' LIMIT 1"));
-                $subject = "SECURITY ALERT: Daily limit reached for phone number - " . $item_id;
-                $body = "Dear Admin,<br><br>User <b>" . $get_logged_user_details["username"] . "</b> has hit the Daily Transaction Limit of <b>$limit</b> for <b>$product_type</b> on phone number <b>$item_id</b> (via $purchase_method).<br><br>This number is now locked for the rest of today, but the user's account remains active. To allow purchases on this number again, whitelist it in Validated IDs or raise the daily limit.<br><br>Please review this activity.";
+                // Dedupe per number per day
+                $abuse_exists = mysqli_query($connection_server, "SELECT id FROM sas_service_abuse_events WHERE vendor_id='$vid' AND username='$uname_esc' AND product_id='$item_id_esc' AND date_created='$today_abuse' LIMIT 1");
+                if (!$abuse_exists || mysqli_num_rows($abuse_exists) == 0) {
+                    mysqli_query($connection_server, "INSERT INTO sas_service_abuse_events (vendor_id, username, product_id, product_type, date_created) VALUES ('$vid', '$uname_esc', '$item_id_esc', '$product_type_esc', '$today_abuse')");
+                }
+
+                // How many DIFFERENT numbers has this user hit the limit on today?
+                $distinct_abuse = mysqli_query($connection_server, "SELECT COUNT(DISTINCT product_id) as c FROM sas_service_abuse_events WHERE vendor_id='$vid' AND username='$uname_esc' AND date_created='$today_abuse'");
+                $distinct_count = (int)(mysqli_fetch_assoc($distinct_abuse)['c'] ?? 0);
+
+                $get_vendor_det = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vid' LIMIT 1"));
+                $client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
+
+                if ($distinct_count >= 2) {
+                    // ESCALATION: user is cycling numbers to bypass the daily limit —
+                    // suspend the account, disable the API, and block the IP immediately.
+                    alterUser($uname, "api_status", "2");
+                    alterUser($uname, "status", "2");
+                    if (!empty($client_ip)) {
+                        $settings = getBruteForceSettings($vid);
+                        blockIP($client_ip, $vid, $settings['block_duration'], "Abuse: hit daily limits on $distinct_count different phone numbers");
+                    }
+                    $subject = "URGENT: Account suspended for number-cycling abuse - " . $uname;
+                    $body = "Dear Admin,<br><br>User <b>" . $uname . "</b> has hit the Daily Transaction Limit on <b>$distinct_count different phone numbers</b> today (latest: <b>$item_id</b> for <b>$product_type</b>).<br><br>This indicates the user is cycling numbers to bypass the limit. The account has been <b>suspended</b>, API access <b>disabled</b>, and the IP <b>blocked</b>.<br><br>Please review and, if this is a legitimate user (e.g. a reseller), whitelist their numbers in Validated IDs and un-suspend the account.";
+                } else {
+                    // FIRST offense: lock this number only and notify for review.
+                    $subject = "SECURITY ALERT: Daily limit reached for phone number - " . $item_id;
+                    $body = "Dear Admin,<br><br>User <b>" . $uname . "</b> has hit the Daily Transaction Limit of <b>$limit</b> for <b>$product_type</b> on phone number <b>$item_id</b> (via $purchase_method).<br><br>This number is now locked for the rest of today, but the user's account remains active. To allow purchases on this number again, whitelist it in Validated IDs or raise the daily limit.<br><br>Please review this activity.";
+                }
                 sendVendorEmail($get_vendor_det["email"], $subject, $body);
             }
 
