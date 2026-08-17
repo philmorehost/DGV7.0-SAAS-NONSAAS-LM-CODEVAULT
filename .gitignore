@@ -1,2 +1,5 @@
 *.zip
 .DS_Store
+
+# Local image backup created during asset smushing (not part of the app)
+DGV7.0-SAAS/asset-backup/
