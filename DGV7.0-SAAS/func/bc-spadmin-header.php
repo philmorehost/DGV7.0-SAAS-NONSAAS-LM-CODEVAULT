@@ -446,6 +446,13 @@ if (!isset($get_all_super_admin_site_details) || empty($get_all_super_admin_site
       </li>
 
       <li class="nav-item">
+        <a class="nav-link <?php echo ($current_page == 'CronJobs.php') ? 'active_item' : 'collapsed'; ?>" href="<?php echo $web_http_host; ?>/bc-spadmin/CronJobs.php">
+          <i class="bi bi-clock-history"></i>
+          <span>Cron Jobs</span> 
+        </a>
+      </li>
+
+      <li class="nav-item">
         <a class="nav-link <?php echo ($current_page == 'UpdateSystem.php') ? 'active_item' : 'collapsed'; ?>" href="<?php echo $web_http_host; ?>/bc-spadmin/UpdateSystem.php">
           <i class="bi bi-cloud-arrow-down-fill"></i>
           <span>Update System</span> 

@@ -1853,23 +1853,32 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                     <div class="card shadow-sm border-0 rounded-4 mb-4">
                         <div class="card-header bg-white py-3 border-0"><h5 class="fw-bold mb-0">System Cronjobs For Automation</h5></div>
                         <div class="card-body p-4">
+                            <div class="alert alert-info border-0 rounded-4 p-3 mb-4 small">
+                                <i class="bi bi-info-circle-fill me-1"></i>
+                                These cron jobs are configured centrally by the <strong>Super Admin</strong> on the platform server and run for all vendors automatically — you do not need to set them up individually. If background processing (auto-requery, bulk queue, notifications, etc.) is not working, please contact the Super Admin to confirm the platform cron jobs are active.
+                            </div>
+
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-muted text-uppercase">Cron Requery URL</label>
+                                <label class="form-label small fw-bold text-muted text-uppercase">Cron Requery Processor Cron Path</label>
                                 <div class="input-group">
-                                    <input type="text" value="<?php echo $web_http_host . "/automated-cron-requery.php"; ?>" class="form-control bg-light" readonly />
+                                    <input type="text" value="php <?php echo realpath(__DIR__ . '/../cron/process_requery_queue.php'); ?>" class="form-control bg-light" readonly />
                                     <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
                                 </div>
+                                <div class="small text-muted mt-1">Run every 1 minute to automatically re-check pending transactions and settle (charge/refund) them for all vendors.</div>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted text-uppercase">Bulk Airtime/Data Queue Processor Cron Path</label>
                                 <div class="input-group">
-                                    <input type="text" value="wget -qO- <?php echo $web_http_host; ?>/cron/process_bulk_queue.php" class="form-control bg-light" readonly />
+                                    <input type="text" value="php <?php echo realpath(__DIR__ . '/../cron/process_bulk_queue.php'); ?>" class="form-control bg-light" readonly />
                                     <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
                                 </div>
                                 <div class="small text-muted mt-1">Run this every 1 minute so bulk airtime/data batches keep processing in the background even if the customer closes their browser or their connection drops mid-submission.</div>
-                            </div>
-
+                                <div class="input-group mt-2">
+                                    <input type="text" value="wget -qO- <?php echo $web_http_host; ?>/cron/process_bulk_queue.php" class="form-control bg-light" readonly />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="small text-muted mt-1">HTTP fallback (only if your host supports HTTP-triggered cron).</div>
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted text-uppercase">Crypto Automation Cron Path</label>
                                 <div class="input-group">
