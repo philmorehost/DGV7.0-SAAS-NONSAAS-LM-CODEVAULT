@@ -67,7 +67,7 @@ if (in_array($product_name, array_keys($data_service_provider_alter_code))) {
   if (!in_array($curl_json_result["Status"], array("successful", "pending"))) {
    $api_response = "failed";
    $api_response_text = $curl_json_result["Status"];
-   $api_response_description = "Transaction Failed | " . strtoupper(str_replace(["_", "-"], " ", $quantity)) . " credited to 234" . substr($phone_no, "1", "11") . " failed";
+   $api_response_description = "Transaction Failed | " . strtoupper(str_replace(["_", "-"], " ", $quantity)) . " data to 234" . substr($phone_no, "1", "11") . " was not delivered";
    $api_response_status = 3;
   }
  } else {

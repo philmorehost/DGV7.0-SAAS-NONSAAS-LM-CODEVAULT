@@ -53,7 +53,7 @@ if(!is_array($curl_json_result) || !isset($curl_json_result["code"])){
    if(!in_array($curl_json_result["code"],array("000","044","001","099"))){
 	$api_response = "failed";
 	$api_response_text = $curl_json_result["response_description"];
-	$api_response_description = "Transaction Failed | ".strtoupper(str_replace(["_","-"]," ",$quantity))." credited to 234".substr($phone_no, "1", "11")." failed";
+	$api_response_description = "Transaction Failed | ".strtoupper(str_replace(["_","-"]," ",$quantity))." data to 234".substr($phone_no, "1", "11")." was not delivered";
 	$api_response_status = 3;
    }
   }else{
