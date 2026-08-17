@@ -27,8 +27,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $full_name     = sanitize($_POST['full_name'] ?? '');
             $business_name = sanitize($_POST['business_name'] ?? '');
 
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $error = 'Please enter a valid email address';
+            // Anti-bot guards: hidden honeypot field must be empty,
+            // and the form can't be legitimately submitted within 3s of render.
+            if (!empty($_POST['company_url']) || (isset($_SESSION['register_form_ts']) && (time() - (int)$_SESSION['register_form_ts']) < 3)) {
+                log_email_abuse($email ?: 'unknown', 'REGISTER_HONEYPOT_BLOCK');
+                // Fake success so the bot learns nothing.
+                $_SESSION['pending_registration'] = [
+                    'email'         => 'blocked@invalid.local',
+                    'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT),
+                    'full_name'     => 'Blocked',
+                    'business_name' => 'Blocked',
+                ];
+                $step = 'otp';
+            } elseif (is_burner_email($email)) {
+                $error = 'Please use a valid, deliverable email address.';
+                log_email_abuse($email, 'REGISTER_BURNER_EMAIL');
             } elseif (strlen($password) < 6) {
                 $error = 'Password must be at least 6 characters';
             } elseif (empty($full_name)) {
@@ -41,6 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$email]);
                 if ($stmt->fetch()) {
                     $error = 'Email already registered';
+                } elseif (!email_send_allowed($email, 'registration')) {
+                    $error = 'Too many verification attempts. Please try again later.';
+                    log_email_abuse($email, 'REGISTER_RATE_LIMITED');
                 } else {
                     // Store pending registration in session
                     $_SESSION['pending_registration'] = [
@@ -90,6 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'resend_otp') {
             if (empty($_SESSION['pending_registration'])) {
                 $error = 'Session expired. Please start over.';
+            } elseif (!email_send_allowed($_SESSION['pending_registration']['email'], 'registration')) {
+                $error = 'Too many verification attempts. Please try again later.';
+                log_email_abuse($_SESSION['pending_registration']['email'], 'REGISTER_RESEND_RATE_LIMITED');
             } else {
                 $email = $_SESSION['pending_registration']['email'];
                 if (generate_and_send_otp($email, 'registration')) {
@@ -199,9 +218,15 @@ $pending_email = htmlspecialchars($_SESSION['pending_registration']['email'] ?? 
 
                 <?php else: ?>
                 <!-- Step 1: Registration Form -->
+                <?php $_SESSION['register_form_ts'] = time(); ?>
                 <form method="POST" class="space-y-5">
                     <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>">
                     <input type="hidden" name="action" value="send_otp">
+                    <!-- Honeypot: hidden from humans, auto-filled by bots. Must stay empty. -->
+                    <div class="hidden" aria-hidden="true">
+                        <label for="company_url">Leave this field empty</label>
+                        <input type="text" id="company_url" name="company_url" tabindex="-1" autocomplete="off" value="">
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-bold text-slate-700 mb-2">Full Name</label>

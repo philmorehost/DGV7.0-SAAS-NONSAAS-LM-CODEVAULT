@@ -301,6 +301,130 @@ function sanitize($data) {
 }
 
 /**
+ * Returns the best-effort client IP address (Cloudflare/proxy aware).
+ */
+function getClientIp() {
+    $candidates = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'];
+    foreach ($candidates as $key) {
+        if (!empty($_SERVER[$key])) {
+            $ip = trim(explode(',', $_SERVER[$key])[0]);
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+    }
+    return '0.0.0.0';
+}
+
+/**
+ * True when the email is a known test/disposable/burner address
+ * (or fails a DNS MX/A lookup). Used to stop OTP spam via public forms.
+ */
+function is_burner_email($email) {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return true;
+    }
+    $domain = strtolower(substr($email, strrpos($email, '@') + 1));
+    $burner = [
+        'example.com', 'example.org', 'example.net', 'test.com', 'tests.com', 'test.test',
+        'localhost', 'invalid', 'mailinator.com', 'guerrillamail.com', 'sharklasers.com',
+        'guerrillamail.info', 'temp-mail.org', 'yopmail.com', 'throwawaymail.com',
+        '10minutemail.com', 'getnada.com', 'dispostable.com', 'maildrop.cc', 'mytemp.email',
+        'trashmail.com', 'spam4.me', 'fakeinbox.com', 'mailnesia.com', 'mintemail.com',
+        'maileater.com', 'emailondeck.com', 'tempmail.com', 'jetable.org', 'tempinbox.com',
+        'burnermail.io', '1secmail.com', 'tmail.io', 'mailto.plus', 'tempr.email',
+        'fakemail.net', 'emailfake.com', 'mailcatch.com', 'buzzr.ga', 'gufum.com',
+        'telegmail.com', 'pookmail.com', 'mailsac.com', 'spambox.us', 'spamgourmet.com',
+        'meltmail.com', 'mailnull.com', '30minutemail.com', 'cuvox.de', 'einrot.com',
+        'hu2.pl', 'zippymail.info', 'xww.ro', 'mintyhash.com',
+    ];
+    if (in_array($domain, $burner, true)) {
+        return true;
+    }
+    // Cheap DNS sanity check (best-effort, skipped if unavailable).
+    if (function_exists('checkdnsrr')) {
+        try {
+            if (!@checkdnsrr($domain, 'MX') && !@checkdnsrr($domain, 'A')) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+            // Never block a legitimate user because a DNS lookup failed.
+        }
+    }
+    return false;
+}
+
+/**
+ * Lazy-create the email abuse guard table.
+ */
+function ensure_email_guard_table() {
+    try {
+        $db = Database::connect();
+        $db->exec("CREATE TABLE IF NOT EXISTS email_guard_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            ip VARCHAR(45) NOT NULL,
+            purpose VARCHAR(32) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_email_guard_email (email, purpose, created_at),
+            INDEX idx_email_guard_ip (ip, purpose, created_at)
+        ) ENGINE=InnoDB");
+    } catch (\Throwable $e) {
+        // Non-fatal: fall back to allowing the request if the table can't be created.
+    }
+}
+
+/**
+ * Rate-limit guard for OTP/email sends. Returns true if the send is allowed.
+ * Limits: 3 per email per hour, 6 per IP per hour (per purpose).
+ */
+function email_send_allowed($email, $purpose) {
+    ensure_email_guard_table();
+    try {
+        $db  = Database::connect();
+        $ip  = getClientIp();
+        $key = strtolower(trim($email));
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) FROM email_guard_log
+             WHERE email = ? AND purpose = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)"
+        );
+        $stmt->execute([$key, $purpose]);
+        if ((int)$stmt->fetchColumn() >= 3) {
+            return false;
+        }
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) FROM email_guard_log
+             WHERE ip = ? AND purpose = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)"
+        );
+        $stmt->execute([$ip, $purpose]);
+        if ((int)$stmt->fetchColumn() >= 6) {
+            return false;
+        }
+        $stmt = $db->prepare("INSERT INTO email_guard_log (email, ip, purpose) VALUES (?, ?, ?)");
+        $stmt->execute([$key, $ip, $purpose]);
+        return true;
+    } catch (\Throwable $e) {
+        return true; // Never block legitimate signups because of a DB hiccup.
+    }
+}
+
+/**
+ * Log a suspected email-abuse / bot attempt to logs/email_abuse.log
+ */
+function log_email_abuse($email, $reason, $ip = null) {
+    $ip = $ip ?: getClientIp();
+    $log_dir = BASE_PATH . 'logs';
+    if (!is_dir($log_dir)) {
+        @mkdir($log_dir, 0755, true);
+    }
+    @file_put_contents(
+        $log_dir . '/email_abuse.log',
+        "[" . date('Y-m-d H:i:s') . "] {$reason} | email={$email} | ip={$ip}\n",
+        FILE_APPEND | LOCK_EX
+    );
+}
+
+/**
  * Robustly get input for API requests, merging GET, POST, and JSON body.
  */
 function get_api_input() {
