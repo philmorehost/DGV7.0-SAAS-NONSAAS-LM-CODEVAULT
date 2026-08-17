@@ -1549,21 +1549,29 @@ function productIDPurchaseChecker($item_id, $product_type, $purchase_method = "W
 		} else {
             // Only block if it's an actual transaction attempt
             if ($purchase_method !== "WEB_CHECK") {
-                // Record abuse attempt for IP blocking
-                recordServiceAbuse($get_logged_user_details["username"], $_SERVER['REMOTE_ADDR'], $get_logged_user_details["vendor_id"]);
+                // CLI-safe IP: background (bulk) processing has no REMOTE_ADDR — skip IP
+                // blocking there instead of blocking an empty/wrong IP.
+                $client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
+
+                if (!empty($client_ip)) {
+                    // Record abuse attempt for IP blocking
+                    recordServiceAbuse($get_logged_user_details["username"], $client_ip, $get_logged_user_details["vendor_id"]);
+                }
 
                 // Strict enforcement for ALL methods: Disable API and block account immediately if limit exceeded
                 alterUser($get_logged_user_details["username"], "api_status", "2");
                 alterUser($get_logged_user_details["username"], "status", "2");
 
                 // Block IP immediately
-                $settings = getBruteForceSettings($get_logged_user_details["vendor_id"]);
-                blockIP($_SERVER['REMOTE_ADDR'], $get_logged_user_details["vendor_id"], $settings['block_duration'], "Exceeded Daily Transaction Limit for $product_type ($purchase_method)");
+                if (!empty($client_ip)) {
+                    $settings = getBruteForceSettings($get_logged_user_details["vendor_id"]);
+                    blockIP($client_ip, $get_logged_user_details["vendor_id"], $settings['block_duration'], "Exceeded Daily Transaction Limit for $product_type ($purchase_method)");
+                }
 
                 // Send notification to Admin
                 $get_vendor_det = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='" . $get_logged_user_details["vendor_id"] . "' LIMIT 1"));
                 $subject = "SECURITY ALERT: Service Abuse Detected - " . $get_logged_user_details["username"];
-                $body = "Dear Admin,<br><br>The user <b>" . $get_logged_user_details["username"] . "</b> has exceeded the Daily Transaction Limit of <b>$limit</b> for <b>$product_type</b> (ID: $item_id) via $purchase_method.<br><br>As per security policy, their access has been disabled, their account locked, and their IP address (" . $_SERVER['REMOTE_ADDR'] . ") has been blocked.<br><br>Please review this activity.";
+                $body = "Dear Admin,<br><br>The user <b>" . $get_logged_user_details["username"] . "</b> has exceeded the Daily Transaction Limit of <b>$limit</b> for <b>$product_type</b> (ID: $item_id) via $purchase_method.<br><br>As per security policy, their access has been disabled, their account locked, and their IP address (" . ($client_ip !== '' ? $client_ip : 'N/A - background process') . ") has been blocked.<br><br>Please review this activity.";
                 sendVendorEmail($get_vendor_det["email"], $subject, $body);
             }
 
@@ -1613,9 +1621,12 @@ function updateProductPurchaseList($reference, $item_id, $product_type)
 			alterUser($get_logged_user_details["username"], "status", "2");
 			alterUser($get_logged_user_details["username"], "api_status", "2");
 
-			// Block IP immediately
-			$settings = getBruteForceSettings($get_logged_user_details["vendor_id"]);
-			blockIP($_SERVER['REMOTE_ADDR'], $get_logged_user_details["vendor_id"], $settings['block_duration'], "Exceeded Daily Transaction Limit for $product_type after purchase");
+			// Block IP immediately (CLI/bulk has no REMOTE_ADDR — skip IP block there)
+			$client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
+			if (!empty($client_ip)) {
+				$settings = getBruteForceSettings($get_logged_user_details["vendor_id"]);
+				blockIP($client_ip, $get_logged_user_details["vendor_id"], $settings['block_duration'], "Exceeded Daily Transaction Limit for $product_type after purchase");
+			}
 
 			// Email Beginning
 			$vendor_id_func = resolveVendorID();
