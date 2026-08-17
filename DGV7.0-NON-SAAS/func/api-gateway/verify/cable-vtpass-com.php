@@ -43,6 +43,9 @@
         	curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
         	$curl_result = curl_exec($curl_request);
         	$curl_json_result = json_decode($curl_result, true);
+if(!is_array($curl_json_result) || !isset($curl_json_result["code"])){
+        	$curl_json_result = array("code" => "999", "response_description" => "Invalid API response. Check your API credentials and try again.");
+        	}
         	
 
         	if(in_array($curl_json_result["code"],array("000"))){
