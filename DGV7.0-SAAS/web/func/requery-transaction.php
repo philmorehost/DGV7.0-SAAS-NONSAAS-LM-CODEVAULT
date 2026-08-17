@@ -68,30 +68,43 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                 }
 
                                 if ($api_response == "failed") {
-                                    removeProductPurchaseList($requery_reference);
-                                    $reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
-                                    $phone_no = $get_transaction_data["product_unique_id"];
-                                    $amount = $get_transaction_data["amount"];
-                                    $discounted_amount = $get_transaction_data["discounted_amount"];
-                                    $previous_purchase_method = $get_transaction_data["mode"];
-                                    $t_username = $get_transaction_data["username"];
+                                    // ─── Idempotency fix: atomically claim the transaction (status 2→3)
+                                    // so it can only be refunded ONCE. A duplicate or concurrent requery
+                                    // run sees 0 affected rows and skips the credit — previously a
+                                    // transaction that stayed pending was refunded again on every run.
+                                    $claim_result = mysqli_query($connection_server, "UPDATE sas_transactions SET status='3' WHERE reference='$requery_reference' AND status='2'");
+                                    $claimed = ($claim_result && mysqli_affected_rows($connection_server) > 0);
 
-                                    chargeOtherUser($t_username, "credit", $phone_no, "Refund", $reference_2, "", $amount, $discounted_amount, "Refund for Ref:<i>'$requery_reference'</i>", $previous_purchase_method, $_SERVER["HTTP_HOST"] ?? "CRON", "1");
+                                    if ($claimed) {
+                                        removeProductPurchaseList($requery_reference);
+                                        $reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
+                                        $phone_no = $get_transaction_data["product_unique_id"];
+                                        $amount = $get_transaction_data["amount"];
+                                        $discounted_amount = $get_transaction_data["discounted_amount"];
+                                        $previous_purchase_method = $get_transaction_data["mode"];
+                                        $t_username = $get_transaction_data["username"];
 
-                                    // Robust User Lookup for Email
-                                    $get_user_info = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_transaction_data['vendor_id']."' AND username='$t_username' LIMIT 1"));
+                                        $refund_result = chargeOtherUser($t_username, "credit", $phone_no, "Refund", $reference_2, "", $amount, $discounted_amount, "Refund for Ref:<i>'$requery_reference'</i>", $previous_purchase_method, $_SERVER["HTTP_HOST"] ?? "CRON", "1");
 
-                                    // Email Beginning
-                                    $log_template_encoded_text_array = array("{firstname}" => $get_user_info["firstname"] ?? $t_username, "{lastname}" => $get_user_info["lastname"] ?? "", "{amount}" => "N" . $discounted_amount, "{description}" => "Refund for Ref No: $requery_reference");
-                                    $raw_log_template_subject = getUserEmailTemplate('user-refund', 'subject');
-                                    $raw_log_template_body = getUserEmailTemplate('user-refund', 'body');
-                                    foreach ($log_template_encoded_text_array as $array_key => $array_val) {
-                                        $raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
-                                        $raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
+                                        if ($refund_result !== "success") {
+                                            @file_put_contents(__DIR__ . "/../../logs/requery_refund_failures.log", "[" . date('Y-m-d H:i:s') . "] Refund FAILED for ref $requery_reference user $t_username amount $discounted_amount\n", FILE_APPEND);
+                                        }
+
+                                        // Robust User Lookup for Email
+                                        $get_user_info = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_transaction_data['vendor_id']."' AND username='$t_username' LIMIT 1"));
+
+                                        // Email Beginning
+                                        $log_template_encoded_text_array = array("{firstname}" => $get_user_info["firstname"] ?? $t_username, "{lastname}" => $get_user_info["lastname"] ?? "", "{amount}" => "N" . $discounted_amount, "{description}" => "Refund for Ref No: $requery_reference");
+                                        $raw_log_template_subject = getUserEmailTemplate('user-refund', 'subject');
+                                        $raw_log_template_body = getUserEmailTemplate('user-refund', 'body');
+                                        foreach ($log_template_encoded_text_array as $array_key => $array_val) {
+                                            $raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
+                                            $raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
+                                        }
+                                        sendVendorEmail($get_user_info["email"] ?? "", $raw_log_template_subject, $raw_log_template_body);
+                                        // Email End
                                     }
-                                    sendVendorEmail($get_user_info["email"] ?? "", $raw_log_template_subject, $raw_log_template_body);
-                                    // Email End
-                                    alterTransaction($requery_reference, "status", $api_response_status);
+
                                     alterTransaction($requery_reference, "description", $api_response_description);
                                     $json_response_array = array("status" => "failed", "desc" => "Transaction Failed");
                                     $json_response_encode = json_encode($json_response_array, true);
