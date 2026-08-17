@@ -1549,29 +1549,16 @@ function productIDPurchaseChecker($item_id, $product_type, $purchase_method = "W
 		} else {
             // Only block if it's an actual transaction attempt
             if ($purchase_method !== "WEB_CHECK") {
-                // CLI-safe IP: background (bulk) processing has no REMOTE_ADDR — skip IP
-                // blocking there instead of blocking an empty/wrong IP.
-                $client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
+                // Number-level lock only: do NOT suspend the account, disable the API,
+                // or block the IP. The daily-count check above already blocks further
+                // purchases on THIS phone number, while the user's account stays active
+                // for other numbers. The admin can allow this number again by whitelisting
+                // it (Validated IDs) or raising the daily limit.
 
-                if (!empty($client_ip)) {
-                    // Record abuse attempt for IP blocking
-                    recordServiceAbuse($get_logged_user_details["username"], $client_ip, $get_logged_user_details["vendor_id"]);
-                }
-
-                // Strict enforcement for ALL methods: Disable API and block account immediately if limit exceeded
-                alterUser($get_logged_user_details["username"], "api_status", "2");
-                alterUser($get_logged_user_details["username"], "status", "2");
-
-                // Block IP immediately
-                if (!empty($client_ip)) {
-                    $settings = getBruteForceSettings($get_logged_user_details["vendor_id"]);
-                    blockIP($client_ip, $get_logged_user_details["vendor_id"], $settings['block_duration'], "Exceeded Daily Transaction Limit for $product_type ($purchase_method)");
-                }
-
-                // Send notification to Admin
+                // Report to the admin immediately for review.
                 $get_vendor_det = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='" . $get_logged_user_details["vendor_id"] . "' LIMIT 1"));
-                $subject = "SECURITY ALERT: Service Abuse Detected - " . $get_logged_user_details["username"];
-                $body = "Dear Admin,<br><br>The user <b>" . $get_logged_user_details["username"] . "</b> has exceeded the Daily Transaction Limit of <b>$limit</b> for <b>$product_type</b> (ID: $item_id) via $purchase_method.<br><br>As per security policy, their access has been disabled, their account locked, and their IP address (" . ($client_ip !== '' ? $client_ip : 'N/A - background process') . ") has been blocked.<br><br>Please review this activity.";
+                $subject = "SECURITY ALERT: Daily limit reached for phone number - " . $item_id;
+                $body = "Dear Admin,<br><br>User <b>" . $get_logged_user_details["username"] . "</b> has hit the Daily Transaction Limit of <b>$limit</b> for <b>$product_type</b> on phone number <b>$item_id</b> (via $purchase_method).<br><br>This number is now locked for the rest of today, but the user's account remains active. To allow purchases on this number again, whitelist it in Validated IDs or raise the daily limit.<br><br>Please review this activity.";
                 sendVendorEmail($get_vendor_det["email"], $subject, $body);
             }
 
@@ -1617,23 +1604,16 @@ function updateProductPurchaseList($reference, $item_id, $product_type)
 		elseif (in_array($product_type, $shared_types)) $limit = $get_user_daily_purchase_limit_details["limit_phone"] ?? $limit;
 
 		if ($tx_count > $limit) {
-			//Block Suspicious Accounts & Disable API immediately
-			alterUser($get_logged_user_details["username"], "status", "2");
-			alterUser($get_logged_user_details["username"], "api_status", "2");
-
-			// Block IP immediately (CLI/bulk has no REMOTE_ADDR — skip IP block there)
-			$client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
-			if (!empty($client_ip)) {
-				$settings = getBruteForceSettings($get_logged_user_details["vendor_id"]);
-				blockIP($client_ip, $get_logged_user_details["vendor_id"], $settings['block_duration'], "Exceeded Daily Transaction Limit for $product_type after purchase");
-			}
+			// Number-level lock only (post-purchase/race path): do NOT suspend the
+			// account or block the IP — the daily-count check blocks this number, and
+			// the user's account stays active for other numbers.
 
 			// Email Beginning
 			$vendor_id_func = resolveVendorID();
 			$get_vendor_det = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vendor_id_func' LIMIT 1"));
 			$transaction_template_encoded_text_array = array("{admin_firstname}" => $get_vendor_det["firstname"], "{admin_lastname}" => $get_vendor_det["lastname"], "{username}" => $get_logged_user_details["username"], "{firstname}" => $get_logged_user_details["firstname"], "{lastname}" => $get_logged_user_details["lastname"], "{limit}" => $limit, "{type}" => $product_type, "{id}" => $item_id);
 			$raw_transaction_template_subject = "URGENT: Max Daily Tx Limit Reached - User: {username}";
-			$raw_transaction_template_body = "Dear {admin_firstname}, " . "\n\n" . "User {username} ({firstname} {lastname}) has hit the Max Daily Limit ({limit}) for {type} ID: {id}." . "\n\n" . "Actions taken automatically:" . "\n" . "- User account status set to Suspended" . "\n" . "- User API access DISABLED" . "\n" . "- Abuse attempt logged for IP blocking" . "\n\n" . "Please review this activity immediately.";
+			$raw_transaction_template_body = "Dear {admin_firstname}, " . "\n\n" . "User {username} ({firstname} {lastname}) has hit the Max Daily Limit ({limit}) for {type} ID: {id}." . "\n\n" . "This phone number is now locked for the rest of today, but the user's account remains active. To allow purchases on this number again, whitelist it in Validated IDs or raise the daily limit." . "\n\n" . "Please review this activity immediately.";
 			foreach ($transaction_template_encoded_text_array as $array_key => $array_val) {
 				$raw_transaction_template_subject = str_replace($array_key, $array_val, $raw_transaction_template_subject);
 				$raw_transaction_template_body = str_replace($array_key, $array_val, $raw_transaction_template_body);

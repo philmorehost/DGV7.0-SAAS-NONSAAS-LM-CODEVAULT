@@ -143,10 +143,9 @@ function bc_process_bulk_queue_item($connection_server, array $item)
 
     bc_mark_queue_item_done($connection_server, $item['id'], $reference ?? null, $desc);
 
-    if (($decoded['status'] ?? '') === 'failed' && strpos($desc, 'ABUSE LIMIT') !== false) {
-        // Same abuse-limit short-circuit the old synchronous loop used — stop the rest of this batch.
-        mysqli_query($connection_server, "UPDATE sas_bulk_queue_items SET status='done', response_desc='Skipped: batch stopped after abuse limit hit', processed_at=NOW() WHERE batch_number='" . mysqli_real_escape_string($connection_server, $item['batch_number']) . "' AND status IN ('pending','processing')");
-    }
+    // Number-level abuse limit: only THIS number is blocked (the daily-count check),
+    // so the remaining items in the batch keep processing. The item itself has already
+    // been marked done above with its ABUSE LIMIT response.
 }
 
 function bc_mark_queue_item_done($connection_server, $id, $reference, $desc)
