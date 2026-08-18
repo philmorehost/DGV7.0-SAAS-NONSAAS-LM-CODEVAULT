@@ -51,7 +51,7 @@
 
             // Check if first purchase
             $check_first = mysqli_query($connection_server, "SELECT id FROM sas_transactions WHERE username='".$get_logged_user_details['username']."' AND product_unique_id='AI_TOKEN' LIMIT 1");
-            $is_first = (mysqli_num_rows($check_first) == 0);
+            $is_first = (!$check_first || mysqli_num_rows($check_first) == 0);
 
             $desc = "Purchase of $token_amount AI Tokens";
             $final_tokens = $token_amount;

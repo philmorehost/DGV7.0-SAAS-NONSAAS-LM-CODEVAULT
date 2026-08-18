@@ -1864,6 +1864,7 @@ while ($c = mysqli_fetch_assoc($ai_user_cols)) $ai_user_existing[] = $c['Field']
 $ai_user_new_cols = [
     'ai_status'            => "TINYINT(1) DEFAULT 0 COMMENT 'AI service enabled for this user'",
     'ai_token_balance'     => "INT DEFAULT 0 COMMENT 'Current AI token balance'",
+    'ai_voice_status'      => "TINYINT(1) DEFAULT 0 COMMENT 'AI voice assistant enabled for this user'",
     'ai_quota_limit'       => "INT DEFAULT 1000 COMMENT 'Monthly AI request quota'",
     'ai_requests_used'     => "INT DEFAULT 0 COMMENT 'Monthly AI requests used'",
     'onboarding_stage'     => "TINYINT(1) DEFAULT 0 COMMENT '0=new,1=api,2=pricing,3=done'",
@@ -1887,6 +1888,8 @@ $ai_vendor_new_cols = [
     'ai_per_tx_cost'          => "INT DEFAULT 5 COMMENT 'AI tokens burned per successful AI call'",
     'voice_tx_threshold'      => "INT DEFAULT 100 COMMENT 'Successful txns required to unlock voice'",
     'ai_price_per_1k_tokens'  => "DECIMAL(10,2) DEFAULT 100.00 COMMENT 'NGN price for 1000 AI tokens'",
+    'ai_user_token_price'     => "DECIMAL(10,2) DEFAULT 150.00 COMMENT 'NGN price per 1000 AI tokens for end users'",
+    'ai_bonus_tokens'         => "INT DEFAULT 500 COMMENT 'Welcome bonus tokens on first AI token purchase'",
     'ai_model_assigned'       => "VARCHAR(50) DEFAULT 'gemini-1.5-flash' COMMENT 'Cloud AI model assigned to vendor tier'",
     'ai_request_status'       => "VARCHAR(20) DEFAULT NULL COMMENT 'NULL=none, pending=requested, approved=active, rejected=denied'",
     'ai_status'               => "TINYINT(1) DEFAULT 0",
@@ -1899,6 +1902,16 @@ foreach ($ai_vendor_new_cols as $col => $def) {
     if (!in_array($col, $ai_vendor_existing)) {
         mysqli_query($connection_server, "ALTER TABLE sas_vendors ADD COLUMN `$col` $def");
     }
+}
+
+// ─── AI COLUMN MIGRATIONS: sas_transactions (product_unique_id) ──
+$ai_tx_cols = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_transactions");
+$ai_tx_existing = [];
+if ($ai_tx_cols) {
+    while ($c = mysqli_fetch_assoc($ai_tx_cols)) $ai_tx_existing[] = $c['Field'];
+}
+if (!in_array('product_unique_id', $ai_tx_existing)) {
+    mysqli_query($connection_server, "ALTER TABLE sas_transactions ADD COLUMN `product_unique_id` VARCHAR(225) NOT NULL DEFAULT '' AFTER product_id");
 }
 
 // ─── AI GLOBAL OPTIONS: sas_super_admin_options ────────────
