@@ -285,17 +285,23 @@ switch ($action_type) {
 
         // 1. Get Intent (either parsed now or passed from client or session)
         if ($action_type === 'execute_vtu') {
-            $intent = $json_input['intent'] ?? $_POST['intent'] ?? $_SESSION['ai_pending_vtu'] ?? null;
+            $intent = $json_input['intent'] ?? null;
+            if (empty($intent) && !empty($_POST['intent'])) {
+                $intent = is_string($_POST['intent']) ? json_decode($_POST['intent'], true) : $_POST['intent'];
+            }
+            if (empty($intent)) $intent = $_SESSION['ai_pending_vtu'] ?? null;
         } else {
             $intent = $ai->parseVtuIntent($prompt_raw, $model_to_use, $context_data);
         }
 
-        if (!$intent || $intent['confidence'] < 50) {
+        $intent_confidence = (is_array($intent) && isset($intent['confidence'])) ? (int)$intent['confidence'] : 0;
+
+        if (!is_array($intent) || $intent_confidence < 50) {
              // Log failed intent for training
              $esc_prompt = mysqli_real_escape_string($connection_server, substr($prompt_raw, 0, 1000));
              $esc_intent = mysqli_real_escape_string($connection_server, json_encode($intent));
              $esc_model  = mysqli_real_escape_string($connection_server, $model_to_use);
-             @mysqli_query($connection_server, "INSERT INTO sas_ai_failed_intents (vendor_id, username, prompt, raw_intent, model_used, confidence) VALUES ('$safe_vid', '$esc_name', '$esc_prompt', '$esc_intent', '$esc_model', '".($intent['confidence'] ?? 0)."')");
+             @mysqli_query($connection_server, "INSERT INTO sas_ai_failed_intents (vendor_id, username, prompt, raw_intent, model_used, confidence) VALUES ('$safe_vid', '$esc_name', '$esc_prompt', '$esc_intent', '$esc_model', '$intent_confidence')");
 
              ai_send_json(200, ['status' => 'error', 'code' => 'LOW_CONFIDENCE', 'message' => 'I could not understand that command clearly. Please ensure you mention the service (e.g., Airtime), Network (e.g., MTN), and Amount or Data Plan.']);
         }
