@@ -2,8 +2,8 @@
     include("../func/bc-spadmin-config.php");
 
     $user_id_number = mysqli_real_escape_string($connection_server, preg_replace("/[^0-9]+/", "", trim(strip_tags($_GET["userID"]))));
-    $select_user = mysqli_query($connection_server, "SELECT u.*, v.site_url FROM sas_users u LEFT JOIN sas_vendors v ON u.vendor_id = v.id WHERE u.id='$user_id_number'");
-    if(mysqli_num_rows($select_user) > 0){
+    $select_user = mysqli_query($connection_server, "SELECT u.*, v.website_url FROM sas_users u LEFT JOIN sas_vendors v ON u.vendor_id = v.id WHERE u.id='$user_id_number'");
+    if($select_user && mysqli_num_rows($select_user) > 0){
         $get_user_details = mysqli_fetch_array($select_user);
     }
 
