@@ -1,10 +1,34 @@
 <?php
+/**
+ * bc_extractEmailBodyContent()
+ * Reduces a full HTML document (e.g. a GrapesJS export) to just the content inside
+ * <body>…</body>. Email clients should receive an HTML *fragment*, not a full
+ * <!DOCTYPE html><html><head><style>…</style></head><body>…</body></html> document —
+ * sending the complete document is what makes some mail clients render the raw HTML
+ * source instead of a formatted email.
+ */
+function bc_extractEmailBodyContent($html)
+{
+    if (!is_string($html)) return '';
+    if (preg_match('/<body[^>]*>(.*)<\/body>/is', $html, $m)) {
+        return trim($m[1]);
+    }
+    $html = preg_replace('/<!DOCTYPE[^>]*>/i', '', $html);
+    $html = preg_replace('/<html[^>]*>/i', '', $html);
+    $html = preg_replace('/<\/html>/i', '', $html);
+    $html = preg_replace('/<head[^>]*>.*?<\/head>/is', '', $html);
+    $html = preg_replace('/<body[^>]*>/i', '', $html);
+    $html = preg_replace('/<\/body>/i', '', $html);
+    return trim($html);
+}
+
 function mailDesignTemplate($title, $message, $details_array, $show_app = true) {
     global $connection_server;
 
-    // If the message is already a full HTML document (e.g. from GrapesJS), return it as is
+    // If the message is already a full HTML document (e.g. from GrapesJS), reduce it to
+    // its body content so it is sent as an email-safe fragment (see helper above).
     if (strpos($message, '<html') !== false || strpos($message, '<body') !== false) {
-        return $message;
+        return bc_extractEmailBodyContent($message);
     }
 
     if (!empty(trim(strip_tags($title)))) {
@@ -80,67 +104,49 @@ function mailDesignTemplate($title, $message, $details_array, $show_app = true) 
             </tr>';
     }
 
-    $html = '<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>' . $mail_title . '</title>
-    <style>
-        body { margin: 0; padding: 0; background-color: #f4f7fa; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        .wrapper { width: 100%; table-layout: fixed; background-color: #f4f7fa; padding-bottom: 40px; }
-        .main { background-color: #ffffff; margin: 0 auto; width: 100%; max-width: 600px; border-spacing: 0; color: #1e293b; border-radius: 12px; overflow: hidden; margin-top: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .header { background-color: #ffffff; padding: 25px; text-align: center; border-bottom: 1px solid #f1f5f9; }
-        .content { padding: 30px 25px; line-height: 1.6; }
-        .footer { padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
-        .button { display: inline-block; padding: 12px 24px; background-color: ' . $primary_color . '; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 20px; }
-        @media only screen and (max-width: 600px) {
-            .main { width: 95% !important; margin-top: 10px !important; }
-        }
-    </style>
-</head>
-<body>
-    <div class="wrapper">
-        <table class="main" role="presentation">
-            <tr>
-                <td class="header">
-                    <img src="' . $website_logo_url . '" alt="' . $website_url . '" style="max-height: 60px; width: auto;">
-                </td>
-            </tr>
-            <tr>
-                <td class="content">
-                    <h2 style="margin-top: 0; color: #0f172a; font-size: 20px;">' . $mail_title . '</h2>
-                    <div style="color: #475569; font-size: 16px;">
-                        ' . $mail_message . '
-                    </div>
+    $html = '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;table-layout:fixed;background-color:#f4f7fa;padding-bottom:40px;">
+        <tr>
+            <td align="center" style="padding:20px 0;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="background-color:#ffffff;margin:0 auto;width:100%;max-width:600px;border-spacing:0;color:#1e293b;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td align="center" style="background-color:#ffffff;padding:25px;text-align:center;border-bottom:1px solid #f1f5f9;">
+                            <img src="' . $website_logo_url . '" alt="' . $website_url . '" style="max-height:60px;width:auto;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:30px 25px;line-height:1.6;">
+                            <h2 style="margin-top:0;color:#0f172a;font-size:20px;">' . $mail_title . '</h2>
+                            <div style="color:#475569;font-size:16px;">
+                                ' . $mail_message . '
+                            </div>
 
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="https://' . $website_url . '/web/Dashboard.php" class="button">Go to Dashboard</a>
-                    </div>
-                </td>
-            </tr>
-            ' . $services_html . '
-            ' . $app_section_html . '
-            <tr>
-                <td style="padding: 20px 25px; background-color: #f8fafc; text-align: center; border-top: 1px solid #f1f5f9;">
-                    <p style="margin: 0; font-size: 14px; color: #64748b; font-weight: bold;">Need Help?</p>
-                    <div style="margin-top: 10px;">
-                        <a href="mailto:' . htmlspecialchars($vendor_support_email) . '" style="text-decoration: none; color: #287bff; font-size: 14px; font-weight: bold; margin: 0 10px;">
-                            Contact Support
-                        </a>
-                    </div>
-                </td>
-            </tr>
-            <tr>
-                <td class="footer">
-                    <p style="margin-bottom: 10px;">&copy; ' . date("Y") . ' ' . $website_url . '. All rights reserved.</p>
-                    <p style="margin: 0;">You received this email because you are a registered member of our platform.</p>
-                </td>
-            </tr>
-        </table>
-    </div>
-</body>
-</html>';
+                            <div style="text-align:center;margin-top:30px;">
+                                <a href="https://' . $website_url . '/web/Dashboard.php" style="display:inline-block;padding:12px 24px;background-color:' . $primary_color . ';color:#ffffff !important;text-decoration:none;border-radius:8px;font-weight:bold;margin-top:20px;">Go to Dashboard</a>
+                            </div>
+                        </td>
+                    </tr>
+                    ' . $services_html . '
+                    ' . $app_section_html . '
+                    <tr>
+                        <td style="padding:20px 25px;background-color:#f8fafc;text-align:center;border-top:1px solid #f1f5f9;">
+                            <p style="margin:0;font-size:14px;color:#64748b;font-weight:bold;">Need Help?</p>
+                            <div style="margin-top:10px;">
+                                <a href="mailto:' . htmlspecialchars($vendor_support_email) . '" style="text-decoration:none;color:#287bff;font-size:14px;font-weight:bold;margin:0 10px;">
+                                    Contact Support
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px;text-align:center;">
+                            <p style="margin:0 0 10px 0;color:#64748b;font-size:12px;">&copy; ' . date("Y") . ' ' . $website_url . '. All rights reserved.</p>
+                            <p style="margin:0;color:#64748b;font-size:12px;">You received this email because you are a registered member of our platform.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>';
 
     return $html;
 }

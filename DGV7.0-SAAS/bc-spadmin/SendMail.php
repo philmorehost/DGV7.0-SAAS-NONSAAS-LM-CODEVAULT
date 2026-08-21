@@ -36,6 +36,15 @@ if (isset($_GET['action'])) {
         }
         exit;
     }
+
+    // ─── Cancel any vendor's queued/sending campaign (super admin) ─────────
+    if ($_GET['action'] == 'cancel_campaign') {
+        header('Content-Type: application/json');
+        $cid = (int)($_GET['campaign_id'] ?? 0);
+        $result = bc_cancel_mail_campaign($connection_server, $cid, 0, true);
+        echo json_encode($result);
+        exit;
+    }
 }
 
 if (isset($_POST["send-mail"])) {
@@ -104,6 +113,9 @@ if (isset($_POST["send-mail"])) {
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
+
+// Campaigns still queued/sending across all vendors, so the super admin can cancel any pending dispatch.
+$active_campaigns = bc_get_active_mail_campaigns($connection_server, 50);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -210,6 +222,32 @@ if (isset($_POST["send-mail"])) {
                     </button>
                 </div>
             </form>
+
+            <hr class="my-4">
+
+            <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Queued / Sending Campaigns</h6>
+            <?php if (empty($active_campaigns)): ?>
+                <p class="text-muted small mb-0">No campaigns are currently queued or sending.</p>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="text-muted"><tr><th>Subject</th><th>Vendor</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th><th>Action</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($active_campaigns as $c): ?>
+                            <tr>
+                                <td class="text-truncate" style="max-width:260px;"><?php echo htmlspecialchars($c['subject']); ?></td>
+                                <td class="text-truncate" style="max-width:180px;"><?php echo htmlspecialchars($c['company_name'] ?: ($c['vendor_email'] ?: ('Vendor #' . (int)$c['vendor_id']))); ?></td>
+                                <td><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($c['status']); ?></span></td>
+                                <td><?php echo (int)$c['sent_count']; ?></td>
+                                <td><?php echo (int)$c['failed_count']; ?></td>
+                                <td><?php echo (int)$c['total_count']; ?></td>
+                                <td><button type="button" class="btn btn-sm btn-outline-danger cancel-campaign-btn" data-id="<?php echo (int)$c['id']; ?>" data-subject="<?php echo htmlspecialchars($c['subject'], ENT_QUOTES); ?>">Cancel</button></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
             </div>
@@ -281,6 +319,24 @@ if (isset($_POST["send-mail"])) {
                 setTimeout(() => btn.innerHTML = '<i class="bi bi-save me-2"></i> Save Draft', 2000);
             });
         }
+
+        // ─── Cancel queued/sending campaigns (super admin) ────────────────
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.cancel-campaign-btn');
+            if (!btn) return;
+            const cid = btn.dataset.id;
+            if (!confirm('Cancel campaign "' + (btn.dataset.subject || '') + '"? Emails that have not been sent yet will not be sent.')) return;
+            btn.disabled = true;
+            btn.textContent = 'Cancelling...';
+            fetch('?action=cancel_campaign&campaign_id=' + cid)
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.message || (data.success ? 'Campaign cancelled.' : 'Could not cancel campaign.'));
+                    if (data.success) { location.reload(); }
+                    else { btn.disabled = false; btn.textContent = 'Cancel'; }
+                })
+                .catch(() => { btn.disabled = false; btn.textContent = 'Cancel'; });
+        });
     </script>
 </body>
 </html>

@@ -137,8 +137,9 @@ function bc_resolve_campaign_recipients($connection_server, $vendor_id, $status_
  * Renders and queues a campaign. $subject/$body_html may contain the same placeholder
  * tokens sendVendorEmailSpecific() already supports ({firstname},{lastname},{username},
  * {address},{email},{phone},{balance},{website}) — substituted per recipient, then each
- * recipient's body is wrapped via mailDesignTemplate() (which passes full HTML documents
- * through untouched — see email-design.php — so GrapesJS output isn't double-wrapped).
+ * recipient's body is wrapped via mailDesignTemplate() (which produces an email-safe HTML
+ * fragment with inline styles, and reduces full HTML documents to their body content —
+ * see email-design.php — so GrapesJS output isn't double-wrapped or sent as a full document).
  *
  * Returns the new campaign_id, or 0 if there were no valid recipients.
  */
@@ -188,10 +189,12 @@ function bc_enqueue_mail_campaign($connection_server, $vendor_id, $subject, $bod
         $personal_subject = strtr($subject, $placeholders);
         $personal_body = strtr($body_html, $placeholders);
 
-        // Full HTML documents (e.g. GrapesJS output) are what mailDesignTemplate() would have
-        // passed through untouched anyway (see its own full-document check) — skip calling it.
+        // Full HTML documents (e.g. GrapesJS output) are reduced to their body content the
+        // same way mailDesignTemplate() now does — email clients should never receive a full
+        // <!DOCTYPE html><html><head>… document, or they render the raw source instead of
+        // a formatted email.
         $rendered_html = $is_full_document
-            ? $personal_body
+            ? bc_extractEmailBodyContent($personal_body)
             : str_replace([$subject_token, $body_token], [$personal_subject, $personal_body], $shell_html);
 
         $rows[] = "(" . implode(',', [
@@ -232,10 +235,10 @@ function bc_get_mail_campaign_progress($connection_server, $campaign_id, $vendor
     $campaign = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT * FROM sas_mail_campaigns WHERE id='$campaign_id_esc' AND vendor_id='$vendor_id_esc' LIMIT 1"));
     if (!$campaign) return null;
 
-    $counts = ['pending' => 0, 'processing' => 0, 'sent' => 0, 'failed' => 0];
+    $counts = ['pending' => 0, 'processing' => 0, 'sent' => 0, 'failed' => 0, 'cancelled' => 0];
     $q = mysqli_query($connection_server, "SELECT status, COUNT(*) as c FROM sas_mail_queue_items WHERE campaign_id='$campaign_id_esc' GROUP BY status");
     while ($q && $row = mysqli_fetch_assoc($q)) {
-        $counts[$row['status']] = (int)$row['c'];
+        if (isset($counts[$row['status']])) $counts[$row['status']] = (int)$row['c'];
     }
 
     return [
@@ -245,6 +248,7 @@ function bc_get_mail_campaign_progress($connection_server, $campaign_id, $vendor
         'total'       => (int)$campaign['total_count'],
         'sent'        => $counts['sent'],
         'failed'      => $counts['failed'],
+        'cancelled'   => $counts['cancelled'],
         'pending'     => $counts['pending'] + $counts['processing'],
     ];
 }
@@ -273,6 +277,76 @@ function bc_get_recent_mail_campaigns($connection_server, $vendor_id, $limit = 1
  * Auto-provisions on first use so there's no separate setup step before the Developer
  * tab has something to display.
  */
+/**
+ * bc_cancel_mail_campaign()
+ * Cancels a queued campaign so no further emails are sent.
+ *
+ * - Vendor scoped by default ($vendor_id must match the campaign's owner) so a tenant can
+ *   never cancel another tenant's campaign; pass $is_super_admin=true (super admin context)
+ *   to allow cancelling any campaign.
+ * - Marks every not-yet-sent item (pending + processing) as 'cancelled'. The queue cron only
+ *   ever claims status='pending' items, and it re-checks status before sending, so cancelled
+ *   items will never go out.
+ * - Returns a result array for the AJAX handlers.
+ */
+function bc_cancel_mail_campaign($connection_server, $campaign_id, $vendor_id, $is_super_admin = false)
+{
+    bc_ensure_mail_queue_schema($connection_server);
+
+    $campaign_id_esc = (int)$campaign_id;
+    $vendor_id_esc   = (int)$vendor_id;
+    $scope_sql       = $is_super_admin ? '' : "AND vendor_id='$vendor_id_esc'";
+
+    if ($campaign_id_esc <= 0) {
+        return ['success' => false, 'message' => 'Invalid campaign.'];
+    }
+
+    $campaign = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT id, vendor_id, status, sent_count, total_count FROM sas_mail_campaigns WHERE id='$campaign_id_esc' $scope_sql LIMIT 1"));
+    if (!$campaign) {
+        return ['success' => false, 'message' => 'Campaign not found or not accessible.'];
+    }
+
+    if (in_array($campaign['status'], ['completed', 'cancelled'], true)) {
+        return ['success' => false, 'message' => 'Campaign is already ' . $campaign['status'] . '.'];
+    }
+    if ((int)$campaign['total_count'] > 0 && (int)$campaign['sent_count'] >= (int)$campaign['total_count']) {
+        return ['success' => false, 'message' => 'Campaign has already finished sending.'];
+    }
+
+    // Stop all not-yet-sent items (pending + processing). claim_token is cleared so the cron's
+    // overlap/crash-recovery logic can't pick them back up.
+    mysqli_query($connection_server, "UPDATE sas_mail_queue_items SET status='cancelled', claim_token=NULL WHERE campaign_id='$campaign_id_esc' AND status IN ('pending','processing')");
+
+    // Mark the campaign cancelled (record when it stopped).
+    mysqli_query($connection_server, "UPDATE sas_mail_campaigns SET status='cancelled', completed_at=NOW() WHERE id='$campaign_id_esc'");
+
+    return [
+        'success'     => true,
+        'message'     => 'Campaign cancelled. Remaining queued emails will not be sent.',
+        'campaign_id' => (int)$campaign['id'],
+    ];
+}
+
+/**
+ * bc_get_active_mail_campaigns()
+ * Lists campaigns that are still sending (queued/sending) for the super admin overview,
+ * so platform admins can cancel any vendor's pending dispatch. Joins vendor identity for
+ * display purposes.
+ */
+function bc_get_active_mail_campaigns($connection_server, $limit = 50)
+{
+    bc_ensure_mail_queue_schema($connection_server);
+    $limit_esc = (int)$limit;
+    $rows = [];
+    $q = mysqli_query($connection_server, "SELECT c.*, v.company_name, v.email AS vendor_email
+        FROM sas_mail_campaigns c
+        LEFT JOIN sas_vendors v ON v.id = c.vendor_id
+        WHERE c.status IN ('queued','sending')
+        ORDER BY c.id DESC LIMIT $limit_esc");
+    while ($q && $row = mysqli_fetch_assoc($q)) $rows[] = $row;
+    return $rows;
+}
+
 function bc_get_or_create_cron_secret($connection_server)
 {
     $existing = getSuperAdminOption('cron_secret', '');

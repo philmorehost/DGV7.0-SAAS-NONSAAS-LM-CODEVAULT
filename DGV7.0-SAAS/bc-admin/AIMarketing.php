@@ -114,6 +114,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'campaign_progress') {
     exit;
 }
 
+// ─── AJAX: cancel a queued/sending campaign (stops remaining emails) ────────
+if (isset($_GET['action']) && $_GET['action'] === 'cancel_campaign') {
+    header('Content-Type: application/json');
+    $cid = (int)($_GET['campaign_id'] ?? 0);
+    $result = bc_cancel_mail_campaign($connection_server, $cid, $vendor_id, false);
+    echo json_encode($result);
+    exit;
+}
+
 if (isset($_POST['set-bg'])) {
     $new_bg = bc_sanitize($_POST['bg_name'] ?? 'midnight');
     mysqli_query($connection_server, "UPDATE sas_vendors SET ai_marketing_bg='$new_bg' WHERE id='$vendor_id'");
@@ -313,7 +322,12 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="fw-bold mb-0"><i class="bi bi-broadcast-pin me-2"></i>Live Send Report</h6>
-                        <span class="badge bg-primary-subtle text-primary" id="progressStatus">—</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary-subtle text-primary" id="progressStatus">—</span>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="cancelActiveBtn">
+                                <i class="bi bi-x-circle me-1"></i>Cancel Campaign
+                            </button>
+                        </div>
                     </div>
                     <div class="progress campaign-progress-bar mb-2">
                         <div class="progress-bar bg-success" id="progressBarSent" style="width:0%"></div>
@@ -336,7 +350,7 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
                     <?php else: ?>
                         <div class="table-responsive">
                             <table class="table table-sm campaign-row align-middle mb-0">
-                                <thead class="text-muted"><tr><th>Subject</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th></tr></thead>
+                                <thead class="text-muted"><tr><th>Subject</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th><th>Action</th></tr></thead>
                                 <tbody>
                                 <?php foreach ($recent_campaigns as $c): ?>
                                     <tr>
@@ -345,6 +359,13 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
                                         <td><?php echo (int)$c['sent_count']; ?></td>
                                         <td><?php echo (int)$c['failed_count']; ?></td>
                                         <td><?php echo (int)$c['total_count']; ?></td>
+                                        <td>
+                                            <?php if (in_array($c['status'], ['queued', 'sending'], true)): ?>
+                                                <button type="button" class="btn btn-sm btn-outline-danger cancel-campaign-btn" data-id="<?php echo (int)$c['id']; ?>" data-subject="<?php echo htmlspecialchars($c['subject'], ENT_QUOTES); ?>">Cancel</button>
+                                            <?php else: ?>
+                                                <span class="text-muted small">—</span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                                 </tbody>
@@ -459,6 +480,26 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
         const elPending = document.getElementById('progressPending');
         const elTotal = document.getElementById('progressTotal');
         const elStatus = document.getElementById('progressStatus');
+        const cancelActiveBtn = document.getElementById('cancelActiveBtn');
+
+        function stopPolling() { cancelActiveBtn.disabled = true; cancelActiveBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Cancelled'; }
+
+        cancelActiveBtn.addEventListener('click', function() {
+            if (!confirm('Cancel this campaign? Emails that have not been sent yet will not be sent.')) return;
+            cancelActiveBtn.disabled = true;
+            cancelActiveBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Cancelling...';
+            fetch('AIMarketing.php?action=cancel_campaign&campaign_id=' + activeCampaignId)
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.message || (data.success ? 'Campaign cancelled.' : 'Could not cancel campaign.'));
+                    if (data.success) { stopPolling(); setTimeout(() => location.reload(), 1200); }
+                    else { cancelActiveBtn.disabled = false; cancelActiveBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel Campaign'; }
+                })
+                .catch(() => {
+                    cancelActiveBtn.disabled = false;
+                    cancelActiveBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel Campaign';
+                });
+        });
 
         function poll() {
             fetch('AIMarketing.php?action=campaign_progress&campaign_id=' + activeCampaignId)
@@ -475,6 +516,7 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
                     elPending.textContent = data.pending;
                     elTotal.textContent = total;
                     elStatus.textContent = data.status;
+                    if (data.status === 'cancelled') { stopPolling(); return; }
                     if (data.status !== 'completed') {
                         setTimeout(poll, 3000);
                     }
@@ -483,6 +525,24 @@ $active_campaign_id = (int)($_GET['campaign'] ?? 0);
         }
         poll();
     }
+
+    // ─── Cancel buttons in the Recent Campaigns table ─────────────────────
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.cancel-campaign-btn');
+        if (!btn) return;
+        const cid = btn.dataset.id;
+        if (!confirm('Cancel campaign "' + (btn.dataset.subject || '') + '"? Emails that have not been sent yet will not be sent.')) return;
+        btn.disabled = true;
+        btn.textContent = 'Cancelling...';
+        fetch('AIMarketing.php?action=cancel_campaign&campaign_id=' + cid)
+            .then(r => r.json())
+            .then(data => {
+                alert(data.message || (data.success ? 'Campaign cancelled.' : 'Could not cancel campaign.'));
+                if (data.success) { location.reload(); }
+                else { btn.disabled = false; btn.textContent = 'Cancel'; }
+            })
+            .catch(() => { btn.disabled = false; btn.textContent = 'Cancel'; });
+    });
 })();
 </script>
 </body>

@@ -137,8 +137,9 @@ function bc_resolve_campaign_recipients($connection_server, $vendor_id, $status_
  * Renders and queues a campaign. $subject/$body_html may contain the same placeholder
  * tokens sendVendorEmailSpecific() already supports ({firstname},{lastname},{username},
  * {address},{email},{phone},{balance},{website}) — substituted per recipient, then each
- * recipient's body is wrapped via mailDesignTemplate() (which passes full HTML documents
- * through untouched — see email-design.php — so GrapesJS output isn't double-wrapped).
+ * recipient's body is wrapped via mailDesignTemplate() (which produces an email-safe HTML
+ * fragment with inline styles, and reduces full HTML documents to their body content —
+ * see email-design.php — so GrapesJS output isn't double-wrapped or sent as a full document).
  *
  * Returns the new campaign_id, or 0 if there were no valid recipients.
  */
@@ -188,10 +189,12 @@ function bc_enqueue_mail_campaign($connection_server, $vendor_id, $subject, $bod
         $personal_subject = strtr($subject, $placeholders);
         $personal_body = strtr($body_html, $placeholders);
 
-        // Full HTML documents (e.g. GrapesJS output) are what mailDesignTemplate() would have
-        // passed through untouched anyway (see its own full-document check) — skip calling it.
+        // Full HTML documents (e.g. GrapesJS output) are reduced to their body content the
+        // same way mailDesignTemplate() now does — email clients should never receive a full
+        // <!DOCTYPE html><html><head>… document, or they render the raw source instead of
+        // a formatted email.
         $rendered_html = $is_full_document
-            ? $personal_body
+            ? bc_extractEmailBodyContent($personal_body)
             : str_replace([$subject_token, $body_token], [$personal_subject, $personal_body], $shell_html);
 
         $rows[] = "(" . implode(',', [
