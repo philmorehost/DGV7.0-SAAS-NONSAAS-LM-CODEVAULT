@@ -48,6 +48,15 @@ function mailDesignTemplate($title, $message, $details_array, $show_app = true) 
     $vendor_row = mysqli_fetch_assoc($vendor_q);
     $vendor_id = $vendor_row ? $vendor_row['id'] : 0;
     $vendor_support_email = $vendor_row['email'] ?? ('support@' . $website_url);
+    // App download link from bc-admin Account Settings (Site Details > APK Download URL).
+    // Used to make the app badge clickable only when the vendor has configured one.
+    $app_download_url = '';
+    if ($vendor_id > 0) {
+        $site_q = mysqli_query($connection_server, "SELECT apk_download_url FROM sas_site_details WHERE vendor_id='$vendor_id' LIMIT 1");
+        if ($site_q && ($site_r = mysqli_fetch_assoc($site_q))) {
+            $app_download_url = trim($site_r['apk_download_url'] ?? '');
+        }
+    }
 
     $services_list = [
         'data' => ['label' => 'Data Bundle', 'icon' => 'data.png', 'link' => '/web/Data.php'],
@@ -94,11 +103,17 @@ function mailDesignTemplate($title, $message, $details_array, $show_app = true) 
 
     $app_section_html = "";
     if ($show_app) {
+        $badge_img = '<img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" height="40" alt="Download App" style="border:0;">';
+        // Make the badge clickable only when the vendor has configured an app download link
+        // (bc-admin Account Settings). Otherwise the badge is shown but not clickable.
+        $app_cta = !empty($app_download_url)
+            ? '<a href="' . htmlspecialchars($app_download_url, ENT_QUOTES) . '" target="_blank" rel="noopener" style="text-decoration:none;">' . $badge_img . '</a>'
+            : $badge_img;
         $app_section_html = '<tr>
                 <td style="padding: 20px 25px; background-color: #f8fafc; text-align: center; border-top: 1px solid #f1f5f9;">
                     <p style="margin: 0; font-size: 14px; color: #64748b; font-weight: bold;">DOWNLOAD AND INSTALL APP</p>
                     <div style="margin-top: 10px;">
-                         <a href="https://play.google.com/store/apps/details?id=com.datagifting.app"><img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" height="40"></a>
+                         ' . $app_cta . '
                     </div>
                 </td>
             </tr>';
