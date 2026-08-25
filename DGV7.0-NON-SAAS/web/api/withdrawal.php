@@ -37,6 +37,11 @@ if ($select_vendor_table) {
 				exit;
 			}
 
+			if (!isServiceEnabled('withdraw')) {
+				echo json_encode(array("status" => "failed", "desc" => "Wallet to Bank service is currently offline. Please contact support."), true);
+				exit;
+			}
+
 			$action_function = 1;
 			$_SESSION["user_session"] = $get_logged_user_details["username"];
 			include_once("../func/bank-transfer.php");

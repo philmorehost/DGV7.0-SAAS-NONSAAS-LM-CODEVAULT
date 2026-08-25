@@ -1,6 +1,12 @@
 <?php session_start();
 include("../func/bc-config.php");
 
+// Wallet to Bank service toggle (Service Control Center)
+if (!isServiceEnabled('withdraw')) {
+    header("Location: Dashboard.php");
+    exit();
+}
+
 // Optimized bank list loading (Cache within request)
 $banks_json_path = $_SERVER["DOCUMENT_ROOT"] . "/func/banks.json";
 $retrieve_bank_list = [];

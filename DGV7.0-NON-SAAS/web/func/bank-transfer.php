@@ -67,6 +67,11 @@ if (in_array($purchase_method, $purchase_method_array)) {
             $json_response_encode = json_encode(["status" => "failed", "desc" => "Payout service is currently offline. Please contact support."]);
             return;
         }
+        // Wallet to Bank Toggle Enforcement
+        if (!isServiceEnabled('withdraw')) {
+            $json_response_encode = json_encode(["status" => "failed", "desc" => "Wallet to Bank service is currently offline. Please contact support."]);
+            return;
+        }
 
         $vid = $get_logged_user_details["vendor_id"];
         $select_v = mysqli_query($connection_server, "SELECT withdrawal_fee, approve_withdrawal, payout_provider, payout_activated, min_withdrawal_amount, max_withdrawal_amount, daily_payout_limit FROM sas_vendors WHERE id='$vid' LIMIT 1");
@@ -118,6 +123,13 @@ if (in_array($purchase_method, $purchase_method_array)) {
 
                 // Strictly enforce balance check including fees
                 if (userBalance(1) >= $total_debit) {
+                    // Idempotency guard: block duplicate withdrawals while one is still pending
+                    $dup_w = mysqli_query($connection_server, "SELECT id FROM sas_transactions WHERE vendor_id='$vid' AND username='".$get_logged_user_details['username']."' AND status=2 AND type_alternative='Bank Transfer' AND description LIKE 'Money sent to%' LIMIT 1");
+                    if (mysqli_num_rows($dup_w) > 0) {
+                        $json_response_encode = json_encode(["status" => "failed", "desc" => "You already have a pending withdrawal request. Please wait for it to be processed."]);
+                        return;
+                    }
+
                     $initial_status = 2; // Keep as pending (2) during initiation
                     $debit_user = chargeUser("debit", $account_number, $bank_code_alternative, $reference, "", $amount, $total_debit, $withdrawal_desc, $purchase_method, strtoupper($payout_provider), $initial_status);
 
@@ -163,10 +175,11 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                     // Paystack logic
                                     $recipient_code = $transfer_enquiry_id;
                                     $ps_res = paystackInitiateTransfer($amount * 100, $recipient_code, $narration, $vid);
-                                    if (($ps_res['status'] ?? false) === true) {
-                                        $res = ['status' => 'success', 'data' => ['reference' => $ps_res['data']['reference']]];
+                                    $ps_inner = json_decode($ps_res['json_result'] ?? '{}', true);
+                                    if (($ps_inner['status'] ?? false) === true) {
+                                        $res = ['status' => 'success', 'data' => ['reference' => $ps_inner['data']['reference'] ?? ($ps_inner['data']['transfer_code'] ?? 'N/A')]];
                                     } else {
-                                        $res = ['status' => 'failed', 'message' => $ps_res['message'] ?? 'Paystack initiation failed'];
+                                        $res = ['status' => 'failed', 'message' => $ps_inner['message'] ?? ($ps_res['message'] ?? 'Paystack initiation failed')];
                                     }
                                 }
                             }
@@ -241,12 +254,13 @@ if (in_array($purchase_method, $purchase_method_array)) {
                         $effective_code = $raw['mapped_bank_code'] ?? $bank_code;
                         // Create recipient
                         $rec_raw = paystackCreateTransferRecipient($acc_name, $account_number, $effective_code, $vid);
-                        if (($rec_raw['status'] ?? false) === true) {
+                        $rec_inner = json_decode($rec_raw['json_result'] ?? '{}', true);
+                        if (($rec_inner['status'] ?? false) === true && !empty($rec_inner['data']['recipient_code'])) {
                             $res = ['status' => 'success', 'account_name' => $acc_name];
-                            $enquiry_id = $rec_raw['data']['recipient_code'];
+                            $enquiry_id = $rec_inner['data']['recipient_code'];
                             $bank_code = $effective_code;
                         } else {
-                            $res['message'] = $rec_raw['message'] ?? 'Paystack recipient creation failed';
+                            $res['message'] = $rec_inner['message'] ?? ($rec_raw['message'] ?? 'Paystack recipient creation failed');
                         }
                     } else {
                         $res['message'] = $raw['message'] ?? 'Account name not found';

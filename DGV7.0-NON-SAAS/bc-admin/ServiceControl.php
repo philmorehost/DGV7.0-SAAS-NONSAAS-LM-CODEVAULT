@@ -32,6 +32,7 @@ $services = [
     'recharge_card' => 'Recharge Card Printing',
     'bank_transfer' => 'Bank Transfer Service',
     'payout' => 'Payout (API & Web)',
+    'withdraw' => 'Wallet to Bank',
     'virtual_card' => 'Virtual Card System',
     'gift_card' => 'Gift Cards',
     'crypto_hub' => 'Crypto Service',

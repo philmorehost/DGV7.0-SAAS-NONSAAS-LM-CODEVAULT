@@ -67,6 +67,11 @@ if (in_array($purchase_method, $purchase_method_array)) {
             $json_response_encode = json_encode(["status" => "failed", "desc" => "Payout service is currently offline. Please contact support."]);
             return;
         }
+        // Wallet to Bank Toggle Enforcement
+        if (!isServiceEnabled('withdraw')) {
+            $json_response_encode = json_encode(["status" => "failed", "desc" => "Wallet to Bank service is currently offline. Please contact support."]);
+            return;
+        }
 
         $vid = $get_logged_user_details["vendor_id"];
         $select_v = mysqli_query($connection_server, "SELECT withdrawal_fee, approve_withdrawal, payout_provider, payout_activated, min_withdrawal_amount, max_withdrawal_amount, daily_payout_limit FROM sas_vendors WHERE id='$vid' LIMIT 1");
