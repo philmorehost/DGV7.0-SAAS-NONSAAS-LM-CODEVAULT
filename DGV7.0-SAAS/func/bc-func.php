@@ -295,38 +295,33 @@ function isServiceEnabled($name, $vid = null) {
 }
 
 /**
- * bc_maybe_redirect_to_app()
- * Optional per-vendor "Force Redirect to App" feature. When enabled in bc-admin
- * (Account Settings > Site Details) and an App Download URL is set, anonymous
- * visitors to the website are redirected to that link to encourage app installs.
- * Logged-in users and admins are never redirected.
+ * bc_get_app_redirect_info()
+ * Reads the per-vendor App redirect mode (off / prompt / force) and the App Download
+ * URL from sas_site_details. Returns ['mode' => ..., 'link' => ...]. The mode is forced
+ * to 'off' when no download URL is set, since there is nothing to redirect to.
  */
-function bc_maybe_redirect_to_app($vendor_id) {
+function bc_get_app_redirect_info($vendor_id) {
     global $connection_server;
     $vendor_id = (int)$vendor_id;
-    if (!$connection_server || $vendor_id <= 0) return;
-
-    if (session_status() === PHP_SESSION_NONE) {
-        @session_start();
-    }
-    if (isset($_SESSION['admin_session']) || isset($_SESSION['user_session'])) return;
+    $result = ['mode' => 'off', 'link' => ''];
+    if (!$connection_server || $vendor_id <= 0) return $result;
 
     // Idempotent safety net — the landing page loads bc-connect.php directly and may
     // run before bc-tables.php migrations have added the column.
-    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'force_redirect_app'");
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'app_redirect_mode'");
     if ($check_col && mysqli_num_rows($check_col) == 0) {
-        @mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN force_redirect_app TINYINT(1) DEFAULT 0");
+        @mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN app_redirect_mode VARCHAR(10) DEFAULT 'off'");
     }
 
-    $q = mysqli_query($connection_server, "SELECT apk_download_url, force_redirect_app FROM sas_site_details WHERE vendor_id='$vendor_id' LIMIT 1");
+    $q = mysqli_query($connection_server, "SELECT apk_download_url, app_redirect_mode FROM sas_site_details WHERE vendor_id='$vendor_id' LIMIT 1");
     if ($q && ($r = mysqli_fetch_assoc($q))) {
-        $app_link = trim($r['apk_download_url'] ?? '');
-        $force = (int)($r['force_redirect_app'] ?? 0);
-        if ($force === 1 && !empty($app_link)) {
-            header("Location: " . $app_link);
-            exit;
-        }
+        $link = trim($r['apk_download_url'] ?? '');
+        $mode = strtolower(trim($r['app_redirect_mode'] ?? 'off'));
+        if (!in_array($mode, ['off', 'prompt', 'force'], true)) $mode = 'off';
+        if (empty($link)) $mode = 'off'; // nothing to redirect/prompt to
+        $result = ['mode' => $mode, 'link' => $link];
     }
+    return $result;
 }
 
 function isKYCEnforced($v_id = null) {

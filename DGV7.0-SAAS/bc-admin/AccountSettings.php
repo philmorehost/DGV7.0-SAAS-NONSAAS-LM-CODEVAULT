@@ -981,7 +981,8 @@ if (isset($_POST["update-site-details"])) {
     $site_title     = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["site-title"])));
     $site_desc      = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["site-desc"])));
     $apk_download_url = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["apk-download-url"] ?? "")));
-    $force_redirect_app = isset($_POST["force-redirect-app"]) ? 1 : 0;
+    $app_redirect_mode = mysqli_real_escape_string($connection_server, strtolower(trim($_POST["app-redirect-mode"] ?? "off")));
+    if (!in_array($app_redirect_mode, ["off", "prompt", "force"], true)) $app_redirect_mode = "off";
     
     // New SEO Fields
     $meta_keywords = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["meta-keywords"] ?? "")));
@@ -1019,7 +1020,7 @@ if (isset($_POST["update-site-details"])) {
                 site_title='$site_title', 
                 site_desc='$site_desc', 
                 apk_download_url='$apk_download_url',
-                force_redirect_app='$force_redirect_app',
+                app_redirect_mode='$app_redirect_mode',
                 meta_keywords='$meta_keywords',
                 meta_author='$meta_author',
                 favicon_url='$favicon_url',
@@ -1046,14 +1047,14 @@ if (isset($_POST["update-site-details"])) {
         } else {
             if (mysqli_num_rows($get_site_details_check) == 0) {
                 mysqli_query($connection_server, "INSERT INTO sas_site_details (
-                    vendor_id, site_title, site_desc, apk_download_url, force_redirect_app,
+                    vendor_id, site_title, site_desc, apk_download_url, app_redirect_mode,
                     meta_keywords, meta_author, favicon_url, og_image,
                     ga_tracking_id, gtm_id, fb_pixel_id, custom_head_code,
                     custom_footer_code, robots_txt, sitemap_enabled,
                     social_twitter, social_facebook, social_instagram, social_whatsapp,
                     schema_org_type, schema_org_phone, schema_org_address
                 ) VALUES (
-                    '" . $get_logged_admin_details["id"] . "', '$site_title', '$site_desc', '$apk_download_url', '$force_redirect_app',
+                    '" . $get_logged_admin_details["id"] . "', '$site_title', '$site_desc', '$apk_download_url', '$app_redirect_mode',
                     '$meta_keywords', '$meta_author', '$favicon_url', '$og_image',
                     '$ga_tracking_id', '$gtm_id', '$fb_pixel_id', '$custom_head_code',
                     '$custom_footer_code', '$robots_txt', '$sitemap_enabled',
@@ -1134,7 +1135,7 @@ $seo_defaults = [
     'schema_org_type' => 'Organization',
     'schema_org_phone' => '',
     'schema_org_address' => '',
-    'force_redirect_app' => 0
+    'app_redirect_mode' => 'off'
 ];
 if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
     $get_site_details = array_merge($seo_defaults, mysqli_fetch_array($q_site_details, MYSQLI_ASSOC));
@@ -1352,10 +1353,14 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
                                             <input id="apk-download-url-input" name="apk-download-url" type="url" value="<?php echo htmlspecialchars($get_site_details['apk_download_url'] ?? ''); ?>" class="form-control rounded-3" placeholder="https://example.com/app.apk or Google Play link" />
                                             <div class="form-text small text-muted">Leave blank to hide the Download App button on the landing page.</div>
                                         </div>
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" role="switch" id="force-redirect-app-input" name="force-redirect-app" value="1" <?php echo (!empty($get_site_details['force_redirect_app'] ?? 0)) ? 'checked' : ''; ?> />
-                                            <label class="form-check-label small fw-bold text-muted" for="force-redirect-app-input">FORCE REDIRECT TO APP LINK</label>
-                                            <div class="form-text small text-muted">When enabled, new visitors to your website will be redirected to the App Download URL above so they install and use the app.</div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold text-muted" for="app-redirect-mode-input">APP REDIRECT MODE</label>
+                                            <select id="app-redirect-mode-input" name="app-redirect-mode" class="form-select rounded-3">
+                                                <option value="off" <?php echo (($get_site_details['app_redirect_mode'] ?? 'off') === 'off') ? 'selected' : ''; ?>>Off — No prompt or redirect</option>
+                                                <option value="prompt" <?php echo (($get_site_details['app_redirect_mode'] ?? '') === 'prompt') ? 'selected' : ''; ?>>Prompt — Let users choose (recommended)</option>
+                                                <option value="force" <?php echo (($get_site_details['app_redirect_mode'] ?? '') === 'force') ? 'selected' : ''; ?>>Force — Always redirect to app</option>
+                                            </select>
+                                            <div class="form-text small text-muted">Choose how visitors are directed to your App Download URL above. "Prompt" lets users decide to install the app or keep using the website.</div>
                                         </div>
                                     </div>
                                     

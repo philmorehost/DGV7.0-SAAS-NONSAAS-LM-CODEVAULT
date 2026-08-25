@@ -42,10 +42,16 @@ if ($connection_server) {
     $error_message = "Failed to connect to the database.";
 }
 
-// Optional per-vendor "Force Redirect to App" — redirects anonymous visitors to the
-// vendor's configured app download link (bc-admin > Account Settings > Site Details).
+// Optional per-vendor App redirect (Off / Prompt / Force) — bc-admin > Account
+// Settings > Site Details. Anonymous visitors only; logged-in users/admins are skipped.
+if (session_status() === PHP_SESSION_NONE) { @session_start(); }
+$app_redirect = ['mode' => 'off', 'link' => ''];
 if ($vendor_account_details) {
-    bc_maybe_redirect_to_app($vendor_account_details["id"]);
+    $app_redirect = bc_get_app_redirect_info($vendor_account_details["id"]);
+    if ($app_redirect['mode'] === 'force' && !isset($_SESSION['admin_session']) && !isset($_SESSION['user_session'])) {
+        header("Location: " . $app_redirect['link']);
+        exit;
+    }
 }
 
 // Default CSS template
@@ -76,4 +82,34 @@ if ($vendor_account_details) {
 
 // Pass both vendor data and any error message to the template
 include(__DIR__ . "/" . $css_style_template_location);
+
+// Soft "Prompt" mode: show a dismissible interstitial offering the app, remembered via
+// cookie for 30 days. Only for anonymous visitors when the vendor selected "prompt".
+if ($app_redirect['mode'] === 'prompt' && !empty($app_redirect['link']) && !isset($_SESSION['admin_session']) && !isset($_SESSION['user_session'])) {
+    $app_link_attr = htmlspecialchars($app_redirect['link'], ENT_QUOTES);
+    echo '<!-- App Prompt (soft redirect mode) -->
+<div id="appPromptOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.75);z-index:2147483647;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#ffffff;border-radius:16px;max-width:420px;width:100%;padding:28px 24px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="font-size:44px;line-height:1;">&#128241;</div>
+        <h3 style="margin:14px 0 6px;color:#0f172a;font-size:18px;font-weight:700;">Get the App for the Best Experience</h3>
+        <p style="margin:0 0 22px;color:#64748b;font-size:14px;line-height:1.55;">Use our mobile app for faster transactions, instant alerts and exclusive offers &mdash; or continue on the website.</p>
+        <a href="' . $app_link_attr . '" style="display:block;background:#287bff;color:#ffffff !important;text-decoration:none;padding:13px;border-radius:10px;font-weight:700;margin-bottom:10px;">Continue to App</a>
+        <button type="button" id="appPromptStay" style="display:block;width:100%;background:transparent;border:1px solid #cbd5e1;color:#334155;padding:12px;border-radius:10px;font-weight:600;cursor:pointer;">Stay on Website</button>
+    </div>
+</div>
+<script>
+(function(){
+    var overlay = document.getElementById("appPromptOverlay");
+    var stay = document.getElementById("appPromptStay");
+    if (!overlay || !stay) return;
+    function dismissed(){ return document.cookie.split(";").some(function(c){ return c.trim().indexOf("app_prompt_dismissed=1") === 0; }); }
+    if (dismissed()) return;
+    overlay.style.display = "flex";
+    stay.addEventListener("click", function(){
+        document.cookie = "app_prompt_dismissed=1; path=/; max-age=2592000";
+        overlay.style.display = "none";
+    });
+})();
+</script>';
+}
 ?>
