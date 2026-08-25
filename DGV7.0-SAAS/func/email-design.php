@@ -98,7 +98,7 @@ function mailDesignTemplate($title, $message, $details_array, $show_app = true) 
                 <td style="padding: 20px 25px; background-color: #f8fafc; text-align: center; border-top: 1px solid #f1f5f9;">
                     <p style="margin: 0; font-size: 14px; color: #64748b; font-weight: bold;">DOWNLOAD AND INSTALL APP</p>
                     <div style="margin-top: 10px;">
-                         <a href="#"><img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" height="40"></a>
+                         <a href="https://play.google.com/store/apps/details?id=com.datagifting.app"><img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" height="40"></a>
                     </div>
                 </td>
             </tr>';
