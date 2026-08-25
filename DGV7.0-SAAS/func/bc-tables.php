@@ -808,7 +808,8 @@ if ($create_site_detail_table) {
         "social_whatsapp" => "VARCHAR(20) DEFAULT ''",
         "schema_org_type" => "VARCHAR(50) DEFAULT 'Organization'",
         "schema_org_phone" => "VARCHAR(30) DEFAULT ''",
-        "schema_org_address" => "VARCHAR(500) DEFAULT ''"
+        "schema_org_address" => "VARCHAR(500) DEFAULT ''",
+        "force_redirect_app" => "TINYINT(1) DEFAULT 0"
     ];
 
     foreach ($seo_columns as $col => $def) {

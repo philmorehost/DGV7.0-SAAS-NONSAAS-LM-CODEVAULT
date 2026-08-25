@@ -219,6 +219,41 @@ function isServiceEnabled($name, $vid = null) {
     return true;
 }
 
+/**
+ * bc_maybe_redirect_to_app()
+ * Optional per-vendor "Force Redirect to App" feature. When enabled in bc-admin
+ * (Account Settings > Site Details) and an App Download URL is set, anonymous
+ * visitors to the website are redirected to that link to encourage app installs.
+ * Logged-in users and admins are never redirected.
+ */
+function bc_maybe_redirect_to_app($vendor_id) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    if (!$connection_server || $vendor_id <= 0) return;
+
+    if (session_status() === PHP_SESSION_NONE) {
+        @session_start();
+    }
+    if (isset($_SESSION['admin_session']) || isset($_SESSION['user_session'])) return;
+
+    // Idempotent safety net — the landing page loads bc-connect.php directly and may
+    // run before bc-tables.php migrations have added the column.
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'force_redirect_app'");
+    if ($check_col && mysqli_num_rows($check_col) == 0) {
+        @mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN force_redirect_app TINYINT(1) DEFAULT 0");
+    }
+
+    $q = mysqli_query($connection_server, "SELECT apk_download_url, force_redirect_app FROM sas_site_details WHERE vendor_id='$vendor_id' LIMIT 1");
+    if ($q && ($r = mysqli_fetch_assoc($q))) {
+        $app_link = trim($r['apk_download_url'] ?? '');
+        $force = (int)($r['force_redirect_app'] ?? 0);
+        if ($force === 1 && !empty($app_link)) {
+            header("Location: " . $app_link);
+            exit;
+        }
+    }
+}
+
 function isKYCEnforced($v_id = null) {
     global $connection_server;
     static $kyc_enforced_cache = [];
@@ -5033,8 +5068,10 @@ function reconcileDeposit($gateway, $reference, $account_number, $date, $pin, $v
             if (($v_data['status'] ?? "") == "success") {
                 $tx_raw = json_decode($v_data['json_result'], true);
                 $tx_data = $tx_raw['data'] ?? $tx_raw;
+                // SECURITY: PayHub verify returns top-level `status:true` = "retrieved"; the
+                // real payment status is `data.status`. Credit only on success/successful.
                 $tx_status = strtolower($tx_data['status'] ?? "");
-                if ($tx_status == "success" || $tx_status == "successful" || ($tx_raw['status'] ?? false) === true) {
+                if ($tx_status == "success" || $tx_status == "successful") {
                     if (processPayhubSuccess($vid, $tx_data['reference'], $tx_data, $payhub_keys, $username)) {
                         $found_new++;
                         $credited_refs[] = $tx_data['reference'];

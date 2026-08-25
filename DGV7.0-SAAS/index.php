@@ -42,6 +42,12 @@ if ($connection_server) {
     $error_message = "Failed to connect to the database.";
 }
 
+// Optional per-vendor "Force Redirect to App" — redirects anonymous visitors to the
+// vendor's configured app download link (bc-admin > Account Settings > Site Details).
+if ($vendor_account_details) {
+    bc_maybe_redirect_to_app($vendor_account_details["id"]);
+}
+
 // Default CSS template
 $css_style_template_location = "index-bc-style-template-1.php";
 

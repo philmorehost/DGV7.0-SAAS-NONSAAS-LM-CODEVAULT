@@ -781,6 +781,11 @@ if ($create_site_detail_table) {
     if (mysqli_num_rows($check_apk_col) == 0) {
         mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN apk_download_url VARCHAR(500) DEFAULT ''");
     }
+
+    $check_force_redirect_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'force_redirect_app'");
+    if (mysqli_num_rows($check_force_redirect_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN force_redirect_app TINYINT(1) DEFAULT 0");
+    }
     
     $check_keywords_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'meta_keywords'");
     if (mysqli_num_rows($check_keywords_col) == 0) {
