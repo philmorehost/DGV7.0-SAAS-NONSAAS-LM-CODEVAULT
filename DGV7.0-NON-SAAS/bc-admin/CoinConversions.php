@@ -52,6 +52,8 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
 
                     mysqli_commit($connection_server);
                     $_SESSION["product_purchase_response"] = "Conversion approved successfully.";
+                    // Notify the user that their conversion was approved
+                    bc_send_user_coin_conversion_status_email($vendor_id, $conversion['username'], 'approved', $conversion['points'], $conversion['amount']);
                 } else {
                     // Not enough points, reject it
                     $update_query = "UPDATE sas_conversions SET status = 'rejected', completion_date = NOW() WHERE id = ?";
@@ -60,6 +62,8 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
                     mysqli_stmt_execute($update_stmt);
                     mysqli_commit($connection_server);
                     $_SESSION["product_purchase_response"] = "Conversion rejected due to insufficient points.";
+                    // Notify the user that their conversion was rejected
+                    bc_send_user_coin_conversion_status_email($vendor_id, $conversion['username'], 'rejected', $conversion['points'], $conversion['amount']);
                 }
 
             } catch (mysqli_sql_exception $exception) {
@@ -73,6 +77,8 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
             mysqli_stmt_bind_param($update_stmt, "i", $conversion_id);
             mysqli_stmt_execute($update_stmt);
             $_SESSION["product_purchase_response"] = "Conversion rejected successfully.";
+            // Notify the user that their conversion was rejected
+            bc_send_user_coin_conversion_status_email($vendor_id, $conversion['username'], 'rejected', $conversion['points'], $conversion['amount']);
         }
     }
 

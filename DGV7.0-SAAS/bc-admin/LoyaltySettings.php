@@ -60,10 +60,12 @@ if (isset($_POST["update-loyalty-settings"])) {
     // Update conversion rate and minimum threshold in the key-value settings table
     $conversion_rate = mysqli_real_escape_string($connection_server, $_POST["conversion_rate"]);
     $min_conversion_threshold = mysqli_real_escape_string($connection_server, $_POST["min_conversion_threshold"]);
+    $coins_email_threshold = (int)mysqli_real_escape_string($connection_server, $_POST["coins_email_threshold"] ?? 0);
 
     $settings_to_update = [
         'points_conversion_rate' => $conversion_rate,
         'min_points_conversion' => $min_conversion_threshold,
+        'coins_email_threshold' => $coins_email_threshold,
     ];
 
     foreach ($settings_to_update as $name => $value) {
@@ -86,7 +88,7 @@ $loyalty_settings_row = mysqli_stmt_get_result($stmt);
 $loyalty_settings = mysqli_fetch_assoc($loyalty_settings_row);
 
 // Fetch conversion rate and minimum threshold from sas_settings
-$stmt = mysqli_prepare($connection_server, "SELECT * FROM sas_settings WHERE vendor_id = ? AND setting_name IN ('points_conversion_rate', 'min_points_conversion')");
+$stmt = mysqli_prepare($connection_server, "SELECT * FROM sas_settings WHERE vendor_id = ? AND setting_name IN ('points_conversion_rate', 'min_points_conversion', 'coins_email_threshold')");
 mysqli_stmt_bind_param($stmt, "i", $vendor_id);
 mysqli_stmt_execute($stmt);
 $settings_query = mysqli_stmt_get_result($stmt);
@@ -96,6 +98,7 @@ while($row = mysqli_fetch_assoc($settings_query)){
 }
 $points_conversion_rate = $settings['points_conversion_rate'] ?? 500;
 $min_points_conversion = $settings['min_points_conversion'] ?? 100;
+$coins_email_threshold = $settings['coins_email_threshold'] ?? 0;
 
 ?>
 <!DOCTYPE html>
@@ -172,6 +175,11 @@ $min_points_conversion = $settings['min_points_conversion'] ?? 100;
                                 <label for="min_conversion_threshold" class="form-label small fw-bold text-muted text-uppercase">Min. Threshold</label>
                                 <input type="number" class="form-control form-control-lg rounded-3" id="min_conversion_threshold" name="min_conversion_threshold" value="<?php echo $min_points_conversion; ?>" required>
                                 <p class="small text-muted mt-2">Minimum points allowed for withdrawal</p>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="coins_email_threshold" class="form-label small fw-bold text-muted text-uppercase">Email Alert Threshold</label>
+                                <input type="number" class="form-control form-control-lg rounded-3" id="coins_email_threshold" name="coins_email_threshold" value="<?php echo $coins_email_threshold; ?>" min="0">
+                                <p class="small text-muted mt-2">When a user's coins reach this amount, they automatically receive an email guide on converting to wallet funds. Set 0 to disable.</p>
                             </div>
                             <div class="col-12">
                                 <hr class="my-2 opacity-25">

@@ -47,6 +47,8 @@ if (isset($_POST["convert-coins"])) {
         $stmt = mysqli_prepare($connection_server, $query);
         mysqli_stmt_bind_param($stmt, "isid", $vendor_id, $username, $points_to_convert, $amount_in_naira);
         if (mysqli_stmt_execute($stmt)) {
+            // Notify the vendor admin of the new conversion request
+            bc_send_admin_coin_conversion_email($vendor_id, $username, $points_to_convert, $amount_in_naira);
             $_SESSION["product_purchase_response"] = "Conversion request for " . $points_to_convert . " points submitted successfully! It is pending admin approval.";
         } else {
             $_SESSION["product_purchase_response"] = "An error occurred. Please try again.";

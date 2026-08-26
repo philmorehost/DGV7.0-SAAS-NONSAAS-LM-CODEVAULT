@@ -727,6 +727,9 @@ function chargeUser($type, $product_unique_id, $type_alternative, $reference, $a
 									mysqli_stmt_bind_param($stmt_log_bonus, "isis", $referrer['vendor_id'], $referrer['username'], $bonus_amount, $log_type_bonus);
 									mysqli_stmt_execute($stmt_log_bonus);
 
+									// Notify the referrer if their coins crossed the conversion-email threshold
+									bc_maybe_send_coin_guide_email($referrer['vendor_id'], $referrer['username']);
+
 									// Mark bonus as awarded
 									$query_update_user = "UPDATE sas_users SET referral_bonus_awarded = 1 WHERE id = ?";
 									$stmt_update_user = mysqli_prepare($connection_server, $query_update_user);
@@ -4737,9 +4740,167 @@ function award_daily_bonus($user_id, $transaction_timestamp) {
 
     if ($insert_log_query) {
         $_SESSION['bonus_message'] = "🎉 Bonus Earned! You received $coins_to_award VTU Coins for maintaining your $streak_day-day purchase streak!";
+        bc_maybe_send_coin_guide_email($vendor_id, $user_id);
         return true;
     }
     return false;
+}
+
+/**
+ * bc_get_coin_settings()
+ * Returns the vendor's coin conversion settings: points_conversion_rate,
+ * min_points_conversion, and coins_email_threshold (the balance at which the
+ * "how to convert" guide email is sent automatically).
+ */
+function bc_get_coin_settings($vendor_id) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    $settings = ['points_conversion_rate' => 500, 'min_points_conversion' => 100, 'coins_email_threshold' => 0];
+    if (!$connection_server || $vendor_id <= 0) return $settings;
+    $stmt = mysqli_prepare($connection_server, "SELECT setting_name, setting_value FROM sas_settings WHERE vendor_id = ? AND setting_name IN ('points_conversion_rate', 'min_points_conversion', 'coins_email_threshold')");
+    mysqli_stmt_bind_param($stmt, "i", $vendor_id);
+    mysqli_stmt_execute($stmt);
+    $q = mysqli_stmt_get_result($stmt);
+    while ($row = mysqli_fetch_assoc($q)) {
+        if ($row['setting_name'] === 'points_conversion_rate') $settings['points_conversion_rate'] = (float)$row['setting_value'];
+        elseif ($row['setting_name'] === 'min_points_conversion') $settings['min_points_conversion'] = (int)$row['setting_value'];
+        elseif ($row['setting_name'] === 'coins_email_threshold') $settings['coins_email_threshold'] = (int)$row['setting_value'];
+    }
+    return $settings;
+}
+
+/**
+ * bc_get_user_email()
+ * Returns a user's email address.
+ */
+function bc_get_user_email($vendor_id, $username) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    if (!$connection_server || $vendor_id <= 0 || empty($username)) return '';
+    $stmt = mysqli_prepare($connection_server, "SELECT email FROM sas_users WHERE vendor_id = ? AND username = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, "is", $vendor_id, $username);
+    mysqli_stmt_execute($stmt);
+    $q = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($q);
+    return $row ? $row['email'] : '';
+}
+
+/**
+ * bc_get_vendor_admin_email()
+ * Returns the vendor's admin email address.
+ */
+function bc_get_vendor_admin_email($vendor_id) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    if (!$connection_server || $vendor_id <= 0) return '';
+    $q = mysqli_query($connection_server, "SELECT email FROM sas_vendors WHERE id = '$vendor_id' LIMIT 1");
+    $r = mysqli_fetch_assoc($q);
+    return $r ? $r['email'] : '';
+}
+
+/**
+ * bc_maybe_send_coin_guide_email()
+ * Sends the "how to convert your coins" guide email once the user's coin balance
+ * reaches the coins_email_threshold set by bc-admin. Tracked in sas_coin_notify_log
+ * so the guide is sent only once per user.
+ */
+function bc_maybe_send_coin_guide_email($vendor_id, $username) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    if (!$connection_server || $vendor_id <= 0 || empty($username)) return;
+
+    $settings = bc_get_coin_settings($vendor_id);
+    $threshold = (int)$settings['coins_email_threshold'];
+    if ($threshold <= 0) return; // feature disabled
+
+    mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_coin_notify_log (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT NOT NULL, username VARCHAR(225) NOT NULL, points_at_time INT NOT NULL, notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uniq_coin_notify (vendor_id, username))");
+
+    $total_points = (int)(get_user_vtu_details($username)['total_points'] ?? 0);
+    if ($total_points < $threshold) return;
+
+    $stmt = mysqli_prepare($connection_server, "SELECT id FROM sas_coin_notify_log WHERE vendor_id = ? AND username = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, "is", $vendor_id, $username);
+    mysqli_stmt_execute($stmt);
+    $check = mysqli_stmt_get_result($stmt);
+    if (mysqli_num_rows($check) > 0) return;
+
+    $user_email = bc_get_user_email($vendor_id, $username);
+    if (empty($user_email)) return;
+
+    $rate = (float)$settings['points_conversion_rate'];
+    $min_points = (int)$settings['min_points_conversion'];
+    $value = $total_points / ($rate > 0 ? $rate : 1);
+
+    $subject = "You can now convert your coins to wallet funds!";
+    $body = "Hi " . htmlspecialchars($username) . ",<br><br>"
+        . "You now have <b>" . number_format($total_points) . " coins</b>, worth about <b>&#8358;" . number_format($value, 2) . "</b>.<br><br>"
+        . "You can convert your coins into wallet funds in a few easy steps:<br>"
+        . "<ol>"
+        . "<li>Log in to your account.</li>"
+        . "<li>Open <b>Coin Conversion</b> (or the Coins section in the app).</li>"
+        . "<li>Enter the number of coins to convert (minimum " . number_format($min_points) . " coins).</li>"
+        . "<li>Submit your request — our team will review and approve it.</li>"
+        . "</ol>"
+        . "Current rate: <b>" . number_format($rate) . " coins = &#8358;1.00</b>.<br><br>"
+        . "Once approved, the equivalent amount is credited directly to your wallet balance.<br><br>"
+        . "Best regards,<br>Support Team";
+
+    $sent = sendVendorEmail($user_email, $subject, $body);
+    if ($sent) {
+        $stmt = mysqli_prepare($connection_server, "INSERT IGNORE INTO sas_coin_notify_log (vendor_id, username, points_at_time) VALUES (?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, "isi", $vendor_id, $username, $total_points);
+        mysqli_stmt_execute($stmt);
+    }
+}
+
+/**
+ * bc_send_admin_coin_conversion_email()
+ * Notifies the vendor admin that a user submitted a coin conversion request.
+ */
+function bc_send_admin_coin_conversion_email($vendor_id, $username, $points, $amount) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    if (!$connection_server || $vendor_id <= 0) return;
+    $admin_email = bc_get_vendor_admin_email($vendor_id);
+    if (empty($admin_email)) return;
+
+    $subject = "New Coin Conversion Request";
+    $body = "A user has submitted a coin conversion request:<br><br>"
+        . "<b>Username:</b> " . htmlspecialchars($username) . "<br>"
+        . "<b>Points:</b> " . number_format((int)$points) . "<br>"
+        . "<b>Amount:</b> &#8358;" . number_format((float)$amount, 2) . "<br><br>"
+        . "Please review and approve or reject it from the admin panel (Coin Conversions).<br><br>"
+        . "Best regards,<br>System Notification";
+    sendVendorEmail($admin_email, $subject, $body);
+}
+
+/**
+ * bc_send_user_coin_conversion_status_email()
+ * Notifies the user when their coin conversion request is approved or rejected.
+ */
+function bc_send_user_coin_conversion_status_email($vendor_id, $username, $status, $points, $amount) {
+    global $connection_server;
+    $vendor_id = (int)$vendor_id;
+    if (!$connection_server || $vendor_id <= 0 || empty($username)) return;
+    $user_email = bc_get_user_email($vendor_id, $username);
+    if (empty($user_email)) return;
+
+    if ($status === 'approved') {
+        $subject = "Your coin conversion was approved";
+        $body = "Good news! Your coin conversion request has been <b>approved</b>.<br><br>"
+            . "<b>Points converted:</b> " . number_format((int)$points) . "<br>"
+            . "<b>Amount credited:</b> &#8358;" . number_format((float)$amount, 2) . "<br><br>"
+            . "The amount has been added to your wallet balance and is ready to use.<br><br>"
+            . "Best regards,<br>Support Team";
+    } else {
+        $subject = "Your coin conversion was declined";
+        $body = "Your coin conversion request was <b>declined</b>.<br><br>"
+            . "<b>Points requested:</b> " . number_format((int)$points) . "<br>"
+            . "<b>Amount:</b> &#8358;" . number_format((float)$amount, 2) . "<br><br>"
+            . "Your coins remain in your balance. Please contact support if you have questions.<br><br>"
+            . "Best regards,<br>Support Team";
+    }
+    sendVendorEmail($user_email, $subject, $body);
 }
 
 function get_user_vtu_details($username) {
