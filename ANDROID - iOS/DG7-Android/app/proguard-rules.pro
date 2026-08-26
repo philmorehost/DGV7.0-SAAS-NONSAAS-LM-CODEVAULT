@@ -1,7 +1,7 @@
 # Gson uses reflection to (de)serialize model fields by name — keep field names intact
 # or every API response silently fails to parse into these classes after obfuscation.
--keep class com.dgv6.app.data.model.** { *; }
--keep class com.dgv6.app.api.** { *; }
+-keep class com.datagifting.app.data.model.** { *; }
+-keep class com.datagifting.app.api.** { *; }
 -keepattributes Signature
 -keepattributes *Annotation*
 -keepattributes EnclosingMethod
