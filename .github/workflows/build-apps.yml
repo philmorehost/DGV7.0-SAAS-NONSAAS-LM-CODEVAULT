@@ -45,8 +45,9 @@ jobs:
 
     # Each Android app signs its own release build with per-app secrets. The build.gradle
     # files read the generic KEYSTORE_* env vars; the workflow maps each app's secret names
-    # to them so no two apps collide. If a secret isn't set yet, the release build falls
-    # back to debug signing so the pipeline still produces an artifact.
+    # to them so no two apps collide. Release builds REQUIRE the keystore — if a secret is
+    # missing the step fails (the debug-sign fallback has been removed so a wrong-signed AAB
+    # can never be produced).
     - name: Build & Sign Release APK + AAB (PayHub Guest)
       if: matrix.project == 'ANDROID - iOS/PayHub-Guest-Android'
       env:
@@ -57,7 +58,8 @@ jobs:
       run: |
         cd "${{ matrix.project }}"
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "GUEST_KEYSTORE_BASE64 secret not set yet — build.gradle will fall back to debug signing for this release build."
+          echo "::error::GUEST_KEYSTORE_BASE64 secret is not set — release builds REQUIRE a keystore (debug-sign fallback removed)."
+          exit 1
         fi
         ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
@@ -71,7 +73,8 @@ jobs:
       run: |
         cd "${{ matrix.project }}"
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "DG7_KEYSTORE_BASE64 secret not set yet — build.gradle will fall back to debug signing for this release build."
+          echo "::error::DG7_KEYSTORE_BASE64 secret is not set — release builds REQUIRE a keystore (debug-sign fallback removed)."
+          exit 1
         fi
         ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
@@ -85,7 +88,8 @@ jobs:
       run: |
         cd "${{ matrix.project }}"
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "MZEEVTU_KEYSTORE_BASE64 secret not set yet — build.gradle will fall back to debug signing for this release build."
+          echo "::error::MZEEVTU_KEYSTORE_BASE64 secret is not set — release builds REQUIRE a keystore (debug-sign fallback removed)."
+          exit 1
         fi
         ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 

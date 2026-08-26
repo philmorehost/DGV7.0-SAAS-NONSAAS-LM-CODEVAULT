@@ -57,8 +57,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Use the release signing config when the secrets are present; fall back to debug otherwise
-            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            // Release builds REQUIRE a real release keystore — fail loudly instead of silently
+            // falling back to debug signing (debug-signed AABs are rejected by Play Store).
+            signingConfig signingConfigs.release
         }
         debug {
             // Debug builds are always signed with the default debug keystore
