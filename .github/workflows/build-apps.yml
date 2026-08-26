@@ -47,8 +47,8 @@ jobs:
     # files read the generic KEYSTORE_* env vars; the workflow maps each app's secret names
     # to them so no two apps collide. If a secret isn't set yet, the release build falls
     # back to debug signing so the pipeline still produces an artifact.
-    - name: Build & Sign Release APK (PayHub Guest only)
-      if: matrix.project == 'DGV7.0-NON-SAAS/PayHub-Guest-Android'
+    - name: Build & Sign Release APK + AAB (PayHub Guest)
+      if: matrix.project == 'ANDROID - iOS/PayHub-Guest-Android'
       env:
         KEYSTORE_BASE64: ${{ secrets.GUEST_KEYSTORE_BASE64 }}
         KEYSTORE_PASSWORD: ${{ secrets.GUEST_KEYSTORE_PASSWORD }}
@@ -59,9 +59,9 @@ jobs:
         if [ -z "$KEYSTORE_BASE64" ]; then
           echo "GUEST_KEYSTORE_BASE64 secret not set yet — build.gradle will fall back to debug signing for this release build."
         fi
-        ./gradlew assembleRelease --no-daemon --stacktrace
+        ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
-    - name: Build & Sign Release APK (DG7-Android only)
+    - name: Build & Sign Release APK + AAB (DG7-Android)
       if: matrix.project == 'ANDROID - iOS/DG7-Android'
       env:
         KEYSTORE_BASE64: ${{ secrets.DG7_KEYSTORE_BASE64 }}
@@ -73,9 +73,9 @@ jobs:
         if [ -z "$KEYSTORE_BASE64" ]; then
           echo "DG7_KEYSTORE_BASE64 secret not set yet — build.gradle will fall back to debug signing for this release build."
         fi
-        ./gradlew assembleRelease --no-daemon --stacktrace
+        ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
-    - name: Build & Sign Release APK (MZEEVTU-Android only)
+    - name: Build & Sign Release APK + AAB (MZEEVTU-Android)
       if: matrix.project == 'ANDROID - iOS/MZEEVTU-Android'
       env:
         KEYSTORE_BASE64: ${{ secrets.MZEEVTU_KEYSTORE_BASE64 }}
@@ -87,7 +87,7 @@ jobs:
         if [ -z "$KEYSTORE_BASE64" ]; then
           echo "MZEEVTU_KEYSTORE_BASE64 secret not set yet — build.gradle will fall back to debug signing for this release build."
         fi
-        ./gradlew assembleRelease --no-daemon --stacktrace
+        ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
     - name: Prepare Artifact Name
       id: artifact-name
@@ -104,11 +104,18 @@ jobs:
         if-no-files-found: warn
 
     - name: Upload Release APK (DG7-Android, MZEEVTU-Android, PayHub Guest)
-      if: matrix.project == 'DGV7.0-NON-SAAS/PayHub-Guest-Android' || matrix.project == 'ANDROID - iOS/DG7-Android' || matrix.project == 'ANDROID - iOS/MZEEVTU-Android'
+      if: matrix.project == 'ANDROID - iOS/PayHub-Guest-Android' || matrix.project == 'ANDROID - iOS/DG7-Android' || matrix.project == 'ANDROID - iOS/MZEEVTU-Android'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.APP_NAME }}-Release-APK
         path: ${{ matrix.project }}/app/build/outputs/apk/release/app-release.apk
+        if-no-files-found: warn
+
+    - name: Upload Release AAB (Android App Bundle)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-Release-AAB
+        path: ${{ matrix.project }}/app/build/outputs/bundle/release/app-release.aab
         if-no-files-found: warn
 
   # ─── IOS BUILD MATRIX ──────────────────────────────────────────────
