@@ -1,7 +1,7 @@
 # Gson uses reflection to (de)serialize model fields by name — keep field names intact
 # or every API response silently fails to parse into these classes after obfuscation.
--keep class com.mzeevtu.data.model.** { *; }
--keep class com.mzeevtu.api.** { *; }
+-keep class com.dgv6.app.data.model.** { *; }
+-keep class com.dgv6.app.api.** { *; }
 -keepattributes Signature
 -keepattributes *Annotation*
 -keepattributes EnclosingMethod
@@ -10,11 +10,15 @@
 # Gson
 -keep class com.google.gson.stream.** { *; }
 -keep class sun.misc.Unsafe { *; }
--keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
--keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
 -dontwarn sun.misc.**
 
-# Retrofit / OkHttp (bundled consumer-rules cover most of this; kept for older AGP/R8 configs)
+# TypeToken: R8's classic "java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType"
+# failure mode. These variants (Gson's documented R8 fix) let R8 rename/remove as normal but
+# forbid the structural changes that break generic lookups.
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
+# Retrofit / OkHttp
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -dontwarn retrofit2.**
@@ -46,8 +50,8 @@
 -keepattributes RuntimeVisibleParameterAnnotations
 -keepattributes RuntimeVisibleTypeAnnotations
 
-# Firebase Cloud Messaging
--keep class com.google.firebase.messaging.** { *; }
-
 # Glide
 -keep class com.bumptech.glide.GeneratedAppGlideModule
+
+# Firebase Cloud Messaging
+-keep class com.google.firebase.messaging.** { *; }
