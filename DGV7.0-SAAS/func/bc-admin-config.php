@@ -1,6 +1,9 @@
 <?php
-$is_secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') || (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
-$web_http_host = ($is_secure ? "https://" : "http://") . $_SERVER["HTTP_HOST"];
+if (isset($_SERVER["HTTPS"]) && ($_SERVER["HTTPS"] == "on")) {
+    $web_http_host = "https://" . $_SERVER["HTTP_HOST"];
+} else {
+    $web_http_host = "http://" . $_SERVER["HTTP_HOST"];
+}
 
 // Standardize session_start across the platform
 if (session_status() === PHP_SESSION_NONE) {
@@ -81,7 +84,8 @@ if ($connection_server) {
                         exit();
                     }
                 }
-
+                // Auto-release expired brute-force auto-blocks so blocked admins aren't stuck after the block window.
+                bc_release_expired_blocks($email, $_SERVER['REMOTE_ADDR'] ?? '', $vid);
                 $get_logged_admin_query = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vid' && email='$email' LIMIT 1");
                 if (mysqli_num_rows($get_logged_admin_query) == 1) {
                     $get_logged_admin_details = mysqli_fetch_array($get_logged_admin_query);

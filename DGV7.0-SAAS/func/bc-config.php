@@ -8,8 +8,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$is_secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') || (isset($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
-$web_http_host = ($is_secure ? "https://" : "http://") . $_SERVER["HTTP_HOST"];
+if (isset($_SERVER["HTTPS"]) && ($_SERVER["HTTPS"] == "on")) {
+    $web_http_host = "https://" . $_SERVER["HTTP_HOST"];
+} else {
+    $web_http_host = "http://" . $_SERVER["HTTP_HOST"];
+}
 
 include_once(__DIR__ . "/bc-connect.php");
 
@@ -393,6 +396,9 @@ if ($connection_server) {
                     }
                 }
             }
+
+			// Auto-release expired brute-force auto-blocks so blocked users aren't stuck after the block window.
+			bc_release_expired_blocks($username, $_SERVER['REMOTE_ADDR'] ?? '', $vendor_id);
 
 			$get_logged_user_query = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$vendor_id' AND username='$username' LIMIT 1");
 

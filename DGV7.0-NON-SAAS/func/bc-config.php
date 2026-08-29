@@ -425,6 +425,9 @@ if ($connection_server) {
                 }
             }
 
+			// Auto-release expired brute-force auto-blocks so blocked users aren't stuck after the block window.
+			bc_release_expired_blocks($username, $_SERVER['REMOTE_ADDR'] ?? '', $vendor_id);
+
 			$get_logged_user_query = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$vendor_id' AND username='$username' LIMIT 1");
 
 			if (mysqli_num_rows($get_logged_user_query) == 1) {

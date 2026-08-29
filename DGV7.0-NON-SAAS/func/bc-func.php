@@ -4834,6 +4834,8 @@ function isIPBlocked($ip, $vendor_id) {
     if ($row = mysqli_fetch_assoc($res)) {
         return "Blocked until " . $row['block_until'];
     }
+    // No active block — lazily release any expired auto-block so the IP recovers automatically.
+    bc_release_expired_blocks('', $ip, $vendor_id);
     return false;
 }
 
@@ -4852,6 +4854,8 @@ function isAccountLocked($username, $vendor_id) {
     if ($row = mysqli_fetch_assoc($res)) {
         return "Locked until " . $row['block_until'];
     }
+    // No active block — lazily release any expired auto-block so the account recovers automatically.
+    bc_release_expired_blocks($username, '', $vendor_id);
     return false;
 }
 
@@ -5120,6 +5124,42 @@ function bc_is_password_reset_blocked($username, $ip, $vendor_id) {
         }
     }
     return false;
+}
+
+/**
+ * bc_release_expired_blocks()
+ * Lazy auto-release of EXPIRED brute-force auto-blocks — this is what makes a
+ * "1-day block" automatically lift WITHOUT a cronjob.
+ *
+ * If an account/IP has a sas_blocked_accounts / sas_blocked_ips row whose
+ * block_until has already passed, that row is removed and the is_blocked flag on
+ * the matching user/vendor is cleared. MANUAL blocks (is_blocked=1 with no block
+ * row, e.g. set from the admin panel) are never touched.
+ */
+function bc_release_expired_blocks($username, $ip, $vendor_id) {
+    global $connection_server;
+    if ($vendor_id <= 0 || !$connection_server) return;
+
+    // 1) Account auto-block
+    if ($username !== '') {
+        $esc_user = mysqli_real_escape_string($connection_server, (string)$username);
+        $row = @mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT block_until FROM sas_blocked_accounts WHERE username='$esc_user' AND vendor_id='$vendor_id' LIMIT 1"));
+        if ($row && isset($row['block_until']) && strtotime($row['block_until']) <= time()) {
+            mysqli_query($connection_server, "DELETE FROM sas_blocked_accounts WHERE username='$esc_user' AND vendor_id='$vendor_id'");
+            // Release the flag only if no OTHER active auto-block remains for this account.
+            mysqli_query($connection_server, "UPDATE sas_users SET is_blocked=0 WHERE username='$esc_user' AND vendor_id='$vendor_id' AND is_blocked=1 AND NOT EXISTS (SELECT 1 FROM sas_blocked_accounts b WHERE b.username='$esc_user' AND b.vendor_id='$vendor_id' AND b.block_until > NOW())");
+            mysqli_query($connection_server, "UPDATE sas_vendors SET is_blocked=0 WHERE email='$esc_user' AND id='$vendor_id' AND is_blocked=1 AND NOT EXISTS (SELECT 1 FROM sas_blocked_accounts b WHERE b.username='$esc_user' AND b.vendor_id='$vendor_id' AND b.block_until > NOW())");
+        }
+    }
+
+    // 2) IP auto-block
+    if ($ip !== '') {
+        $esc_ip = mysqli_real_escape_string($connection_server, (string)$ip);
+        $row = @mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT block_until FROM sas_blocked_ips WHERE ip_address='$esc_ip' AND vendor_id='$vendor_id' LIMIT 1"));
+        if ($row && isset($row['block_until']) && strtotime($row['block_until']) <= time()) {
+            mysqli_query($connection_server, "DELETE FROM sas_blocked_ips WHERE ip_address='$esc_ip' AND vendor_id='$vendor_id'");
+        }
+    }
 }
 
 function getCountryCodeFromIP($ip) {

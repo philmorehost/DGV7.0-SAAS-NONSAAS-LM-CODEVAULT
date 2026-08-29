@@ -55,6 +55,9 @@ if ($connection_server) {
                 }
             }
 
+            // Auto-release expired brute-force auto-blocks so blocked admins aren't stuck after the block window.
+            bc_release_expired_blocks($email, $_SERVER['REMOTE_ADDR'] ?? '', $vid);
+
             $get_logged_admin_query = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vid' && email='$email' LIMIT 1");
             if (mysqli_num_rows($get_logged_admin_query) == 1) {
                 $get_logged_admin_details = mysqli_fetch_array($get_logged_admin_query);
