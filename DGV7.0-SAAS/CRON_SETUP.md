@@ -15,6 +15,7 @@ Copy these into your cPanel or VPS crontab. Replace `YOUR_USERNAME` with your ac
 | `0 7 * * *` | `cron/ai_daily_briefing.php` | AI Daily briefing emailed to vendors |
 | `0 10 * * *` | `cron/dormant_user_alert.php` | Re-engage inactive users via email |
 | `0 8 1 * *` | `cron/ai_monthly_blueprint.php` | Monthly full platform AI Audit |
+| `0 8 * * 1` | `cron/ai_weekly_error_report.php` | Weekly AI health scan — error logs emailed to admin + AI enhancement plan |
 
 ---
 
@@ -48,6 +49,12 @@ This is what allows bulk airtime/data batches to finish crediting recipients eve
 ```bash
 0 8 1 * * /usr/bin/php /home/YOUR_USERNAME/public_html/cron/ai_monthly_blueprint.php >> /home/YOUR_USERNAME/logs/audit.log 2>&1
 ```
+
+### AI Weekly Health Scan & Enhancement Plan (Every Monday 8:00 AM)
+```bash
+0 8 * * 1 /usr/bin/php /home/YOUR_USERNAME/public_html/cron/ai_weekly_error_report.php >> /home/YOUR_USERNAME/logs/weekly_health.log 2>&1
+```
+Scans PHP `error_log` files, the `logs/` directory, the DB audit log, failed transactions and password-reset brute-force attempts from the last 7 days. If errors are detected, the Cloud AI engine analyses them and emails a report to the configured admin email (`admin_email` option). The AI also reviews the health snapshot and, when enhancements are worthwhile, emails an implementation plan.
 
 ---
 
