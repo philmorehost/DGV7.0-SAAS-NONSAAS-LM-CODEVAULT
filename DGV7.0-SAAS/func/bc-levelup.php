@@ -104,9 +104,6 @@ function bc_store_license_option($conn, $name, $value) {
  * Verifies system integrity against the validation API
  */
 function bc_verify_integrity() {
-    if (session_status() === PHP_SESSION_NONE) {
-        @session_start();
-    }
     // Avoid double validation in the same execution
     if (isset($GLOBALS['bc_integrity_checked'])) {
         return !$GLOBALS['bc_integrity_fail'];
@@ -184,20 +181,6 @@ function bc_verify_integrity() {
     $cache_file = $cache_dir . '/bc-core.cache';
 
     $now = time();
-
-    // 1. Session Cache Check (bulletproof fallback against slow disk I/O and remote hits)
-    if (isset($_SESSION['license_integrity_cache']) && is_array($_SESSION['license_integrity_cache'])) {
-        $sc = $_SESSION['license_integrity_cache'];
-        if (($sc['domain'] ?? '') === $domain && ($sc['code'] ?? '') === $code) {
-            if (($now - ($sc['last_check'] ?? 0)) < 21600) { // 6 hours
-                if (($sc['status'] ?? 0) == 1) {
-                    $GLOBALS['bc_integrity_fail'] = false;
-                    return true;
-                }
-            }
-        }
-    }
-
     $cache = null;
 
     if (file_exists($cache_file)) {
@@ -207,12 +190,14 @@ function bc_verify_integrity() {
         }
     }
 
-    // If cache exists, matches current domain/code, and is fresh (< 6 hours)
+    // If cache exists, matches current domain/code, and is fresh — trust a validated
+    // license for the full 48h window (matches the offline grace below). This avoids a
+    // blocking remote call on every fresh session; the license API is only contacted
+    // once per 48h or when the license state needs re-checking, keeping page loads fast.
     if ($cache && isset($cache['last_check'], $cache['status'], $cache['domain'], $cache['code'])) {
         if ($cache['domain'] === $domain && $cache['code'] === $code) {
-            // Check if within 6 hours (21600 seconds)
-            if (($now - $cache['last_check']) < 21600) {
-                $_SESSION['license_integrity_cache'] = $cache;
+            // Check if within 48 hours (172800 seconds)
+            if (($now - $cache['last_check']) < 172800) {
                 if ($cache['status'] == 1) {
                     $GLOBALS['bc_integrity_fail'] = false;
                     return true;
@@ -235,8 +220,10 @@ function bc_verify_integrity() {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    // Short timeouts: a slow/unreachable license server should never stall a page load
+    // for many seconds. On failure the offline grace below still passes a valid license.
+    curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     
     $response = curl_exec($ch);
@@ -255,7 +242,6 @@ function bc_verify_integrity() {
                 'code' => $code
             ];
             @file_put_contents($cache_file, json_encode($new_cache));
-            $_SESSION['license_integrity_cache'] = $new_cache;
 
             if ($status === 1 || (isset($res_decoded['message']) && stripos($res_decoded['message'], 'Limit exceeded') !== false)) {
                 $GLOBALS['bc_integrity_fail'] = false;

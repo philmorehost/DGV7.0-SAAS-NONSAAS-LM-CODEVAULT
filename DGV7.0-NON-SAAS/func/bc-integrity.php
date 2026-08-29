@@ -226,7 +226,10 @@ function bc_verify_integrity(): bool {
 
     $response = null;
     $http_code = 0;
-    $attempts = 2;
+    // Single fast attempt with short timeouts: a slow/unreachable license server must
+    // never stall a page load for ~20s (the old 2 attempts x 10s + sleep). On failure the
+    // 48h valid-cache grace below still passes a previously-validated license.
+    $attempts = 1;
 
     while ($attempts-- > 0) {
         $ch = curl_init();
@@ -234,8 +237,8 @@ function bc_verify_integrity(): bool {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post_body);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 4);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
