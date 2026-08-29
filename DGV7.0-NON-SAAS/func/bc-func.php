@@ -4983,6 +4983,116 @@ function lockAccount($username, $vendor_id, $duration_type, $reason) {
     }
 }
 
+/**
+ * bc_is_global_service_enabled()
+ * Reads the Super-Admin GLOBAL service control (sas_global_service_control).
+ * Used by the bc-spadmin "general control" (e.g. the password-reset kill switch).
+ * In standalone (NON-SAAS) deployments there is no global table, so this returns
+ * true and the vendor-local sas_service_control setting applies instead.
+ */
+function bc_is_global_service_enabled($name) {
+    global $connection_server;
+    static $global_service_cache = null;
+    if ($global_service_cache === null) {
+        $global_service_cache = [];
+        if ($connection_server) {
+            $gc_q = mysqli_query($connection_server, "SELECT service_name, status FROM sas_global_service_control");
+            if ($gc_q) {
+                while ($gc_r = mysqli_fetch_assoc($gc_q)) {
+                    $global_service_cache[$gc_r['service_name']] = (int)$gc_r['status'];
+                }
+            }
+        }
+    }
+    $name = strtolower(trim($name));
+    return isset($global_service_cache[$name]) ? (bool)$global_service_cache[$name] : true;
+}
+
+/**
+ * bc_handle_password_reset_attempt()
+ * Anti-bruteforce for the password-reset flow (web users, admins and the app API).
+ * Mirrors recordLoginAttempt() but on a dedicated table (sas_password_reset_attempts)
+ * so login and reset counters never interfere with each other.
+ *
+ * Every reset request and every failed code verification counts as an attempt; once
+ * the configured threshold is reached the TARGET ACCOUNT is locked (sas_blocked_accounts
+ * + is_blocked=1) and/or the SOURCE IP is blocked. This is the exact same lock that the
+ * Security-PIN self-help page (web/LockoutResolution.php) clears — so the real account
+ * owner can always unlock "as usual", but a brute-forcing attacker cannot.
+ */
+function bc_handle_password_reset_attempt($username, $ip, $success, $vendor_id, $type = 'request') {
+    global $connection_server;
+    if ($vendor_id <= 0 || !$connection_server) return; // Super admin exempt (matches login)
+
+    // Idempotent one-time-per-request table ensure (also created by bc-tables.php).
+    static $reset_table_checked = false;
+    if (!$reset_table_checked) {
+        $reset_table_checked = true;
+        mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_password_reset_attempts (
+            id INT NOT NULL AUTO_INCREMENT,
+            vendor_id INT UNSIGNED NOT NULL,
+            username VARCHAR(225) DEFAULT NULL,
+            ip_address VARCHAR(50) NOT NULL,
+            success TINYINT(1) NOT NULL DEFAULT 0,
+            attempt_type VARCHAR(30) NOT NULL DEFAULT 'request',
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_reset_lookup (vendor_id, ip_address, timestamp),
+            KEY idx_reset_user (vendor_id, username, timestamp)
+        )");
+    }
+
+    $vendor_id = (int)$vendor_id;
+    $username  = mysqli_real_escape_string($connection_server, trim((string)$username));
+    $ip        = mysqli_real_escape_string($connection_server, trim((string)$ip));
+    $type      = ($type === 'verify') ? 'verify' : 'request';
+    $success   = $success ? 1 : 0;
+
+    mysqli_query($connection_server, "INSERT INTO sas_password_reset_attempts (vendor_id, username, ip_address, success, attempt_type) VALUES ('$vendor_id', '$username', '$ip', $success, '$type')");
+
+    $settings = getBruteForceSettings($vendor_id);
+    if (empty($settings['is_enabled'])) return; // master brute-force switch turned off
+
+    $period = max(1, (int)$settings['period_mins']);
+
+    // A fully successful reset (correct code + password actually changed) clears the
+    // lockout counters for this account and IP.
+    if ($success) {
+        mysqli_query($connection_server, "DELETE FROM sas_password_reset_attempts WHERE vendor_id='$vendor_id' AND (ip_address='$ip' OR (username='$username' AND username <> ''))");
+        return;
+    }
+
+    // Block the source IP after repeated probes (e.g. non-existent usernames).
+    $r = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT COUNT(*) AS c FROM sas_password_reset_attempts WHERE vendor_id='$vendor_id' AND ip_address='$ip' AND success=0 AND timestamp > (NOW() - INTERVAL $period MINUTE)"));
+    if ($r && (int)$r['c'] >= (int)$settings['max_failures_ip']) {
+        blockIP($ip, $vendor_id, $settings['block_duration'], "Exceeded max password-reset IP failures (" . $r['c'] . ")");
+    }
+
+    // Lock the target account after repeated reset attempts against it.
+    if (!empty($username)) {
+        $r2 = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT COUNT(*) AS c FROM sas_password_reset_attempts WHERE vendor_id='$vendor_id' AND username='$username' AND success=0 AND timestamp > (NOW() - INTERVAL $period MINUTE)"));
+        if ($r2 && (int)$r2['c'] >= (int)$settings['max_failures_account']) {
+            lockAccount($username, $vendor_id, $settings['block_duration'], "Exceeded max password-reset account failures (" . $r2['c'] . ")");
+        }
+    }
+}
+
+/**
+ * bc_is_password_reset_blocked()
+ * Returns a human-readable lock message (or false) when password reset must be refused
+ * for this account/IP. Reuses the exact same sas_blocked_ips / sas_blocked_accounts
+ * tables that login checks and that LockoutResolution.php clears with the Security PIN.
+ */
+function bc_is_password_reset_blocked($username, $ip, $vendor_id) {
+    global $connection_server;
+    if ($vendor_id <= 0 || !$connection_server) return false;
+    if ($msg = isIPBlocked($ip, $vendor_id)) return $msg;
+    if (!empty($username)) {
+        if ($msg = isAccountLocked($username, $vendor_id)) return $msg;
+    }
+    return false;
+}
+
 function getCountryCodeFromIP($ip) {
     // Basic mock for country detection, in production use GeoIP2
     return 'NG';

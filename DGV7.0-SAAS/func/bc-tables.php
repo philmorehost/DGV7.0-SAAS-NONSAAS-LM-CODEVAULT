@@ -1347,6 +1347,20 @@ if ($connection_server) {
         } catch (mysqli_sql_exception $e) { error_log($e->getMessage()); }
     }
 
+    //Create Password Reset Attempts Table (anti-bruteforce for the forgot-password flow)
+    $create_password_reset_attempts_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_password_reset_attempts (
+        id INT NOT NULL AUTO_INCREMENT,
+        vendor_id INT UNSIGNED NOT NULL,
+        username VARCHAR(225) DEFAULT NULL,
+        ip_address VARCHAR(50) NOT NULL,
+        success TINYINT(1) NOT NULL DEFAULT 0,
+        attempt_type VARCHAR(30) NOT NULL DEFAULT 'request',
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_reset_lookup (vendor_id, ip_address, timestamp),
+        KEY idx_reset_user (vendor_id, username, timestamp)
+    )");
+
     //Create Country Security Table
     $create_country_security_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_country_security (country_code VARCHAR(5) NOT NULL, vendor_id INT UNSIGNED NOT NULL, status ENUM('Whitelisted', 'Blacklisted', 'Not Specified') NOT NULL DEFAULT 'Not Specified', PRIMARY KEY (country_code, vendor_id))");
 

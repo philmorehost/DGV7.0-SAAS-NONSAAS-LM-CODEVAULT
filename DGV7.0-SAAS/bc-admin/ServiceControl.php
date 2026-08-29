@@ -33,6 +33,7 @@ $services = [
     'bank_transfer' => 'Bank Transfer Service',
     'payout' => 'Payout (API & Web)',
     'withdraw' => 'Wallet to Bank',
+    'password_reset' => 'Password Reset',
     'virtual_card' => 'Virtual Card System',
     'gift_card' => 'Gift Cards',
     'crypto_hub' => 'Crypto Service',

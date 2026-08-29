@@ -1,7 +1,18 @@
 <?php session_start();
     include("../func/bc-spadmin-config.php");
     
+    // Password Reset General Control — the Super Admin controls the global kill switch.
+    $reset_blocked_msg = null;
+    if (!bc_is_global_service_enabled('password_reset')) {
+        $reset_blocked_msg = "Password reset is currently disabled by the platform administrator.";
+    }
+    
     if(isset($_POST["send-code"])){
+        if ($reset_blocked_msg) {
+            $_SESSION["product_purchase_response"] = $reset_blocked_msg;
+            header("Location: ".$_SERVER["REQUEST_URI"]);
+            exit();
+        }
     	$email = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["email"]))));
     	if(!empty($email)){
     		$get_user_details = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE email='$email'");
@@ -48,6 +59,11 @@
     }
 
 	if(isset($_POST["verify-code"])){
+        if ($reset_blocked_msg) {
+            $_SESSION["product_purchase_response"] = $reset_blocked_msg;
+            header("Location: ".$_SERVER["REQUEST_URI"]);
+            exit();
+        }
     	$pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["pass"])));
     	$confirm_pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["confirm-pass"])));
 		$recovery_code = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["code"]))));
@@ -186,6 +202,16 @@
                     <p class="text-center opacity-75">Secure session re-authorization for super administrative accounts.</p>
                 </div>
                 <div class="col-lg-7 p-4 p-md-5 bg-white">
+                    <?php if ($reset_blocked_msg): ?>
+                    <div class="alert alert-danger border-0 rounded-3 mb-4">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-shield-lock-fill fs-4 me-2 text-danger"></i>
+                            <strong class="fw-bold">Password reset unavailable</strong>
+                        </div>
+                        <p class="mb-2 small"><?php echo htmlspecialchars($reset_blocked_msg); ?></p>
+                        <a href="Login.php" class="btn btn-dark btn-lg w-100 fw-bold">Back to Super Admin Login</a>
+                    </div>
+                    <?php endif; ?>
                     <div class="text-center mb-4 d-lg-none">
                         <img src="<?php echo $web_http_host; ?>/uploaded-image/sp-logo.png" style="width: 80px; height: 80px; object-fit: contain;" class="rounded-circle bg-light p-1 mb-3"/>
                         <h4 class="fw-bold text-dark">Super Recovery</h4>
@@ -194,7 +220,7 @@
                     <h2 class="fw-bold text-dark mb-1 d-none d-lg-block">Account Recovery</h2>
                     <p class="text-muted mb-4 d-none d-lg-block">Master access restoration</p>
 
-                    <form method="post" action="">
+                    <form method="post" action="" <?php echo $reset_blocked_msg ? 'style="display:none"' : ''; ?>>
                         <?php if(!isset($_SESSION["spadmin-recovery-username"]) || empty($_SESSION["spadmin-recovery-username"])){ ?>
                             <div class="mb-4">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Super Email</label>

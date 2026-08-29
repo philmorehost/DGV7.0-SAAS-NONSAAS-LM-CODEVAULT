@@ -1,7 +1,27 @@
 <?php session_start();
     include("../func/bc-admin-config.php");
     
+    // Password Reset Control + Anti-BruteForce (security hardening) — admin's own account
+    $reset_vendor_id = resolveVendorID();
+    $reset_user_ip = $_SERVER['REMOTE_ADDR'];
+    $reset_blocked_msg = null;
+    if (!isServiceEnabled('password_reset', $reset_vendor_id)) {
+        $reset_blocked_msg = "Password reset is currently disabled for this admin account. Please contact the platform administrator.";
+    } else {
+        $reset_probe_user = (isset($_SESSION["admin-recovery-username"]) && !empty($_SESSION["admin-recovery-username"]))
+            ? $_SESSION["admin-recovery-username"]
+            : (isset($_POST["email"]) ? trim(strip_tags($_POST["email"])) : '');
+        if ($msg = bc_is_password_reset_blocked($reset_probe_user, $reset_user_ip, $reset_vendor_id)) {
+            $reset_blocked_msg = "Password reset is temporarily locked for this admin account: " . $msg . ". Please unlock with your Security PIN to continue.";
+        }
+    }
+    
     if(isset($_POST["send-code"])){
+        if ($reset_blocked_msg) {
+            $_SESSION["product_purchase_response"] = $reset_blocked_msg;
+            header("Location: ".$_SERVER["REQUEST_URI"]);
+            exit();
+        }
     	$email = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["email"]))));
     	if(!empty($email)){
             $vendor_id = resolveVendorID();
@@ -20,6 +40,8 @@
 				}
 				sendVendorEmail($get_user_personal_details["email"], $raw_log_template_subject, $raw_log_template_body);
 				// Email End
+				// Record the reset request — repeated requests for the same admin account lock it out.
+				bc_handle_password_reset_attempt($email, $reset_user_ip, 0, $vendor_id, 'request');
 				//Recovery Code Emailed Successfully
 				$json_response_array = array("desc" => "Recovery Code Emailed Successfully");
 				$json_response_encode = json_encode($json_response_array,true);
@@ -30,6 +52,7 @@
     				$json_response_encode = json_encode($json_response_array,true);
     			}else{
     				//User Not Exists
+    				bc_handle_password_reset_attempt($email, $reset_user_ip, 0, $vendor_id, 'request');
     				$json_response_array = array("desc" => "User Not Exists");
     				$json_response_encode = json_encode($json_response_array,true);
     			}
@@ -49,6 +72,11 @@
     }
 
 	if(isset($_POST["verify-code"])){
+        if ($reset_blocked_msg) {
+            $_SESSION["product_purchase_response"] = $reset_blocked_msg;
+            header("Location: ".$_SERVER["REQUEST_URI"]);
+            exit();
+        }
     	$pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["pass"])));
     	$confirm_pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["confirm-pass"])));
 		$recovery_code = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["code"]))));
@@ -71,6 +99,8 @@
 						}
 						sendVendorEmail($get_user_personal_details["email"], $raw_log_template_subject, $raw_log_template_body);
 						// Email End
+						// Successful reset clears the password-reset lockout counters.
+						bc_handle_password_reset_attempt($_SESSION["admin-recovery-username"] ?? '', $reset_user_ip, 1, $reset_vendor_id, 'verify');
 						unset($_SESSION["admin-recovery-username"]);
 						unset($_SESSION["admin-recovery-code"]);
 
@@ -79,11 +109,13 @@
 						$json_response_encode = json_encode($json_response_array,true);
 					}else{
 						//Password Not Match
+						bc_handle_password_reset_attempt($_SESSION["admin-recovery-username"] ?? '', $reset_user_ip, 0, $reset_vendor_id, 'verify');
 						$json_response_array = array("desc" => "Password Not Match");
 						$json_response_encode = json_encode($json_response_array,true);
 					}
 				}else{
 					//Invalid Recovery Code
+					bc_handle_password_reset_attempt($_SESSION["admin-recovery-username"] ?? '', $reset_user_ip, 0, $reset_vendor_id, 'verify');
 					$json_response_array = array("desc" => "Invalid Recovery Code");
 					$json_response_encode = json_encode($json_response_array,true);
 				}
@@ -185,6 +217,19 @@
                     <p class="text-center opacity-75">Follow the instructions to safely regain access to your admin dashboard.</p>
                 </div>
                 <div class="col-lg-7 p-4 p-md-5 bg-white">
+                    <?php if ($reset_blocked_msg): ?>
+                    <div class="alert alert-danger border-0 rounded-3 mb-4">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-shield-lock-fill fs-4 me-2 text-danger"></i>
+                            <strong class="fw-bold">Password reset unavailable</strong>
+                        </div>
+                        <p class="mb-2 small"><?php echo htmlspecialchars($reset_blocked_msg); ?></p>
+                        <a href="../web/LockoutResolution.php" class="btn btn-danger btn-lg w-100 fw-bold">Unlock with Security PIN</a>
+                        <div class="text-center mt-2">
+                            <a href="Login.php" class="text-decoration-none small fw-bold text-muted"><i class="bi bi-arrow-left me-1"></i>Back to Login</a>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                     <div class="text-center mb-4 d-lg-none">
                         <img src="<?php echo $web_http_host; ?>/uploaded-image/<?php echo str_replace(['.',':'],'-',$_SERVER['HTTP_HOST']).'_'; ?>logo.png" style="width: 80px; height: 80px; object-fit: contain;" class="rounded-circle bg-light p-1 mb-3"/>
                         <h4 class="fw-bold text-dark">Recover Admin</h4>
@@ -193,7 +238,7 @@
                     <h2 class="fw-bold text-dark mb-1 d-none d-lg-block">Account Recovery</h2>
                     <p class="text-muted mb-4 d-none d-lg-block">Reset your administrator password</p>
 
-                    <form method="post" action="">
+                    <form method="post" action="" <?php echo $reset_blocked_msg ? 'style="display:none"' : ''; ?>>
                         <?php if(!isset($_SESSION["admin-recovery-username"]) || empty($_SESSION["admin-recovery-username"])){ ?>
                             <div class="mb-4">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Admin Email</label>

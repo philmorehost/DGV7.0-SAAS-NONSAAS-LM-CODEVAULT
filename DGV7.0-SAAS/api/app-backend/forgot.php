@@ -17,8 +17,24 @@ if (json_last_error() === JSON_ERROR_NONE) {
         $status_update = "failed";
         $status_msg = "Unknown Error";
 
+        // Password Reset Control + Anti-BruteForce (security hardening)
+        $reset_ip = $_SERVER['REMOTE_ADDR'];
+        $reset_gated = false;
+        if (!isServiceEnabled('password_reset', $vendor_id)) {
+            $status_msg = "Password reset is currently disabled. Please contact support.";
+            $reset_gated = true;
+        } elseif ($msg = bc_is_password_reset_blocked($username, $reset_ip, $vendor_id)) {
+            $status_msg = "Password reset is temporarily locked for this account: " . $msg . ". Please unlock with your Security PIN to continue.";
+            $reset_gated = true;
+        }
+
+        if (!$reset_gated) {
+            // Record every reset request — repeated requests lock the target account.
+            bc_handle_password_reset_attempt($username, $reset_ip, 0, $vendor_id, 'request');
+        }
+
         if (
-            !empty($username)
+            !empty($username) && !$reset_gated
         ) {
             $checkuser = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id = '" . $select_vendor_table["id"] . "' AND (username = '" . $username . "' OR email='" . $username . "')");
             if (mysqli_num_rows($checkuser) == 1) {
@@ -49,7 +65,7 @@ if (json_last_error() === JSON_ERROR_NONE) {
                 $status_msg = "Invalid Username or email";
             }
         } else {
-            if (empty($username)) {
+            if (empty($username) && !$reset_gated) {
                 $status_msg = "Empty Username";
             }
         }
