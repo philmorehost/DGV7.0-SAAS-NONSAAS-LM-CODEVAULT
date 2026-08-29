@@ -1809,6 +1809,15 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                 </form>
                             </div>
 
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-muted text-uppercase">AI Weekly Health Scan &amp; Enhancement Plan Cron Path</label>
+                                <div class="input-group">
+                                    <input type="text" value="php <?php echo realpath(__DIR__ . '/../cron/ai_weekly_error_report.php'); ?>" class="form-control bg-light" readonly />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="small text-muted mt-1">Run once a week (e.g. every Monday) to scan PHP error logs, app logs, DB audit log, failed transactions and password-reset brute-force attempts — the AI emails an error report plus an enhancement plan to the admin.</div>
+                            </div>
+
                             <div class="mb-1">
                                 <label class="form-label small fw-bold text-muted text-uppercase d-block">System Tools & Maintenance</label>
                                 <a href="cleanup_platform.php" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill fw-bold px-4 py-2 mt-1">

@@ -171,11 +171,19 @@ $root = dirname(__FILE__) . '/..';
                         </div>
                     </div>
 
-                    <div class="mb-0">
+                    <div class="mb-4">
                         <h6 class="fw-bold small text-uppercase d-flex align-items-center gap-2">AI Monthly Platform Audit <span class="badge bg-warning bg-opacity-10 text-warning schedule-badge">1st of month at 08:00</span></h6>
                         <p class="text-muted small mb-2">Runs the monthly AI platform audit.</p>
                         <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">COPY</button>
                             <code>0 8 1 * * <?php echo $php_bin; ?> <?php echo realpath($root . '/cron/ai_monthly_blueprint.php'); ?> &gt;&gt; <?php echo $logs_dir; ?>/audit.log 2&gt;&amp;1</code>
+                        </div>
+                    </div>
+
+                    <div class="mb-0">
+                        <h6 class="fw-bold small text-uppercase d-flex align-items-center gap-2">AI Weekly Health Scan &amp; Enhancement Plan <span class="badge bg-warning bg-opacity-10 text-warning schedule-badge">Every Monday at 08:00</span></h6>
+                        <p class="text-muted small mb-2">Scans PHP error logs, app logs, DB audit log, failed transactions and password-reset brute-force attempts — emails an AI error report and an enhancement plan to the admin.</p>
+                        <div class="code-block"><button class="copy-btn" onclick="copyCode(this)">COPY</button>
+                            <code>0 8 * * 1 <?php echo $php_bin; ?> <?php echo realpath($root . '/cron/ai_weekly_error_report.php'); ?> &gt;&gt; <?php echo $logs_dir; ?>/weekly_health.log 2&gt;&amp;1</code>
                         </div>
                     </div>
                 </div>
