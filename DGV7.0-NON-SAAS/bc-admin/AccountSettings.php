@@ -880,6 +880,10 @@ if (isset($_POST["update-security-settings"])) {
 
     mysqli_query($connection_server, "UPDATE sas_vendors SET force_security_pin='$force_pin', reg_otp_enabled='$force_otp', trans_email_enabled='$force_email', force_google_sso='$force_sso', google_client_id='$google_id', smtp_host='$smtp_host', smtp_user='$smtp_user', smtp_pass='$smtp_pass', smtp_port='$smtp_port', smtp_sec='$smtp_sec', support_whatsapp='$support_whatsapp' WHERE id='" . $get_logged_admin_details["id"] . "'");
 
+    // Daily password-reset limit (per account, default 1)
+    $reset_daily_limit_ns = max(1, (int)($_POST["password_reset_daily_limit"] ?? 1));
+    mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('password_reset_daily_limit', '$reset_daily_limit_ns') ON DUPLICATE KEY UPDATE option_value='$reset_daily_limit_ns'");
+
     if (!empty($new_pin)) {
         if (is_numeric($new_pin) && strlen($new_pin) == 4) {
             if ($new_pin === $con_pin) {
@@ -1667,6 +1671,21 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                     <div class="col-md-6">
                                         <label class="form-label small fw-bold text-muted">CONFIRM ADMIN PIN</label>
                                         <input name="admin_pin_con" type="password" maxlength="4" pattern="[0-9]{4}" class="form-control" placeholder="Repeat new PIN" inputmode="numeric"/>
+                                    </div>
+                                </div>
+
+                                <hr class="my-4">
+                                <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Password Reset Limit</h6>
+                                <p class="small text-muted">Maximum number of times an account password can be reset per day (web users, admins and the mobile app). Default is 1 — increase it to allow more resets in a single day.</p>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold">DAILY PASSWORD RESET LIMIT</label>
+                                        <?php
+                                        $opt_reset_ns = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='password_reset_daily_limit'");
+                                        $reset_daily_limit_ns_val = (int)(mysqli_fetch_assoc($opt_reset_ns)['option_value'] ?? 1);
+                                        if ($reset_daily_limit_ns_val < 1) $reset_daily_limit_ns_val = 1;
+                                        ?>
+                                        <input name="password_reset_daily_limit" type="number" min="1" value="<?php echo $reset_daily_limit_ns_val; ?>" class="form-control" />
                                     </div>
                                 </div>
 

@@ -319,6 +319,10 @@
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_vendor_pin', '$force_pin') ON DUPLICATE KEY UPDATE option_value='$force_pin'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('spadmin_trans_email_enabled', '$force_email') ON DUPLICATE KEY UPDATE option_value='$force_email'");
 
+        // Daily password-reset limit (per account, default 1)
+        $reset_daily_limit = max(1, (int)($_POST["password_reset_daily_limit"] ?? 1));
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('password_reset_daily_limit', '$reset_daily_limit') ON DUPLICATE KEY UPDATE option_value='$reset_daily_limit'");
+
         $smtp_host = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_host"])));
         $smtp_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_user"])));
         $smtp_pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_pass"])));
@@ -1143,6 +1147,22 @@
                                                     <option value="tls" <?php echo (($get_logged_spadmin_details['smtp_sec'] ?? '') == 'tls') ? 'selected' : ''; ?>>TLS</option>
                                                 </select>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card border border-primary border-opacity-25 rounded-4 shadow-none mb-4">
+                                    <div class="card-body p-4">
+                                        <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2 text-primary"></i>Password Reset Limit</h6>
+                                        <p class="text-muted small">Maximum number of times an account password can be reset per day (web users, admins and the mobile app). Default is 1 — increase it to allow more resets in a single day.</p>
+                                        <?php
+                                        $opt_reset = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='password_reset_daily_limit'");
+                                        $reset_daily_limit_val = (int)(mysqli_fetch_assoc($opt_reset)['option_value'] ?? 1);
+                                        if ($reset_daily_limit_val < 1) $reset_daily_limit_val = 1;
+                                        ?>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold">DAILY PASSWORD RESET LIMIT</label>
+                                            <input name="password_reset_daily_limit" type="number" min="1" value="<?php echo $reset_daily_limit_val; ?>" class="form-control" />
                                         </div>
                                     </div>
                                 </div>

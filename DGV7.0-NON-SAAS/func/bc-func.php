@@ -5056,9 +5056,10 @@ function bc_handle_password_reset_attempt($username, $ip, $success, $vendor_id, 
     $period = max(1, (int)$settings['period_mins']);
 
     // A fully successful reset (correct code + password actually changed) clears the
-    // lockout counters for this account and IP.
+    // anti-bruteforce failure counters, but keeps the success row so the per-account
+    // DAILY reset limit (bc_get_password_reset_daily_limit) can be enforced.
     if ($success) {
-        mysqli_query($connection_server, "DELETE FROM sas_password_reset_attempts WHERE vendor_id='$vendor_id' AND (ip_address='$ip' OR (username='$username' AND username <> ''))");
+        mysqli_query($connection_server, "DELETE FROM sas_password_reset_attempts WHERE vendor_id='$vendor_id' AND success=0 AND (ip_address='$ip' OR (username='$username' AND username <> ''))");
         return;
     }
 
@@ -5078,10 +5079,29 @@ function bc_handle_password_reset_attempt($username, $ip, $success, $vendor_id, 
 }
 
 /**
+ * bc_get_password_reset_daily_limit()
+ * Returns how many times an account password may be reset per day. Controlled globally
+ * by the Super Admin (SAAS bc-spadmin AccountSettings → Security tab) or by the
+ * standalone admin (NON-SAAS bc-admin AccountSettings → Security tab), stored in
+ * sas_super_admin_options. Defaults to 1 when unset.
+ */
+function bc_get_password_reset_daily_limit($vendor_id = null) {
+    global $connection_server;
+    if (!$connection_server) return 1;
+    $q = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='password_reset_daily_limit' LIMIT 1");
+    if ($q && $r = mysqli_fetch_assoc($q)) {
+        $limit = (int)$r['option_value'];
+        return $limit >= 1 ? $limit : 1;
+    }
+    return 1;
+}
+
+/**
  * bc_is_password_reset_blocked()
  * Returns a human-readable lock message (or false) when password reset must be refused
  * for this account/IP. Reuses the exact same sas_blocked_ips / sas_blocked_accounts
  * tables that login checks and that LockoutResolution.php clears with the Security PIN.
+ * Also enforces the per-account DAILY password-reset limit.
  */
 function bc_is_password_reset_blocked($username, $ip, $vendor_id) {
     global $connection_server;
@@ -5089,6 +5109,15 @@ function bc_is_password_reset_blocked($username, $ip, $vendor_id) {
     if ($msg = isIPBlocked($ip, $vendor_id)) return $msg;
     if (!empty($username)) {
         if ($msg = isAccountLocked($username, $vendor_id)) return $msg;
+        // Per-account DAILY password-reset limit.
+        $daily_limit = bc_get_password_reset_daily_limit($vendor_id);
+        if ($daily_limit > 0) {
+            $esc_user = mysqli_real_escape_string($connection_server, $username);
+            $r = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT COUNT(*) AS c FROM sas_password_reset_attempts WHERE vendor_id='$vendor_id' AND username='$esc_user' AND success=1 AND DATE(timestamp)=CURDATE()"));
+            if ($r && (int)$r['c'] >= $daily_limit) {
+                return "Daily password-reset limit reached (" . $daily_limit . " per day). Please try again tomorrow.";
+            }
+        }
     }
     return false;
 }

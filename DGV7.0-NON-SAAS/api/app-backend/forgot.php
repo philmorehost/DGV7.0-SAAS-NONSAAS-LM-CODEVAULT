@@ -56,6 +56,9 @@ if (json_last_error() === JSON_ERROR_NONE) {
                     beeMailer($get_user_detail["email"], $raw_login_template_subject, $raw_login_template_body);
                     // Email End
 
+                    // Record the successful reset — counts toward the per-account daily limit.
+                    bc_handle_password_reset_attempt($username, $reset_ip, 1, $vendor_id, 'verify');
+
                     $status_update = "success";
                     $status_msg = "New Password sent to " . $get_user_detail["email"];
                 } else {
