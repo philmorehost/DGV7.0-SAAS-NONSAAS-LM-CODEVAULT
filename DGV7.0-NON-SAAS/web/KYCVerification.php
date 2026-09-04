@@ -11,6 +11,17 @@ while($r = mysqli_fetch_assoc($q_kyc)) $kyc_settings[$r['verification_name']] = 
 
 $is_kyc_enabled = isKYCEnforced($vid);
 
+// Check if VoveID is enabled for this vendor
+$voveid_enabled = false;
+$voveid_public_key = '';
+$voveid_env = 'production';
+$voveid_q = mysqli_query($connection_server, "SELECT option_name, option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name IN ('voveid_enabled', 'voveid_public_key', 'voveid_environment')");
+while($r = mysqli_fetch_assoc($voveid_q)) {
+    if ($r['option_name'] === 'voveid_enabled') $voveid_enabled = (int)$r['option_value'] === 1;
+    if ($r['option_name'] === 'voveid_public_key') $voveid_public_key = $r['option_value'];
+    if ($r['option_name'] === 'voveid_environment') $voveid_env = $r['option_value'];
+}
+
 // Handle Submissions
 if (isset($_POST['submit_bvn_nin'])) {
     $type = ($_POST['type'] == 'nin') ? 'nin' : 'bvn'; // Whitelist to prevent SQL injection
@@ -71,6 +82,10 @@ if (isset($_POST['submit_media'])) {
     <link href="../assets-2/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="../assets-2/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
     <link href="../assets-2/css/style.css" rel="stylesheet">
+    <?php if ($voveid_enabled && !empty($voveid_public_key)): ?>
+    <!-- VoveID Web SDK -->
+    <script src="https://cdn.voveid.com/web-sdk/voveid-web-sdk.min.js"></script>
+    <?php endif; ?>
     <style>
         .kyc-card { border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); transition: 0.3s; }
         .kyc-card:hover { transform: translateY(-5px); }
@@ -116,6 +131,29 @@ if (isset($_POST['submit_media'])) {
                 <?php endif; ?>
 
                 <div class="row g-3">
+                    <!-- VoveID Verification Section -->
+                    <?php if ($voveid_enabled && !empty($voveid_public_key)): ?>
+                    <div class="col-12">
+                        <div class="card kyc-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            <div class="card-body p-4">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <h5 class="fw-bold mb-2"><i class="bi bi-shield-check me-2"></i>VoveID Identity Verification</h5>
+                                        <p class="small text-white-50 mb-3">Complete your KYC in minutes with VoveID's AI-powered verification. Secure, fast, and compliant.</p>
+                                        <button type="button" id="btnStartVoveID" class="btn btn-light rounded-pill px-4 fw-bold shadow-sm" onclick="startVoveIDVerification()">
+                                            <i class="bi bi-shield-lock me-2"></i>Start VoveID Verification
+                                        </button>
+                                        <span id="voveidStatus" class="ms-3 small text-white-50"></span>
+                                    </div>
+                                    <div class="col-md-4 text-center d-none d-md-block">
+                                        <i class="bi bi-shield-lock-fill display-4 opacity-50"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- BVN/NIN Section -->
                     <?php if(($kyc_settings['bvn'] ?? 0) == 1 || ($kyc_settings['nin'] ?? 0) == 1): ?>
                     <div class="col-md-6">
@@ -189,39 +227,141 @@ if (isset($_POST['submit_media'])) {
         </div>
     </div>
 
+    <?php if ($voveid_enabled && !empty($voveid_public_key)): ?>
     <script>
-        let kycHistory = [{role: 'assistant', content: "Hello! I'm here to help you complete your KYC. What is your full name as it appears on your ID?"}];
+        // VoveID Web SDK Integration
+        let voveidInitialized = false;
         
-        async function sendToAiKyc() {
-            const input = document.getElementById('aiKycInput');
-            const log = document.getElementById('aiChatLog');
-            const msg = input.value.trim();
-            if(!msg) return;
-
-            log.innerHTML += `<p class='small mb-2'><b>You:</b> ${msg}</p>`;
-            kycHistory.push({role: 'user', content: msg});
-            input.value = '';
-            log.scrollTop = log.scrollHeight;
-
-            const response = await fetch('/api/app-backend/ai-kyc-interview.php', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: msg, history: kycHistory})
-            });
-            const data = await response.json();
-            
-            if(data.success) {
-                log.innerHTML += `<p class='small mb-2'><b>AI:</b> ${data.response}</p>`;
-                kycHistory.push({role: 'assistant', content: data.response});
-                if(data.completed) {
-                    input.disabled = true;
-                    setTimeout(() => window.location.reload(), 3000);
+        // Initialize VoveID SDK
+        async function initVoveID() {
+            if (typeof Vove === 'undefined') {
+                document.getElementById('voveidStatus').textContent = 'Loading VoveID SDK...';
+                // Wait for SDK to load
+                let attempts = 0;
+                while (typeof Vove === 'undefined' && attempts < 20) {
+                    await new Promise(r => setTimeout(r, 100));
+                    attempts++;
                 }
             }
-            log.scrollTop = log.scrollHeight;
+            
+            if (typeof Vove !== 'undefined') {
+                try {
+                    await new Promise((resolve, reject) => {
+                        Vove.initialize('<?php echo addslashes($voveid_public_key); ?>', '<?php echo $voveid_env; ?>', (result) => {
+                            if (result === 'success' || result === true) {
+                                voveidInitialized = true;
+                                document.getElementById('voveidStatus').textContent = 'Ready';
+                                resolve();
+                            } else {
+                                reject(new Error('VoveID initialization failed'));
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.error('VoveID init error:', e);
+                    document.getElementById('voveidStatus').textContent = 'SDK init failed';
+                }
+            } else {
+                document.getElementById('voveidStatus').textContent = 'SDK not loaded';
+            }
         }
+        
+        // Start VoveID Verification
+        async function startVoveIDVerification() {
+            const btn = document.getElementById('btnStartVoveID');
+            const statusEl = document.getElementById('voveidStatus');
+            
+            if (!voveidInitialized) {
+                statusEl.textContent = 'Initializing...';
+                await initVoveID();
+            }
+            
+            if (!voveidInitialized) {
+                statusEl.textContent = 'VoveID SDK not available';
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating session...';
+            statusEl.textContent = 'Creating verification session...';
+            
+            try {
+                // Create VoveID session via our backend
+                const response = await fetch('/api/voveid-session.php', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to create session');
+                }
+                
+                const sessionToken = data.token;
+                statusEl.textContent = 'Starting verification...';
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Launching...';
+                
+                // Start VoveID verification
+                const config = {
+                    showUI: true,
+                    exitAfterEachStep: false,
+                    maxAttemptsActionCallback: () => {
+                        statusEl.textContent = 'Max attempts reached. Contact support.';
+                    }
+                };
+                
+                Vove.start(sessionToken, config, (payload) => {
+                    if (!payload) return;
+                    
+                    console.log('VoveID payload:', payload);
+                    
+                    switch (payload.result) {
+                        case 'success':
+                        case 'SUCCESS':
+                            statusEl.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Verification successful!</span>';
+                            btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Verified';
+                            btn.classList.remove('btn-light');
+                            btn.classList.add('btn-success');
+                            setTimeout(() => window.location.reload(), 3000);
+                            break;
+                        case 'pending':
+                        case 'PENDING':
+                            statusEl.textContent = 'Verification pending review...';
+                            break;
+                        case 'in_progress':
+                        case 'IN_PROGRESS':
+                            const nextStep = payload.nextStep?.name || 'processing';
+                            statusEl.textContent = 'Step completed: ' + nextStep + '. Continuing...';
+                            break;
+                        case 'canceled':
+                        case 'CANCELED':
+                            statusEl.textContent = 'Verification canceled';
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-shield-lock me-2"></i>Start VoveID Verification';
+                            break;
+                        case 'max_attempts':
+                        case 'MAX_ATTEMPTS_REACHED':
+                            statusEl.textContent = 'Max attempts reached. Contact support.';
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-shield-lock me-2"></i>Start VoveID Verification';
+                            break;
+                    }
+                    
+                    if (payload.nextStep && payload.nextStep.name) {
+                        console.log('Next step:', payload.nextStep.name);
+                    }
+                });
+                
+            } catch (e) {
+                console.error('VoveID error:', e);
+                statusEl.textContent = 'Error: ' + e.message;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-shield-lock me-2"></i>Start VoveID Verification';
+            }
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initVoveID);
     </script>
-
-    <?php include("../func/bc-footer.php"); ?>
-</body>
-</html>
+    <?php endif; ?>

@@ -2097,4 +2097,76 @@ if (mysqli_num_rows($check_upc_idx) == 0) {
     mysqli_query($connection_server, "ALTER TABLE sas_user_payment_checkouts ADD INDEX (reference), ADD INDEX (vendor_id)");
 }
 
+// Create VoveID Webhooks Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_voveid_webhooks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    ref_id VARCHAR(100) NOT NULL,
+    session_id VARCHAR(100),
+    status VARCHAR(50),
+    payload JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX (vendor_id),
+    INDEX (user_id),
+    INDEX (ref_id),
+    INDEX (session_id)
+)");
+
+// Create VoveID Sessions Table (for tracking session tokens)
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_voveid_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    ref_id VARCHAR(100) NOT NULL,
+    session_token TEXT,
+    session_id VARCHAR(100),
+    flow_id VARCHAR(100),
+    status VARCHAR(50) DEFAULT 'created',
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (vendor_id),
+    INDEX (user_id),
+    INDEX (ref_id),
+    INDEX (session_id)
+)");
+
+// Add VoveID columns to sas_users if not exist
+$voveid_cols = [
+    'voveid_ref_id' => "VARCHAR(100) DEFAULT NULL",
+    'voveid_session_id' => "VARCHAR(100) DEFAULT NULL",
+    'voveid_verification_data' => "LONGTEXT DEFAULT NULL",
+    'voveid_last_webhook' => "TIMESTAMP NULL DEFAULT NULL",
+    'voveid_status' => "VARCHAR(50) DEFAULT 'unverified'",
+];
+
+foreach ($voveid_cols as $col => $def) {
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_users LIKE '$col'");
+    if ($check_col && mysqli_num_rows($check_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE sas_users ADD COLUMN $col $def");
+    }
+}
+
+// Add VoveID settings to sas_vendor_settings
+$voveid_settings = [
+    'voveid_api_key' => '',
+    'voveid_environment' => 'production',
+    'voveid_flow_id' => '',
+    'voveid_webhook_secret' => '',
+    'voveid_enabled' => '0',
+];
+
+foreach ($voveid_settings as $setting => $default) {
+    $check_setting = mysqli_query($connection_server, "SELECT id FROM sas_vendor_settings WHERE vendor_id='$vendor_id' AND option_name='$setting' LIMIT 1");
+    if ($check_setting && mysqli_num_rows($check_setting) == 0) {
+        mysqli_query($connection_server, "INSERT INTO sas_vendor_settings (vendor_id, option_name, option_value) VALUES ('$vendor_id', '$setting', '$default')");
+    }
+}
+
+$check_upc_idx = mysqli_query($connection_server, "SHOW INDEX FROM sas_user_payment_checkouts WHERE Key_name = 'reference'");
+if (mysqli_num_rows($check_upc_idx) == 0) {
+    mysqli_query($connection_server, "ALTER TABLE sas_user_payment_checkouts ADD INDEX (reference), ADD INDEX (vendor_id)");
+}
+
 }

@@ -1,10 +1,22 @@
 <?php
 if ($connection_server) {
 //Create Super Admin Table
-$create_super_admin_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_super_admin (id INT NOT NULL AUTO_INCREMENT, email VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, gender VARCHAR(225) NOT NULL, home_address VARCHAR(225) NOT NULL, status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, PRIMARY KEY (id))");
+$create_super_admin_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_super_admin (id INT NOT NULL AUTO_INCREMENT, email VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, gender VARCHAR(225) NOT NULL, home_address VARCHAR(225) NOT NULL, status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, smtp_host VARCHAR(255) DEFAULT NULL, smtp_user VARCHAR(255) DEFAULT NULL, smtp_pass VARCHAR(255) DEFAULT NULL, smtp_port VARCHAR(50) DEFAULT NULL, smtp_sec VARCHAR(50) DEFAULT NULL, PRIMARY KEY (id))");
 
 if ($create_super_admin_table) {
-    $cols = ["security_pin" => "VARCHAR(255)", "is_blocked" => "TINYINT(1) DEFAULT 0", "failed_login_count" => "INT DEFAULT 0", "last_failed_login" => "TIMESTAMP NULL", "failed_pin_count" => "INT DEFAULT 0", "last_failed_pin" => "TIMESTAMP NULL"];
+    $cols = [
+        "security_pin" => "VARCHAR(255)",
+        "is_blocked" => "TINYINT(1) DEFAULT 0",
+        "failed_login_count" => "INT DEFAULT 0",
+        "last_failed_login" => "TIMESTAMP NULL",
+        "failed_pin_count" => "INT DEFAULT 0",
+        "last_failed_pin" => "TIMESTAMP NULL",
+        "smtp_host" => "VARCHAR(255) DEFAULT NULL",
+        "smtp_user" => "VARCHAR(255) DEFAULT NULL",
+        "smtp_pass" => "VARCHAR(255) DEFAULT NULL",
+        "smtp_port" => "VARCHAR(50) DEFAULT NULL",
+        "smtp_sec" => "VARCHAR(50) DEFAULT NULL"
+    ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_super_admin");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
     foreach($cols as $col => $def) {
@@ -16,7 +28,7 @@ if ($create_super_admin_table) {
 $create_super_admin_status_message_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_super_admin_status_messages (message LONGTEXT NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 //Create Vendors Table
-$create_vendor_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_vendors (id INT NOT NULL AUTO_INCREMENT, email VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, balance DECIMAL(65,30) UNSIGNED NOT NULL, website_url VARCHAR(225) NOT NULL, home_address VARCHAR(225) NOT NULL, bank_code VARCHAR(225), account_number VARCHAR(225), bvn VARCHAR(225), nin VARCHAR(225), status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), force_security_pin TINYINT(1) DEFAULT 0, force_2fa TINYINT(1) DEFAULT 0, force_google_sso TINYINT(1) DEFAULT 0, totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', google_client_id VARCHAR(225), security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, PRIMARY KEY (id))");
+$create_vendor_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_vendors (id INT NOT NULL AUTO_INCREMENT, email VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, balance DECIMAL(65,30) UNSIGNED NOT NULL, website_url VARCHAR(225) NOT NULL, home_address VARCHAR(225) NOT NULL, bank_code VARCHAR(225), account_number VARCHAR(225), bvn VARCHAR(225), nin VARCHAR(225), status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), force_security_pin TINYINT(1) DEFAULT 0, force_2fa TINYINT(1) DEFAULT 0, force_google_sso TINYINT(1) DEFAULT 0, totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', google_client_id VARCHAR(225), security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, smtp_host VARCHAR(255) DEFAULT NULL, smtp_user VARCHAR(255) DEFAULT NULL, smtp_pass VARCHAR(255) DEFAULT NULL, smtp_port VARCHAR(50) DEFAULT NULL, smtp_sec VARCHAR(50) DEFAULT NULL, PRIMARY KEY (id))");
 
 if ($create_vendor_table) {
     $cols = [
@@ -26,12 +38,18 @@ if ($create_vendor_table) {
         "last_failed_login" => "TIMESTAMP NULL",
         "failed_pin_count" => "INT DEFAULT 0",
         "last_failed_pin" => "TIMESTAMP NULL",
+        "smtp_host" => "VARCHAR(255) DEFAULT NULL",
+        "smtp_user" => "VARCHAR(255) DEFAULT NULL",
+        "smtp_pass" => "VARCHAR(255) DEFAULT NULL",
+        "smtp_port" => "VARCHAR(50) DEFAULT NULL",
+        "smtp_sec" => "VARCHAR(50) DEFAULT NULL",
         "hollatags_username" => "VARCHAR(255) DEFAULT NULL",
         "hollatags_password" => "VARCHAR(255) DEFAULT NULL",
         "hollatags_ussd_code" => "VARCHAR(50) DEFAULT NULL",
         "ussd_activation_fee" => "DECIMAL(10,2) DEFAULT 0.00",
         "ussd_per_call_charge" => "DECIMAL(10,2) DEFAULT 0.00",
         "ussd_channel_mode" => "VARCHAR(20) DEFAULT 'Both'",
+        "ussd_access" => "TINYINT(1) NOT NULL DEFAULT 0",
         "support_whatsapp" => "VARCHAR(20) DEFAULT ''"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
@@ -147,6 +165,37 @@ if ($create_vendor_table) {
     }
 }
 
+// Add columns to pending vendors as well
+$check_pending_cols = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_pending_vendors");
+if ($check_pending_cols) {
+    $pending_existing = [];
+    while($c = mysqli_fetch_assoc($check_pending_cols)) $pending_existing[] = $c['Field'];
+
+    if (!in_array('min_withdrawal_amount', $pending_existing)) {
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN min_withdrawal_amount DECIMAL(20,2) DEFAULT 1000.00");
+    }
+    if (!in_array('max_withdrawal_amount', $pending_existing)) {
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN max_withdrawal_amount DECIMAL(20,2) DEFAULT 50000.00");
+    }
+    if (!in_array('daily_payout_limit', $pending_existing)) {
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN daily_payout_limit INT DEFAULT 10");
+    }
+
+    if (!in_array('app_base_url', $pending_existing)) {
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN app_base_url VARCHAR(255) DEFAULT NULL");
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_apk TINYINT(1) DEFAULT 0");
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_ios TINYINT(1) DEFAULT 0");
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_playstore TINYINT(1) DEFAULT 0");
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_sms_bridge TINYINT(1) DEFAULT 0");
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN domain_registration_fee DECIMAL(10,2) DEFAULT 0");
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN total_amount DECIMAL(10,2) DEFAULT 0");
+    }
+
+    if (!in_array('order_sms_bridge', $pending_existing) && in_array('app_base_url', $pending_existing)) {
+        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_sms_bridge TINYINT(1) DEFAULT 0 AFTER order_playstore");
+    }
+}
+
 // Add columns to vendors as well
 $check_vendor_cols = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
 $vendor_existing = [];
@@ -238,34 +287,6 @@ CREATE TABLE IF NOT EXISTS sas_pending_vendors (
     UNIQUE (website_url))");
 
 if ($create_pending_vendors_table) {
-    $check_pending_cols = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_pending_vendors");
-    $pending_existing = [];
-    while($c = mysqli_fetch_assoc($check_pending_cols)) $pending_existing[] = $c['Field'];
-
-    if (!in_array('min_withdrawal_amount', $pending_existing)) {
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN min_withdrawal_amount DECIMAL(20,2) DEFAULT 1000.00");
-    }
-    if (!in_array('max_withdrawal_amount', $pending_existing)) {
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN max_withdrawal_amount DECIMAL(20,2) DEFAULT 50000.00");
-    }
-    if (!in_array('daily_payout_limit', $pending_existing)) {
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN daily_payout_limit INT DEFAULT 10");
-    }
-
-    if (!in_array('app_base_url', $pending_existing)) {
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN app_base_url VARCHAR(255) DEFAULT NULL");
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_apk TINYINT(1) DEFAULT 0");
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_ios TINYINT(1) DEFAULT 0");
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_playstore TINYINT(1) DEFAULT 0");
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_sms_bridge TINYINT(1) DEFAULT 0");
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN domain_registration_fee DECIMAL(10,2) DEFAULT 0");
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN total_amount DECIMAL(10,2) DEFAULT 0");
-    }
-
-    if (!in_array('order_sms_bridge', $pending_existing) && in_array('app_base_url', $pending_existing)) {
-        mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN order_sms_bridge TINYINT(1) DEFAULT 0 AFTER order_playstore");
-    }
-
     $check_pv_addons = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_pending_vendors LIKE 'selected_addons'");
     if (mysqli_num_rows($check_pv_addons) == 0) {
         mysqli_query($connection_server, "ALTER TABLE sas_pending_vendors ADD COLUMN selected_addons TEXT AFTER order_sms_bridge");
@@ -346,7 +367,7 @@ if ($create_billing_addons_table) {
 $create_vendor_status_message_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_vendor_status_messages (vendor_id INT UNSIGNED NOT NULL, message LONGTEXT NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 //Create User Table
-$create_user_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_users (id INT NOT NULL AUTO_INCREMENT, vendor_id INT UNSIGNED NOT NULL, email VARCHAR(225) NOT NULL, username VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, balance DECIMAL(65,30) UNSIGNED NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, othername VARCHAR(225), home_address VARCHAR(225) NOT NULL, bank_code VARCHAR(225), account_number VARCHAR(225), bvn VARCHAR(225), nin VARCHAR(225), transaction_pin BIGINT, security_quest BIGINT, security_answer VARCHAR(225), referral_id VARCHAR(225), referral_bonus_awarded TINYINT(1) DEFAULT 0, account_level INT UNSIGNED NOT NULL, api_key VARCHAR(225) NOT NULL, api_status INT UNSIGNED NOT NULL, status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), google_id VARCHAR(225), totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, PRIMARY KEY (id))");
+$create_user_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_users (id INT NOT NULL AUTO_INCREMENT, vendor_id INT UNSIGNED NOT NULL, email VARCHAR(225) NOT NULL, username VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, balance DECIMAL(65,30) UNSIGNED NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, othername VARCHAR(225), home_address VARCHAR(225) NOT NULL, bank_code VARCHAR(225), account_number VARCHAR(225), bvn VARCHAR(225), nin VARCHAR(225), transaction_pin BIGINT, security_quest BIGINT, security_answer VARCHAR(225), referral_id VARCHAR(225), referral_bonus_awarded TINYINT(1) DEFAULT 0, account_level INT UNSIGNED NOT NULL, api_key VARCHAR(225) NOT NULL, api_status INT UNSIGNED NOT NULL, status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), google_id VARCHAR(225), totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, kyc_status TINYINT(1) DEFAULT 0, kyc_id_expiry VARCHAR(50) DEFAULT NULL, kyc_refresh_required TINYINT(1) DEFAULT 0, kyc_id_ok TINYINT(1) DEFAULT 0, PRIMARY KEY (id))");
 
 if ($create_user_table) {
     $cols = [
@@ -358,7 +379,11 @@ if ($create_user_table) {
         "last_failed_pin" => "TIMESTAMP NULL",
         "last_low_balance_email" => "TIMESTAMP NULL",
         "last_weekly_sales_email" => "TIMESTAMP NULL",
-        "last_inactivity_email" => "TIMESTAMP NULL"
+        "last_inactivity_email" => "TIMESTAMP NULL",
+        "kyc_status" => "TINYINT(1) DEFAULT 0",
+        "kyc_id_expiry" => "VARCHAR(50) DEFAULT NULL",
+        "kyc_refresh_required" => "TINYINT(1) DEFAULT 0",
+        "kyc_id_ok" => "TINYINT(1) DEFAULT 0"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_users");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
@@ -593,27 +618,21 @@ if ($create_user_transaction_table) {
     }
 }
 
-//Create Guest Order Table (Guest Mode checkout — no wallet/api_key, one row per anonymous purchase)
-$create_guest_orders_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_guest_orders (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, reference VARCHAR(225) NOT NULL, service_type VARCHAR(50) NOT NULL, identity VARCHAR(225) NOT NULL, api_id INT UNSIGNED, product_id INT UNSIGNED, api_reference VARCHAR(225), amount DECIMAL(65,30) UNSIGNED NOT NULL, discounted_amount DECIMAL(65,30) UNSIGNED NOT NULL, description LONGTEXT, extra_data LONGTEXT, status TINYINT UNSIGNED NOT NULL DEFAULT 0, payment_reference VARCHAR(225), ip_address VARCHAR(64), api_website VARCHAR(225), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, fulfilled_at TIMESTAMP NULL, UNIQUE KEY uniq_reference (reference), KEY idx_vendor_status (vendor_id, status), KEY idx_payment_reference (payment_reference))");
-
-//Create Guest Abuse Tracker Table (daily per-identity/IP purchase-count limiter for Guest Mode, mirrors sas_daily_purchase_tracker but IP+identity keyed since guests have no username)
-$create_guest_abuse_tracker_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_guest_abuse_tracker (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, service_type VARCHAR(50) NOT NULL, identity VARCHAR(225) NOT NULL, ip_address VARCHAR(64) NOT NULL, reference VARCHAR(225) NOT NULL, date_tracked VARCHAR(50) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, KEY idx_identity_lookup (vendor_id, identity, service_type, date_tracked), KEY idx_ip_lookup (vendor_id, ip_address, service_type, date_tracked))");
-
 //Create Vendor Transaction Table
 $create_vendor_transaction_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_vendor_transactions (vendor_id INT UNSIGNED NOT NULL, product_unique_id VARCHAR(225) NOT NULL, type_alternative VARCHAR(225), reference VARCHAR(225) NOT NULL, amount DECIMAL(65,30) UNSIGNED NOT NULL, discounted_amount DECIMAL(65,30) UNSIGNED NOT NULL, balance_before DECIMAL(65,30) UNSIGNED NOT NULL, balance_after DECIMAL(65,30) UNSIGNED NOT NULL, description LONGTEXT NOT NULL, api_website VARCHAR(225) NOT NULL, status INT UNSIGNED NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 //Create Daily Product Tracker Table
-$create_daily_product_tracker_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_daily_purchase_tracker (vendor_id INT UNSIGNED NOT NULL, reference VARCHAR(225) NOT NULL, product_type VARCHAR(50) NOT NULL, product_id VARCHAR(100) NOT NULL, username VARCHAR(100) NOT NULL, date_purchased VARCHAR(50) NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+$create_daily_product_tracker_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_daily_purchase_tracker (vendor_id INT UNSIGNED NOT NULL, reference VARCHAR(225) NOT NULL, product_type VARCHAR(225) NOT NULL, product_id VARCHAR(225) NOT NULL, username VARCHAR(225) NOT NULL, date_purchased VARCHAR(225) NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
 
 if ($create_daily_product_tracker_table) {
     // Branch DG6.7 Optimization: Add indexes to speed up limit checks
     $check_idx_tracker = mysqli_query($connection_server, "SHOW INDEX FROM `sas_daily_purchase_tracker` WHERE Key_name = 'idx_tracker_lookup'");
     if (mysqli_num_rows($check_idx_tracker) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE `sas_daily_purchase_tracker` ADD INDEX idx_tracker_lookup (vendor_id, username(100), product_id(100), product_type(50), date_purchased(50))");
+        mysqli_query($connection_server, "ALTER TABLE `sas_daily_purchase_tracker` ADD INDEX idx_tracker_lookup (vendor_id, username, product_id, product_type, date_purchased)");
     }
     $check_idx_limit = mysqli_query($connection_server, "SHOW INDEX FROM `sas_daily_purchase_tracker` WHERE Key_name = 'idx_limit_check'");
     if (mysqli_num_rows($check_idx_limit) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE `sas_daily_purchase_tracker` ADD INDEX idx_limit_check (vendor_id, product_id(100), date_purchased(50))");
+        mysqli_query($connection_server, "ALTER TABLE `sas_daily_purchase_tracker` ADD INDEX idx_limit_check (vendor_id, product_id, date_purchased)");
     }
 }
 
@@ -631,9 +650,18 @@ if ($create_daily_validated_product_tracker_table) {
     }
 }
 
+//Create Service Abuse Events Table (tracks per-user, per-number daily-limit hits to detect number-cycling abuse)
+$create_service_abuse_events_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_service_abuse_events (id INT AUTO_INCREMENT PRIMARY KEY, vendor_id INT UNSIGNED NOT NULL, username VARCHAR(100) NOT NULL, product_id VARCHAR(50) NOT NULL, product_type VARCHAR(30) NOT NULL, date_created DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+
+if ($create_service_abuse_events_table) {
+    $check_idx_abuse = mysqli_query($connection_server, "SHOW INDEX FROM `sas_service_abuse_events` WHERE Key_name = 'idx_abuse_user_day'");
+    if (mysqli_num_rows($check_idx_abuse) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_service_abuse_events` ADD INDEX idx_abuse_user_day (vendor_id, username, date_created)");
+    }
+}
+
 //Create Daily Product Limit Table
 $create_daily_product_limit_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_daily_purchase_limit (vendor_id INT UNSIGNED NOT NULL, `limit` INT UNSIGNED NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
-
 if ($create_daily_product_limit_table) {
     $existing_cols = [];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_daily_purchase_limit");
@@ -683,15 +711,6 @@ if ($create_payment_gateway_table) {
     foreach($cols as $col) {
         mysqli_query($connection_server, "ALTER TABLE sas_payment_gateways MODIFY $col VARCHAR(500)");
     }
-    // Security Fix: Dedicated webhook signing secret, distinct from the API secret_key/encrypt_key
-    // (which are already overloaded per-gateway — e.g. encrypt_key means Flutterwave's verif-hash
-    // for one gateway and Monnify's contract code for another). Webhook handlers should prefer this
-    // column and fall back to secret_key/encrypt_key only if it's empty, so existing configured
-    // gateways keep working until an admin explicitly sets a webhook secret.
-    $check_webhook_secret = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_payment_gateways LIKE 'webhook_secret'");
-    if ($check_webhook_secret && mysqli_num_rows($check_webhook_secret) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_payment_gateways ADD COLUMN webhook_secret VARCHAR(500) NOT NULL DEFAULT '' AFTER encrypt_key");
-    }
 }
 
 //Create Bank Transfer Gateway Table
@@ -702,12 +721,6 @@ if ($create_bank_transfer_gateway_table) {
     $cols = ["public_key", "secret_key", "encrypt_key"];
     foreach($cols as $col) {
         mysqli_query($connection_server, "ALTER TABLE sas_bank_transfer_gateways MODIFY $col VARCHAR(500)");
-    }
-    // Security Fix: same dedicated webhook secret column as sas_payment_gateways, for parity
-    // (no withdrawal webhook exists yet, but keeps the two gateway-credential tables schema-aligned).
-    $check_webhook_secret_bt = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_bank_transfer_gateways LIKE 'webhook_secret'");
-    if ($check_webhook_secret_bt && mysqli_num_rows($check_webhook_secret_bt) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_bank_transfer_gateways ADD COLUMN webhook_secret VARCHAR(500) NOT NULL DEFAULT '' AFTER encrypt_key");
     }
 }
 
@@ -744,12 +757,6 @@ if ($create_admin_payment_gateway_table) {
     foreach($cols as $col) {
         mysqli_query($connection_server, "ALTER TABLE sas_super_admin_payment_gateways MODIFY $col VARCHAR(500)");
     }
-    // Security Fix: same dedicated webhook secret column, for schema parity across all three
-    // gateway-credential tables (vendor, bank-transfer, super-admin).
-    $check_webhook_secret_sa = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_super_admin_payment_gateways LIKE 'webhook_secret'");
-    if ($check_webhook_secret_sa && mysqli_num_rows($check_webhook_secret_sa) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_super_admin_payment_gateways ADD COLUMN webhook_secret VARCHAR(500) NOT NULL DEFAULT '' AFTER encrypt_key");
-    }
     $gateways = ["monnify", "flutterwave", "paystack", "payvessel", "payhub", "plisio", "vpay", "vpay-2", "dojah", "qoreid", "smileid"];
     foreach ($gateways as $g) {
         $check = mysqli_query($connection_server, "SELECT gateway_name FROM sas_super_admin_payment_gateways WHERE LOWER(TRIM(gateway_name))='$g' OR gateway_name LIKE '%$g%' LIMIT 1");
@@ -782,29 +789,34 @@ if ($create_site_detail_table) {
         mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN apk_download_url VARCHAR(500) DEFAULT ''");
     }
 
-    $check_app_redirect_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'app_redirect_mode'");
-    if (mysqli_num_rows($check_app_redirect_col) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN app_redirect_mode VARCHAR(10) DEFAULT 'off'");
-    }
-    
-    $check_keywords_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'meta_keywords'");
-    if (mysqli_num_rows($check_keywords_col) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN meta_keywords VARCHAR(500) DEFAULT ''");
-    }
+    // Branch SEO Migrations: Dynamic Columns for Per-Vendor SEO & Custom Code Injection
+    $seo_columns = [
+        "meta_keywords" => "VARCHAR(500) DEFAULT ''",
+        "meta_author" => "VARCHAR(255) DEFAULT ''",
+        "og_image" => "VARCHAR(500) DEFAULT ''",
+        "favicon_url" => "VARCHAR(500) DEFAULT ''",
+        "ga_tracking_id" => "VARCHAR(50) DEFAULT ''",
+        "gtm_id" => "VARCHAR(50) DEFAULT ''",
+        "fb_pixel_id" => "VARCHAR(50) DEFAULT ''",
+        "custom_head_code" => "TEXT DEFAULT NULL",
+        "custom_footer_code" => "TEXT DEFAULT NULL",
+        "robots_txt" => "TEXT DEFAULT NULL",
+        "sitemap_enabled" => "TINYINT(1) DEFAULT 1",
+        "social_twitter" => "VARCHAR(255) DEFAULT ''",
+        "social_facebook" => "VARCHAR(255) DEFAULT ''",
+        "social_instagram" => "VARCHAR(255) DEFAULT ''",
+        "social_whatsapp" => "VARCHAR(20) DEFAULT ''",
+        "schema_org_type" => "VARCHAR(50) DEFAULT 'Organization'",
+        "schema_org_phone" => "VARCHAR(30) DEFAULT ''",
+        "schema_org_address" => "VARCHAR(500) DEFAULT ''",
+        "app_redirect_mode" => "VARCHAR(10) DEFAULT 'off'"
+    ];
 
-    $check_header_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'custom_header_code'");
-    if (mysqli_num_rows($check_header_col) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN custom_header_code TEXT");
-    }
-
-    $check_footer_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'custom_footer_code'");
-    if (mysqli_num_rows($check_footer_col) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN custom_footer_code TEXT");
-    }
-
-    $check_robots_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE 'robots_txt'");
-    if (mysqli_num_rows($check_robots_col) == 0) {
-        mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN robots_txt TEXT");
+    foreach ($seo_columns as $col => $def) {
+        $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_site_details LIKE '$col'");
+        if ($check_col && mysqli_num_rows($check_col) == 0) {
+            mysqli_query($connection_server, "ALTER TABLE sas_site_details ADD COLUMN $col $def");
+        }
     }
 }
 
@@ -908,9 +920,7 @@ if ($create_super_admin_options_table) {
     $defaults = [
         'default_min_withdrawal' => '1000',
         'default_max_withdrawal' => '50000',
-        'default_daily_payout_limit' => '10',
-        'system_auth_token' => '',
-        'integrity_status' => '0'
+        'default_daily_payout_limit' => '10'
     ];
     foreach($defaults as $opt => $val) {
         $check = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='$opt'");
@@ -1540,26 +1550,6 @@ if ($check_domain_exp && mysqli_num_rows($check_domain_exp) == 0) {
     mysqli_query($connection_server, "ALTER TABLE `sas_vendors` ADD `domain_expiry_date` DATE NULL AFTER `expiry_date` ");
 }
 
-// 2. Gift Card Product Metadata (Description, Terms, Instructions)
-$giftcard_tables = ['sas_global_giftcard_products', 'sas_vendor_giftcard_products'];
-$meta_cols = [
-    'category_id' => "INT DEFAULT NULL",
-    'category_name' => "VARCHAR(255) DEFAULT NULL",
-    'description' => "TEXT DEFAULT NULL",
-    'terms' => "TEXT DEFAULT NULL",
-    'redemption_instructions' => "TEXT DEFAULT NULL"
-];
-
-foreach ($giftcard_tables as $table) {
-    $res = mysqli_query($connection_server, "SHOW COLUMNS FROM `$table` ");
-    if ($res) {
-        $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
-        foreach($meta_cols as $col => $def) {
-            if(!in_array($col, $existing)) mysqli_query($connection_server, "ALTER TABLE `$table` ADD COLUMN `$col` $def");
-        }
-    }
-}
-
 // 1b. Fix Gift Card ID Type Mismatch & Missing Columns (Branch DG6.7)
 $gc_tables_to_fix = ['sas_vendor_giftcard_products', 'sas_global_giftcard_products'];
 foreach ($gc_tables_to_fix as $table) {
@@ -1604,6 +1594,25 @@ foreach ($gc_tables_to_fix as $table) {
     }
 }
 
+// 2. Gift Card Product Metadata (Description, Terms, Instructions)
+$giftcard_tables = ['sas_global_giftcard_products', 'sas_vendor_giftcard_products'];
+$meta_cols = [
+    'category_id' => "INT DEFAULT NULL",
+    'category_name' => "VARCHAR(255) DEFAULT NULL",
+    'description' => "TEXT DEFAULT NULL",
+    'terms' => "TEXT DEFAULT NULL",
+    'redemption_instructions' => "TEXT DEFAULT NULL"
+];
+
+foreach ($giftcard_tables as $table) {
+    $res = mysqli_query($connection_server, "SHOW COLUMNS FROM `$table` ");
+    if ($res) {
+        $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
+        foreach($meta_cols as $col => $def) {
+            if(!in_array($col, $existing)) mysqli_query($connection_server, "ALTER TABLE `$table` ADD COLUMN `$col` $def");
+        }
+    }
+}
 
 // 3. Gift Card Inventory Alignment
 $inv_cols = [
@@ -1954,7 +1963,7 @@ if ($check_options_table && mysqli_num_rows($check_options_table) > 0) {
     foreach ($ai_global_options as $key => $val) {
         $esc_key = mysqli_real_escape_string($connection_server, $key);
         $esc_val = mysqli_real_escape_string($connection_server, $val);
-        $exists_q = mysqli_query($connection_server, "SELECT option_name FROM sas_super_admin_options WHERE option_name='$esc_key' LIMIT 1");
+        $exists_q = mysqli_query($connection_server, "SELECT id FROM sas_super_admin_options WHERE option_name='$esc_key' LIMIT 1");
         if ($exists_q && mysqli_num_rows($exists_q) === 0) {
             mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('$esc_key', '$esc_val')");
         }
@@ -1997,6 +2006,7 @@ if ($check_options_table && mysqli_num_rows($check_options_table) > 0) {
     mysqli_query($connection_server, "UPDATE sas_super_admin_options SET option_value='gemini-1.5-flash' WHERE option_name='ai_default_model' AND option_value IN ('phi4-mini', 'gemma:2b', 'llama3')");
 }
 mysqli_query($connection_server, "UPDATE sas_vendors SET ai_model_assigned='gemini-1.5-flash' WHERE ai_model_assigned IN ('phi4-mini', 'gemma:2b', 'llama3', 'llama4-scout', 'gemma4:e2b') OR ai_model_assigned IS NULL OR ai_model_assigned=''");
+mysqli_query($connection_server, "UPDATE sas_users SET ai_model_assigned='gemini-1.5-flash' WHERE ai_model_assigned IN ('phi4-mini', 'gemma:2b', 'llama3')");
 
 // ─── SERVICE CONTROL TABLES (Global & Vendor) ───────────────
 mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_global_service_control (id INT AUTO_INCREMENT PRIMARY KEY, service_name VARCHAR(100) NOT NULL, status TINYINT(1) DEFAULT 1, date_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY (service_name))");
@@ -2022,4 +2032,141 @@ mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ai_failed_inten
     confidence INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )");
+
+// Create Unblock Requests Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_unblock_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT,
+    username VARCHAR(255),
+    ip_address VARCHAR(255),
+    reason TEXT,
+    status VARCHAR(50) DEFAULT 'pending',
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+
+// Create User Biometrics Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_user_biometrics (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    credential_id TEXT,
+    public_key TEXT,
+    sign_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX (user_id)
+)");
+
+// Create AI Intelligence Memory Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ai_intelligence (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT,
+    intel_type VARCHAR(50),
+    content TEXT,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+
+// Create Global Service Control Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_global_service_control (
+    id INT AUTO_INCREMENT PRIMARY KEY, 
+    service_name VARCHAR(100) NOT NULL, 
+    status TINYINT(1) DEFAULT 1, 
+    date_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+    UNIQUE KEY (service_name)
+)");
+
+// Create Vendor Service Control Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_service_control (
+    id INT AUTO_INCREMENT PRIMARY KEY, 
+    vendor_id INT UNSIGNED NOT NULL, 
+    service_name VARCHAR(100) NOT NULL, 
+    status TINYINT(1) DEFAULT 1, 
+    date_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+    UNIQUE KEY (vendor_id, service_name)
+)");
+
+// Create AI Blueprints Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_ai_blueprints (
+    id INT AUTO_INCREMENT PRIMARY KEY, 
+    month_label VARCHAR(30), 
+    blueprint_html LONGTEXT, 
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+
+$check_upc_idx = mysqli_query($connection_server, "SHOW INDEX FROM sas_user_payment_checkouts WHERE Key_name = 'reference'");
+if (mysqli_num_rows($check_upc_idx) == 0) {
+    mysqli_query($connection_server, "ALTER TABLE sas_user_payment_checkouts ADD INDEX (reference), ADD INDEX (vendor_id)");
+}
+
+// Create VoveID Webhooks Table
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_voveid_webhooks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    ref_id VARCHAR(100) NOT NULL,
+    session_id VARCHAR(100),
+    status VARCHAR(50),
+    payload JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX (vendor_id),
+    INDEX (user_id),
+    INDEX (ref_id),
+    INDEX (session_id)
+)");
+
+// Create VoveID Sessions Table (for tracking session tokens)
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_voveid_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vendor_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    ref_id VARCHAR(100) NOT NULL,
+    session_token TEXT,
+    session_id VARCHAR(100),
+    flow_id VARCHAR(100),
+    status VARCHAR(50) DEFAULT 'created',
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (vendor_id),
+    INDEX (user_id),
+    INDEX (ref_id),
+    INDEX (session_id)
+)");
+
+// Add VoveID columns to sas_users if not exist
+$voveid_cols = [
+    'voveid_ref_id' => "VARCHAR(100) DEFAULT NULL",
+    'voveid_session_id' => "VARCHAR(100) DEFAULT NULL",
+    'voveid_verification_data' => "LONGTEXT DEFAULT NULL",
+    'voveid_last_webhook' => "TIMESTAMP NULL DEFAULT NULL",
+    'voveid_status' => "VARCHAR(50) DEFAULT 'unverified'",
+];
+
+foreach ($voveid_cols as $col => $def) {
+    $check_col = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_users LIKE '$col'");
+    if ($check_col && mysqli_num_rows($check_col) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE sas_users ADD COLUMN $col $def");
+    }
+}
+
+// Add VoveID settings to sas_vendor_settings
+$voveid_settings = [
+    'voveid_api_key' => '',
+    'voveid_environment' => 'production',
+    'voveid_flow_id' => '',
+    'voveid_webhook_secret' => '',
+    'voveid_enabled' => '0',
+];
+
+foreach ($voveid_settings as $setting => $default) {
+    $check_setting = mysqli_query($connection_server, "SELECT id FROM sas_vendor_settings WHERE vendor_id='$vendor_id' AND option_name='$setting' LIMIT 1");
+    if ($check_setting && mysqli_num_rows($check_setting) == 0) {
+        mysqli_query($connection_server, "INSERT INTO sas_vendor_settings (vendor_id, option_name, option_value) VALUES ('$vendor_id', '$setting', '$default')");
+    }
+}
+
+$check_upc_idx = mysqli_query($connection_server, "SHOW INDEX FROM sas_user_payment_checkouts WHERE Key_name = 'reference'");
+if (mysqli_num_rows($check_upc_idx) == 0) {
+    mysqli_query($connection_server, "ALTER TABLE sas_user_payment_checkouts ADD INDEX (reference), ADD INDEX (vendor_id)");
+}
+
 }

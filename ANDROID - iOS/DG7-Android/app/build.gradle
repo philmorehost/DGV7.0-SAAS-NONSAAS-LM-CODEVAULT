@@ -72,6 +72,7 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
+        freeCompilerArgs += ['-Xskip-metadata-version-check']
     }
     buildFeatures {
         viewBinding true
@@ -144,6 +145,11 @@ dependencies {
     // Firebase Cloud Messaging (push notifications for app-update broadcasts)
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
     implementation 'com.google.firebase:firebase-messaging-ktx'
+
+    // VoveID SDK for KYC/Identity Verification
+    implementation files('libs/VoveSDK-release.aar')
+    implementation 'com.github.code-ants:face-tec:9.7.95'
+    implementation 'com.google.mlkit:object-detection:17.0.2'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

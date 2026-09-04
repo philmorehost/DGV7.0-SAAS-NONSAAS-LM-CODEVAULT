@@ -878,7 +878,28 @@ if (isset($_POST["update-security-settings"])) {
     $smtp_sec = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["smtp_sec"])));
     $support_whatsapp = mysqli_real_escape_string($connection_server, preg_replace('/[^0-9]/', '', $_POST["support-whatsapp"] ?? ''));
 
+    // VoveID Settings
+    $voveid_enabled = isset($_POST["voveid_enabled"]) ? 1 : 0;
+    $voveid_public_key = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_public_key"] ?? '')));
+    $voveid_environment = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_environment"] ?? 'sandbox')));
+    $voveid_flow_id = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_flow_id"] ?? '')));
+    $voveid_webhook_secret = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_webhook_secret"] ?? '')));
+
     mysqli_query($connection_server, "UPDATE sas_vendors SET force_security_pin='$force_pin', reg_otp_enabled='$force_otp', trans_email_enabled='$force_email', force_google_sso='$force_sso', google_client_id='$google_id', smtp_host='$smtp_host', smtp_user='$smtp_user', smtp_pass='$smtp_pass', smtp_port='$smtp_port', smtp_sec='$smtp_sec', support_whatsapp='$support_whatsapp' WHERE id='" . $get_logged_admin_details["id"] . "'");
+
+    // Save VoveID settings to sas_vendor_settings
+    $voveid_settings = [
+        'voveid_enabled' => $voveid_enabled,
+        'voveid_public_key' => $voveid_public_key,
+        'voveid_environment' => $voveid_environment,
+        'voveid_flow_id' => $voveid_flow_id,
+        'voveid_webhook_secret' => $voveid_webhook_secret,
+    ];
+    foreach ($voveid_settings as $key => $value) {
+        $key_esc = mysqli_real_escape_string($connection_server, $key);
+        $val_esc = mysqli_real_escape_string($connection_server, $value);
+        mysqli_query($connection_server, "INSERT INTO sas_vendor_settings (vendor_id, option_name, option_value) VALUES ('$vid', '$key_esc', '$val_esc') ON DUPLICATE KEY UPDATE option_value='$val_esc'");
+    }
 
     // Daily password-reset limit (per account, default 1)
     $reset_daily_limit_ns = max(1, (int)($_POST["password_reset_daily_limit"] ?? 1));
@@ -1658,6 +1679,67 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                 <div class="mb-4">
                                     <label class="form-label small fw-bold text-muted text-uppercase">Google Client ID (For SSO)</label>
                                     <input name="google-client-id" type="text" value="<?php echo $get_logged_admin_details['google_client_id']; ?>" class="form-control" placeholder="e.g. 12345678-abc.apps.googleusercontent.com" />
+                                </div>
+
+                                <hr class="my-4">
+                                <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock me-2 text-success"></i>VoveID Identity Verification (KYC)</h6>
+                                <p class="small text-muted">Enable VoveID's AI-powered identity verification for your users. Get your API keys from <a href="https://dashboard.voveid.com" target="_blank">VoveID Dashboard</a>.</p>
+                                
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" name="voveid_enabled" id="voveidEnabled" <?php 
+                                        $voveid_enabled = false;
+                                        $voveid_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_enabled' LIMIT 1");
+                                        if ($voveid_q && $r = mysqli_fetch_assoc($voveid_q)) $voveid_enabled = (int)$r['option_value'] === 1;
+                                        echo $voveid_enabled ? 'checked' : ''; ?>>
+                                    <label class="form-check-label fw-bold" for="voveidEnabled">Enable VoveID Identity Verification</label>
+                                    <div class="small text-muted">Enable VoveID's AI-powered identity verification (IDV/IDV+/KYC) for your users. Users can verify their identity using government-issued documents and biometric liveness detection.</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID Public Key</label>
+                                    <input name="voveid_public_key" type="text" value="<?php 
+                                        $voveid_pk = '';
+                                        $voveid_pk_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_public_key' LIMIT 1");
+                                        if ($voveid_pk_q && $r = mysqli_fetch_assoc($voveid_pk_q)) $voveid_pk = $r['option_value'];
+                                        echo htmlspecialchars($voveid_pk); ?>" class="form-control" placeholder="pk_live_... or pk_test_..." />
+                                    <div class="small text-muted">Your VoveID Public Key from the dashboard. Used to initialize the VoveID SDK on web and mobile.</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID Environment</label>
+                                    <select name="voveid_environment" class="form-select">
+                                        <option value="sandbox" <?php 
+                                            $voveid_env = 'sandbox';
+                                            $voveid_env_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_environment' LIMIT 1");
+                                            if ($voveid_env_q && $r = mysqli_fetch_assoc($voveid_env_q)) $voveid_env = $r['option_value'];
+                                            echo $voveid_env === 'sandbox' ? 'selected' : ''; ?>>Sandbox (Testing)</option>
+                                        <option value="production" <?php 
+                                            $voveid_env = 'sandbox';
+                                            $voveid_env_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_environment' LIMIT 1");
+                                            if ($voveid_env_q && $r = mysqli_fetch_assoc($voveid_env_q)) $voveid_env = $r['option_value'];
+                                            echo $voveid_env === 'production' ? 'selected' : ''; ?>>Production</option>
+                                    </select>
+                                    <div class="small text-muted">Sandbox for testing, Production for live verification.</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID Flow ID (Optional)</label>
+                                    <input name="voveid_flow_id" type="text" value="<?php 
+                                        $voveid_flow = '';
+                                        $voveid_flow_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_flow_id' LIMIT 1");
+                                        if ($voveid_flow_q && $r = mysqli_fetch_assoc($voveid_flow_q)) $voveid_flow = $r['option_value'];
+                                        echo htmlspecialchars($voveid_flow); ?>" class="form-control" placeholder="Custom flow ID from VoveID dashboard" />
+                                    <div class="small text-muted">Custom verification flow ID from VoveID dashboard. Leave empty to use default flow.</div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID Webhook Secret (Optional)</label>
+                                    <input name="voveid_webhook_secret" type="password" value="<?php 
+                                        $voveid_ws = '';
+                                        $voveid_ws_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_webhook_secret' LIMIT 1");
+                                        if ($voveid_ws_q && $r = mysqli_fetch_assoc($voveid_ws_q)) $voveid_ws = $r['option_value'];
+                                        echo htmlspecialchars($voveid_ws); ?>" class="form-control" placeholder="Webhook secret for signature verification" />
+                                    <div class="small text-muted">Secret for verifying VoveID webhook signatures. Configure webhook URL in VoveID dashboard: <code><?php echo $web_http_host; ?>/api/voveid-webhook.php</code></div>
                                 </div>
 
                                 <hr class="my-4">

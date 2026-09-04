@@ -43,6 +43,7 @@
     include_once(__DIR__ . "/bc-func.php");
     include_once(__DIR__ . "/bc-bulk-queue.php");
     include_once(__DIR__ . "/bc-mail-queue.php");
+    include_once(__DIR__ . "/voveid-client.php");
 
     // Connect Platform Validation & Integrity Engine
     include_once(__DIR__ . "/bc-integrity.php");

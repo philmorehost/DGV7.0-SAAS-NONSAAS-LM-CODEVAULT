@@ -21,6 +21,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.FileOutputStream
 
+// VoveID SDK imports
+import com.voveid.sdk.Vove
+import com.voveid.sdk.VoveEnvironment
+import com.voveid.sdk.model.VerificationResult
+
 class KYCFragment : Fragment(R.layout.fragment_kyc) {
 
     private var _binding: FragmentKycBinding? = null
@@ -28,6 +33,7 @@ class KYCFragment : Fragment(R.layout.fragment_kyc) {
 
     private var govtIdUri: Uri? = null
     private var selfieUri: Uri? = null
+    private var voveidInitialized = false
 
     private val pickGovtId = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -62,6 +68,12 @@ class KYCFragment : Fragment(R.layout.fragment_kyc) {
             pickSelfie.launch(intent)
         }
         binding.btnUploadDocuments.setOnClickListener { uploadDocuments() }
+        
+        // VoveID Verification button
+        binding.btnStartVoveID?.setOnClickListener { startVoveIDVerification() }
+        
+        // Initialize VoveID SDK
+        initVoveID()
     }
 
     private fun loadKYCStatus() {
@@ -79,9 +91,17 @@ class KYCFragment : Fragment(R.layout.fragment_kyc) {
                         val statusName = body["kyc_name"] as? String ?: "Unverified"
                         val bvnSet = body["bvn_set"] as? String ?: "No"
                         val ninSet = body["nin_set"] as? String ?: "No"
+                        val voveidEnabled = body["voveid_enabled"] as? String ?: "No"
                         binding.tvKycStatus.text = "KYC Status: $statusName"
                         binding.tvBvnStatus.text = "BVN Saved: $bvnSet"
                         binding.tvNinStatus.text = "NIN Saved: $ninSet"
+                        
+                        // Show/hide VoveID button based on vendor settings
+                        if (voveidEnabled == "Yes") {
+                            binding.btnStartVoveID?.visibility = View.VISIBLE
+                        } else {
+                            binding.btnStartVoveID?.visibility = View.GONE
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -91,6 +111,78 @@ class KYCFragment : Fragment(R.layout.fragment_kyc) {
                 }
             }
         }
+    }
+
+    private fun initVoveID() {
+        // The VoveID Android SDK initializes itself when startIDVerification is called.
+        voveidInitialized = true
+    }
+
+    private fun startVoveIDVerification() {
+        val prefs = PreferenceManager(requireContext())
+        val api = RetrofitClient.getService()
+        
+        binding.progressBar.visibility = View.VISIBLE
+        binding.btnStartVoveID?.isEnabled = false
+        
+        lifecycleScope.launch {
+            try {
+                val resp = api.kycAction(mapOf(
+                    "api_key" to prefs.getApiKey(),
+                    "action" to "voveid_session"
+                ))
+                
+                val body = resp.body()
+                activity?.runOnUiThread {
+                    if (_binding == null) return@runOnUiThread
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnStartVoveID?.isEnabled = true
+                    
+                    if (body?.get("status") == "success") {
+                        val token = body["token"] as? String ?: ""
+                        if (token.isNotBlank()) {
+                            startVoveIDWithToken(token)
+                        } else {
+                            snack("Failed to create VoveID session")
+                        }
+                    } else {
+                        val desc = body?.get("desc") as? String ?: "Failed to create VoveID session"
+                        snack(desc)
+                    }
+                }
+            } catch (e: Exception) {
+                activity?.runOnUiThread {
+                    if (_binding == null) return@runOnUiThread
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnStartVoveID?.isEnabled = true
+                    snack("Error: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun startVoveIDWithToken(sessionToken: String) {
+        val environment = if (getString(R.string.voveid_environment).equals("production", true)) {
+            VoveEnvironment.PRODUCTION
+        } else {
+            VoveEnvironment.SANDBOX
+        }
+
+        Vove.start(requireContext(), sessionToken, false, { result: VerificationResult ->
+            activity?.runOnUiThread {
+                when (result) {
+                    VerificationResult.SUCCESS -> {
+                        snack("Verification successful!")
+                        loadKYCStatus()
+                    }
+                    VerificationResult.FAILURE -> snack("Verification failed")
+                    VerificationResult.PENDING -> snack("Verification pending review")
+                    VerificationResult.CANCELLED -> snack("Verification canceled")
+                    VerificationResult.IN_PROGRESS -> snack("Verification in progress")
+                    VerificationResult.MAX_ATTEMPTS_REACHED -> snack("Maximum attempts reached. Please contact support.")
+                }
+            }
+        }, null)
     }
 
     private fun saveBvnNin() {

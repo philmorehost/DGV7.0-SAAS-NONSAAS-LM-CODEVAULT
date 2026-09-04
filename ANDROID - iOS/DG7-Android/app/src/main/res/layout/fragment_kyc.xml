@@ -55,6 +55,14 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <Button android:id="@+id/btn_start_vove_i_d"
+                android:layout_width="match_parent" android:layout_height="52dp"
+                android:text="Start VoveID Verification"
+                android:textSize="15sp" android:textStyle="bold"
+                android:backgroundTint="@color/primary"
+                style="@style/Widget.Material3.Button"
+                android:layout_marginBottom="24dp" />
+
             <!-- BVN / NIN Section -->
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:text="STEP 1 — ENTER BVN OR NIN" android:textSize="11sp" android:textStyle="bold"
