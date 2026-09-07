@@ -313,7 +313,28 @@
         header("Location: ".$_SERVER["REQUEST_URI"]);
     }
     
-    if(isset($_POST["update-security"])){
+    if (isset($_POST['set-demo-lock-key'])) {
+        $new_demo_key = trim($_POST['demo_lock_key'] ?? '');
+        $confirm_demo_key = trim($_POST['demo_lock_key_confirm'] ?? '');
+        if (strlen($new_demo_key) < 10 || $new_demo_key !== $confirm_demo_key) {
+            $_SESSION['product_purchase_response'] = 'Demo/Production lock key must be at least 10 characters and both entries must match.';
+        } elseif (bc_demo_set_lock_key($connection_server, $new_demo_key)) {
+            $_SESSION['product_purchase_response'] = 'Demo/Production security lock key saved successfully.';
+        } else {
+            $_SESSION['product_purchase_response'] = 'Unable to save the Demo/Production security lock key.';
+        }
+        header('Location: ' . $_SERVER['REQUEST_URI'] . '#tab-security');
+        exit();
+    }
+
+    if (isset($_POST['change-demo-mode'])) {
+        $demo_result = bc_demo_toggle($connection_server, $_POST['demo_mode'] ?? 'production', $_POST['demo_lock_key'] ?? '');
+        $_SESSION['product_purchase_response'] = $demo_result['message'];
+        header('Location: ' . $_SERVER['REQUEST_URI'] . '#tab-security');
+        exit();
+    }
+
+    if(isset($_POST["update-security"])){ 
         $force_pin = isset($_POST["force_vendor_pin"]) ? '1' : '0';
         $force_email = isset($_POST["force_spadmin_trans_email"]) ? '1' : '0';
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_vendor_pin', '$force_pin') ON DUPLICATE KEY UPDATE option_value='$force_pin'");
@@ -1097,6 +1118,29 @@
                                             <p class="text-dark-primary small mb-0" style="opacity: 0.8;">Toggle off to stop receiving email notifications for every vendor and user transaction.</p>
                                         </div>
                                         <input type="checkbox" name="force_spadmin_trans_email" class="form-check-input ms-0" id="forceSpadminEmail" style="width: 3.5rem; height: 1.75rem;" <?php echo ($spadmin_trans_email == '1') ? 'checked' : ''; ?>>
+                                    </div>
+                                </div>
+
+                                <?php $demo_state = bc_demo_state($connection_server); ?>
+                                <div class="card border border-warning border-opacity-50 rounded-4 shadow-none mb-4">
+                                    <div class="card-body p-4">
+                                        <h6 class="fw-bold mb-2"><i class="bi bi-toggle2-on me-2 text-warning"></i>Website Demo Mode</h6>
+                                        <p class="text-muted small">Demo mode snapshots the locked site settings, APIs, service controls, vendor settings and templates. Testers may change them temporarily; switching back to Production restores the snapshot.</p>
+                                        <?php if (!bc_demo_has_lock_key($connection_server)): ?>
+                                            <div class="alert alert-warning small">Set the security lock key before changing Demo/Production mode. This key is separate from your login password and is required to restore Production.</div>
+                                            <form method="post" class="row g-2">
+                                                <div class="col-md-5"><input type="password" name="demo_lock_key" class="form-control" minlength="10" placeholder="New security lock key" required></div>
+                                                <div class="col-md-5"><input type="password" name="demo_lock_key_confirm" class="form-control" minlength="10" placeholder="Confirm lock key" required></div>
+                                                <div class="col-md-2"><button name="set-demo-lock-key" class="btn btn-warning w-100 fw-bold">Save Key</button></div>
+                                            </form>
+                                        <?php else: ?>
+                                            <form method="post" class="row g-2 align-items-end">
+                                                <div class="col-md-3"><label class="form-label small fw-bold">CURRENT MODE</label><div class="form-control bg-light fw-bold text-uppercase"><?php echo htmlspecialchars($demo_state['mode']); ?></div></div>
+                                                <div class="col-md-3"><label class="form-label small fw-bold">CHANGE TO</label><select name="demo_mode" class="form-select"><option value="demo" <?php echo $demo_state['mode'] === 'demo' ? 'selected' : ''; ?>>Demo</option><option value="production" <?php echo $demo_state['mode'] === 'production' ? 'selected' : ''; ?>>Production</option></select></div>
+                                                <div class="col-md-4"><label class="form-label small fw-bold">SECURITY LOCK KEY</label><input type="password" name="demo_lock_key" class="form-control" placeholder="Enter lock key" required></div>
+                                                <div class="col-md-2"><button name="change-demo-mode" class="btn btn-warning w-100 fw-bold">Apply</button></div>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
 

@@ -1849,15 +1849,26 @@ function beeMailer($recipient_email, $email_subject, $email_body)
 
 	// More headers
     $from_name = $get_all_site_details["site_title"] ?? $get_all_super_admin_site_details["site_title"] ?? "System Mailer";
-	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
-	$mail_headers .= 'Cc: ' . get_admin_info(1, "email") . "\r\n";
+    // Use smtp_user for From address so it is valid even in CLI/cron (HTTP_HOST is empty there)
+    $smtp_from_addr = getSMTPUserForHeaders($connection_server);
+	$mail_headers .= 'From: ' . $from_name . ' <' . $smtp_from_addr . '>' . "\r\n";
+	// Only add a Cc: when we actually have a valid admin address. get_admin_info(1, "email")
+	// returns the literal string "Error: Vendor not exists" when the lookup fails; that bogus
+	// value used to flow into PHPMailer's addCC() → "Invalid address" exception → every
+	// beeMailer() email (mobile login/register/forgot) silently fell back to the raw mail()
+	// path — exactly where the Gmail 550 5.7.1 "missing From" rejections come from.
+	$admin_cc = get_admin_info(1, "email");
+	if (!empty($admin_cc) && filter_var($admin_cc, FILTER_VALIDATE_EMAIL)) {
+		$mail_headers .= 'Cc: ' . $admin_cc . "\r\n";
+	}
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
 	$website_admin_phone_number = "234" . substr(get_admin_info(1, "phone_number"), 1, 11);
 	$details_array = array($website_admin_phone_number);
 	$mail_html_body = mailDesignTemplate($email_subject, $email_body, $details_array, true);
-	return customBCMailSender('', $recipient_email, $email_subject, $mail_html_body, $mail_headers);
-	fwrite(fopen("./email-msg.txt", "a++"), "\n" . $recipient_email . " || " . strtoupper($email_subject) . " || " . $email_body . "\n");
+	$sent = customBCMailSender('', $recipient_email, $email_subject, $mail_html_body, $mail_headers);
+	@fwrite(@fopen("./email-msg.txt", "a++"), "\n" . $recipient_email . " || " . strtoupper($email_subject) . " || " . $email_body . "\n");
+	return $sent;
 }
 
 function sendVendorEmail($recipient_email, $email_subject, $email_body)
@@ -1887,7 +1898,9 @@ function sendVendorEmail($recipient_email, $email_subject, $email_body)
 
 	// More headers
     $from_name = $get_all_site_details["site_title"] ?? $get_all_super_admin_site_details["site_title"] ?? "System Admin";
-	$mail_headers .= 'From: ' . $from_name . ' <no-reply@' . $_SERVER["HTTP_HOST"] . '>' . "\r\n";
+    // Use smtp_user for From address so it is valid even in CLI/cron (HTTP_HOST is empty there)
+    $smtp_from_addr = getSMTPUserForHeaders($connection_server);
+	$mail_headers .= 'From: ' . $from_name . ' <' . $smtp_from_addr . '>' . "\r\n";
 	//$mail_headers .= 'Cc: ' . $logged_account_details["email"] . "\r\n";
 	//$mail_headers .= 'Subject: '.$email_subject."\r\n";
 
