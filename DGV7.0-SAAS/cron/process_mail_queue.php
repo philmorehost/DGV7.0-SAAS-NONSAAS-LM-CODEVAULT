@@ -49,6 +49,13 @@ if (PHP_SAPI !== 'cli') {
     bc_get_or_create_cron_secret($connection_server); // Ensure it exists for the Developer tab either way.
 }
 
+// ─── Demo-mode guard: skip processing entirely ────────────────────────────────
+require_once __DIR__ . "/../func/bc-demo-mode.php";
+if (bc_is_demo_mode($connection_server)) {
+    echo "Demo mode active — skipping mail queue processing.\n";
+    exit(0);
+}
+
 // ─── Overlap protection ──────────────────────────────────────────────────────
 $lock_file = __DIR__ . "/../logs/mail_queue.lock";
 $lock_handle = fopen($lock_file, 'c');
@@ -71,12 +78,25 @@ $failed = 0;
 
 if ($claimed) {
     while ($item = mysqli_fetch_assoc($claimed)) {
+        // The campaign may have been cancelled between claiming this item and now (the
+        // cancel handler flips pending/processing items to 'cancelled'). Re-check right
+        // before sending so a cancellation always wins over an in-flight item.
+        $recheck = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT status FROM sas_mail_queue_items WHERE id='" . (int)$item['id'] . "' LIMIT 1"));
+        if (!$recheck || $recheck['status'] !== 'processing') {
+            continue;
+        }
+
         $vid = (int)$item['vendor_id'];
         $GLOBALS['vendor_id'] = $vid;
         resolveVendorID(true);
 
         $from_name = !empty($item['from_name']) ? $item['from_name'] : "System Notification";
+        // Include a valid From: in fallback headers so the RFC 5322 requirement is met
+        // if PHPMailer fails and mail() is used instead. getSMTPUserForHeaders() queries
+        // smtp_user from the DB, which is available in CLI context (HTTP_HOST is not).
+        $smtp_from_addr = getSMTPUserForHeaders($connection_server);
         $mail_headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\n";
+        $mail_headers .= "From: " . $from_name . " <" . $smtp_from_addr . ">\r\n";
 
         $ok = false;
         $error_msg = '';
@@ -91,22 +111,28 @@ if ($claimed) {
         $campaign_id = (int)$item['campaign_id'];
 
         if ($ok) {
-            mysqli_query($connection_server, "UPDATE sas_mail_queue_items SET status='sent', attempts=attempts+1 WHERE id='$item_id'");
-            mysqli_query($connection_server, "UPDATE sas_mail_campaigns SET sent_count=sent_count+1, status='sending' WHERE id='$campaign_id'");
-            $sent++;
+            // The 'AND status="processing"' guard means a concurrent cancellation wins: if the
+            // item was flipped to 'cancelled' mid-send it stays cancelled and isn't counted.
+            mysqli_query($connection_server, "UPDATE sas_mail_queue_items SET status='sent', attempts=attempts+1 WHERE id='$item_id' AND status='processing'");
+            $item_updated = mysqli_affected_rows($connection_server) > 0;
+            mysqli_query($connection_server, "UPDATE sas_mail_campaigns SET sent_count=sent_count+1, status='sending' WHERE id='$campaign_id' AND status != 'cancelled'");
+            if ($item_updated) $sent++;
         } else {
             if (empty($error_msg)) $error_msg = 'Send failed (SMTP error or invalid mailbox)';
             $error_esc = mysqli_real_escape_string($connection_server, $error_msg);
-            mysqli_query($connection_server, "UPDATE sas_mail_queue_items SET status='failed', attempts=attempts+1, error_msg='$error_esc' WHERE id='$item_id'");
-            mysqli_query($connection_server, "UPDATE sas_mail_campaigns SET failed_count=failed_count+1, status='sending' WHERE id='$campaign_id'");
-            $failed++;
+            mysqli_query($connection_server, "UPDATE sas_mail_queue_items SET status='failed', attempts=attempts+1, error_msg='$error_esc' WHERE id='$item_id' AND status='processing'");
+            $item_updated = mysqli_affected_rows($connection_server) > 0;
+            mysqli_query($connection_server, "UPDATE sas_mail_campaigns SET failed_count=failed_count+1, status='sending' WHERE id='$campaign_id' AND status != 'cancelled'");
+            if ($item_updated) $failed++;
         }
     }
 }
 
 // ─── Finalize campaigns whose items are all done ─────────────────────────────
+// Only 'queued'/'sending' campaigns are finalized to 'completed' — a campaign the admin
+// explicitly cancelled (status='cancelled') must never be flipped back to 'completed'.
 mysqli_query($connection_server, "UPDATE sas_mail_campaigns c SET c.status='completed', c.completed_at=NOW()
-    WHERE c.status != 'completed'
+    WHERE c.status IN ('queued','sending')
     AND NOT EXISTS (SELECT 1 FROM sas_mail_queue_items i WHERE i.campaign_id = c.id AND i.status IN ('pending','processing'))
     AND EXISTS (SELECT 1 FROM sas_mail_queue_items i WHERE i.campaign_id = c.id)");
 

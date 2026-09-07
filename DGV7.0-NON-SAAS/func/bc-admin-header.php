@@ -255,9 +255,13 @@ function hex2rgb($hex) {
             </a>
           </li>
           <li>
-            <a href="<?php echo $web_http_host; ?>/bc-admin/AIMarketing.php" class="<?php echo $current_page == 'AIMarketing.php' ? 'active' : ''; ?>">
-              <i class="bi bi-circle"></i><span>AI Marketing Studio</span>
-            </a>
+            <?php if (bc_is_demo_mode($connection_server)): ?>
+              <?php echo bc_demo_locked_link($web_http_host . '/bc-admin/AIMarketing.php', 'AI Marketing Studio', 'bi bi-circle', 'AI Marketing'); ?>
+            <?php else: ?>
+              <a href="<?php echo $web_http_host; ?>/bc-admin/AIMarketing.php" class="<?php echo $current_page == 'AIMarketing.php' ? 'active' : ''; ?>">
+                <i class="bi bi-circle"></i><span>AI Marketing Studio</span>
+              </a>
+            <?php endif; ?>
           </li>
         </ul>
       </li>
@@ -386,14 +390,22 @@ function hex2rgb($hex) {
             </a>
           </li>
           <li>
-            <a href="<?php echo $web_http_host; ?>/bc-admin/SendMail.php" class="<?php echo ($current_page == 'SendMail.php') ? 'active' : ''; ?>">
-              <i class="bi bi-circle"></i><span>Mail Sender</span>
-            </a>
+            <?php if (bc_is_demo_mode($connection_server)): ?>
+              <?php echo bc_demo_locked_link($web_http_host . '/bc-admin/SendMail.php', 'Mail Sender', 'bi bi-circle', 'Broadcast Email'); ?>
+            <?php else: ?>
+              <a href="<?php echo $web_http_host; ?>/bc-admin/SendMail.php" class="<?php echo ($current_page == 'SendMail.php') ? 'active' : ''; ?>">
+                <i class="bi bi-circle"></i><span>Mail Sender</span>
+              </a>
+            <?php endif; ?>
           </li>
           <li>
-            <a href="<?php echo $web_http_host; ?>/bc-admin/AppUpdateBroadcast.php" class="<?php echo ($current_page == 'AppUpdateBroadcast.php') ? 'active' : ''; ?>">
-              <i class="bi bi-circle"></i><span>App Update Broadcast</span>
-            </a>
+            <?php if (bc_is_demo_mode($connection_server)): ?>
+              <?php echo bc_demo_locked_link($web_http_host . '/bc-admin/AppUpdateBroadcast.php', 'App Update Broadcast', 'bi bi-circle', 'App Update Broadcast'); ?>
+            <?php else: ?>
+              <a href="<?php echo $web_http_host; ?>/bc-admin/AppUpdateBroadcast.php" class="<?php echo ($current_page == 'AppUpdateBroadcast.php') ? 'active' : ''; ?>">
+                <i class="bi bi-circle"></i><span>App Update Broadcast</span>
+              </a>
+            <?php endif; ?>
           </li>
           <li>
             <a href="<?php echo $web_http_host; ?>/bc-admin/IDBlockingSystem.php" class="<?php echo ($current_page == 'IDBlockingSystem.php') ? 'active' : ''; ?>">

@@ -2,6 +2,16 @@
 include ("../func/bc-admin-config.php");
 include_once(__DIR__ . "/../func/bc-integrity.php");
 
+// Demo-mode blocked feature notice
+if (isset($_GET['demo_blocked']) && bc_is_demo_mode($connection_server)) {
+    $blocked_feature = htmlspecialchars($_GET['feature'] ?? 'This feature');
+    echo '<div class="alert alert-danger text-center m-3" role="alert">
+            <i class="bi bi-lock-fill me-2"></i>
+            <strong>Demo Mode:</strong> ' . $blocked_feature . ' is locked.
+            Contact your administrator to enable this feature.
+          </div>';
+}
+
 // Used by the Developer tab's mail-queue cron entry below.
 $mail_queue_batch_size = (int)getSuperAdminOption('mail_queue_batch_size', 5);
 $mail_queue_cron_secret = bc_get_or_create_cron_secret($connection_server);

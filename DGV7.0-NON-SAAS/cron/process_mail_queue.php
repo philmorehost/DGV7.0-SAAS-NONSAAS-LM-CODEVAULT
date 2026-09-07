@@ -49,6 +49,13 @@ if (PHP_SAPI !== 'cli') {
     bc_get_or_create_cron_secret($connection_server); // Ensure it exists for the Developer tab either way.
 }
 
+// ─── Demo-mode guard: skip processing entirely ────────────────────────────────
+require_once __DIR__ . "/../func/bc-demo-mode.php";
+if (bc_is_demo_mode($connection_server)) {
+    echo "Demo mode active — skipping mail queue processing.\n";
+    exit(0);
+}
+
 // ─── Overlap protection ──────────────────────────────────────────────────────
 $lock_file = __DIR__ . "/../logs/mail_queue.lock";
 $lock_handle = fopen($lock_file, 'c');

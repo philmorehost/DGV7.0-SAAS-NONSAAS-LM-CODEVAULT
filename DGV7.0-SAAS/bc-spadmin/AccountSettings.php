@@ -1,6 +1,16 @@
 <?php session_start();
     include("../func/bc-spadmin-config.php");
-    
+
+    // Demo-mode blocked feature notice
+    if (isset($_GET['demo_blocked']) && bc_is_demo_mode($connection_server)) {
+        $blocked_feature = htmlspecialchars($_GET['feature'] ?? 'This feature');
+        echo '<div class="alert alert-danger text-center m-3" role="alert">
+                <i class="bi bi-lock-fill me-2"></i>
+                <strong>Demo Mode:</strong> ' . $blocked_feature . ' is locked.
+                Contact your administrator to enable this feature.
+              </div>';
+    }
+
     if (isset($_GET['refresh_license'])) {
         header('Content-Type: application/json');
         $license_key = getSuperAdminOption('license_key', '');

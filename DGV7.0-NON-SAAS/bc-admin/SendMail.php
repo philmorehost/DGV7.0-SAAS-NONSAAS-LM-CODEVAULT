@@ -1,6 +1,12 @@
 <?php session_start();
 include("../func/bc-admin-config.php");
 include_once("../func/bc-ai-engine.php");
+require_once "../func/bc-demo-mode.php";
+
+// Block bulk email sends in demo mode
+if (isset($_POST["send-mail"]) && bc_is_demo_mode($connection_server)) {
+    bc_demo_block_feature('Broadcast Email');
+}
 
 $vid = $get_logged_admin_details['id'];
 $ai_engine = ai_engine();

@@ -145,6 +145,12 @@ function bc_resolve_campaign_recipients($connection_server, $vendor_id, $status_
  */
 function bc_enqueue_mail_campaign($connection_server, $vendor_id, $subject, $body_html, array $recipients, $source, $from_name = null, $website_url = '')
 {
+    // Refuse to enqueue new campaigns in demo mode — testers must not be able to blast
+    // real users or external addresses with bulk email.  The cron processor will also
+    // skip any pending items when bc_is_demo_mode() is true, but blocking at enqueue
+    // time is cleaner and works for both SAAS and NON-SAAS deployments.
+    if (bc_is_demo_mode($connection_server)) return 0;
+
     bc_ensure_mail_queue_schema($connection_server);
 
     $recipients = array_values($recipients);

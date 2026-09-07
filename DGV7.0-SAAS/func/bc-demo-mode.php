@@ -118,3 +118,24 @@ function bc_demo_toggle($connection_server, $mode, $lock_key = '') {
         return ['ok' => false, 'message' => 'Mode change failed safely: ' . $e->getMessage()];
     }
 }
+
+/**
+ * Returns true if the platform is currently in demo mode.
+ * Guards bulk/transactional email send paths from tester abuse.
+ */
+function bc_is_demo_mode($connection_server) {
+    $state = bc_demo_state($connection_server);
+    return ($state['mode'] ?? 'production') === 'demo';
+}
+
+/**
+ * Halts and redirects with a friendly message when a feature is locked in demo mode.
+ * Call this at the top of any bulk-email send handler to prevent tester abuse.
+ */
+function bc_demo_block_feature($feature_name = 'This feature') {
+    http_response_code(403);
+    if (!headers_sent()) {
+        header("Location: bc-spadmin/AccountSettings.php?demo_blocked=1&feature=" . urlencode($feature_name));
+    }
+    exit;
+}

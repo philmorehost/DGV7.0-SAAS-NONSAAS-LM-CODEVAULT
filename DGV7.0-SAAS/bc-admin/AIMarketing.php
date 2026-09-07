@@ -1,9 +1,15 @@
 <?php session_start();
 include("../func/bc-admin-config.php");
 include_once("../func/bc-ai-engine.php");
+require_once "../func/bc-demo-mode.php";
 
 $title = "AI Marketing Studio";
 $vendor_id = $get_logged_admin_details['id'];
+
+// Block bulk email sends in demo mode
+if (isset($_POST['send-campaign']) && bc_is_demo_mode($connection_server)) {
+    bc_demo_block_feature('AI Marketing Email Campaign');
+}
 $ai_engine = ai_engine();
 $assigned_model_raw = $get_logged_admin_details['ai_model_assigned'] ?: getSuperAdminOption('ai_default_model', '');
 $assigned_model = $ai_engine->isModelCompatible($assigned_model_raw) ? $assigned_model_raw : $ai_engine->getDefaultModel();

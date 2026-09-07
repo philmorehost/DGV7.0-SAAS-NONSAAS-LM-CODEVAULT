@@ -1,6 +1,12 @@
 <?php session_start();
 include("../func/bc-admin-config.php");
 include_once("../func/bc-ai-engine.php");
+require_once "../func/bc-demo-mode.php";
+
+// Block bulk email sends in demo mode
+if (isset($_POST["send-mail"]) && bc_is_demo_mode($connection_server)) {
+    bc_demo_block_feature('Broadcast Email');
+}
 
 $vid = $get_logged_admin_details['id'];
 $ai_engine = ai_engine();
@@ -162,6 +168,15 @@ $safe_input";
         $cid = (int)($_GET['campaign_id'] ?? 0);
         $progress = bc_get_mail_campaign_progress($connection_server, $cid, $vid);
         echo json_encode($progress ?: ['status' => 'error', 'message' => 'Campaign not found.']);
+        exit;
+    }
+
+    // ─── Cancel a queued/sending campaign (stops remaining emails) ──────────
+    if ($_GET['action'] == 'cancel_campaign') {
+        header('Content-Type: application/json');
+        $cid = (int)($_GET['campaign_id'] ?? 0);
+        $result = bc_cancel_mail_campaign($connection_server, $cid, $vid, false);
+        echo json_encode($result);
         exit;
     }
 }
@@ -386,7 +401,12 @@ $prompt_chips = [
             <div class="marketing-card mb-4">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="fw-bold mb-0"><i class="bi bi-broadcast-pin me-2"></i>Live Send Report</h6>
-                    <span class="badge bg-primary-subtle text-primary" id="progressStatus">—</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary-subtle text-primary" id="progressStatus">—</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="cancelActiveBtn">
+                            <i class="bi bi-x-circle me-1"></i>Cancel Campaign
+                        </button>
+                    </div>
                 </div>
                 <div class="progress campaign-progress-bar mb-2">
                     <div class="progress-bar bg-success" id="progressBarSent" style="width:0%"></div>
@@ -411,7 +431,7 @@ $prompt_chips = [
                 <?php else: ?>
                     <div class="table-responsive">
                         <table class="table table-sm campaign-row align-middle mb-0">
-                            <thead class="text-muted"><tr><th>Subject</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th></tr></thead>
+                            <thead class="text-muted"><tr><th>Subject</th><th>Status</th><th>Sent</th><th>Failed</th><th>Total</th><th>Action</th></tr></thead>
                             <tbody>
                             <?php foreach ($recent_campaigns as $c): ?>
                                 <tr>
@@ -420,6 +440,13 @@ $prompt_chips = [
                                     <td><?php echo (int)$c['sent_count']; ?></td>
                                     <td><?php echo (int)$c['failed_count']; ?></td>
                                     <td><?php echo (int)$c['total_count']; ?></td>
+                                    <td>
+                                        <?php if (in_array($c['status'], ['queued', 'sending'], true)): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-danger cancel-campaign-btn" data-id="<?php echo (int)$c['id']; ?>" data-subject="<?php echo htmlspecialchars($c['subject'], ENT_QUOTES); ?>">Cancel</button>
+                                        <?php else: ?>
+                                            <span class="text-muted small">—</span>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                             </tbody>
@@ -566,6 +593,26 @@ $prompt_chips = [
             const elPending = document.getElementById('progressPending');
             const elTotal = document.getElementById('progressTotal');
             const elStatus = document.getElementById('progressStatus');
+            const cancelActiveBtn = document.getElementById('cancelActiveBtn');
+
+            function stopPolling() { cancelActiveBtn.disabled = true; cancelActiveBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Cancelled'; }
+
+            cancelActiveBtn.addEventListener('click', function() {
+                if (!confirm('Cancel this campaign? Emails that have not been sent yet will not be sent.')) return;
+                cancelActiveBtn.disabled = true;
+                cancelActiveBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Cancelling...';
+                fetch('?action=cancel_campaign&campaign_id=' + activeCampaignId)
+                    .then(r => r.json())
+                    .then(data => {
+                        alert(data.message || (data.success ? 'Campaign cancelled.' : 'Could not cancel campaign.'));
+                        if (data.success) { stopPolling(); setTimeout(() => location.reload(), 1200); }
+                        else { cancelActiveBtn.disabled = false; cancelActiveBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel Campaign'; }
+                    })
+                    .catch(() => {
+                        cancelActiveBtn.disabled = false;
+                        cancelActiveBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel Campaign';
+                    });
+            });
 
             function poll() {
                 fetch('?action=campaign_progress&campaign_id=' + activeCampaignId)
@@ -582,6 +629,7 @@ $prompt_chips = [
                         elPending.textContent = data.pending;
                         elTotal.textContent = total;
                         elStatus.textContent = data.status;
+                        if (data.status === 'cancelled') { stopPolling(); return; }
                         if (data.status !== 'completed') {
                             setTimeout(poll, 3000);
                         }
@@ -590,6 +638,24 @@ $prompt_chips = [
             }
             poll();
         })();
+
+        // ─── Cancel buttons in the Recent Campaigns table ─────────────────────
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.cancel-campaign-btn');
+            if (!btn) return;
+            const cid = btn.dataset.id;
+            if (!confirm('Cancel campaign "' + (btn.dataset.subject || '') + '"? Emails that have not been sent yet will not be sent.')) return;
+            btn.disabled = true;
+            btn.textContent = 'Cancelling...';
+            fetch('?action=cancel_campaign&campaign_id=' + cid)
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.message || (data.success ? 'Campaign cancelled.' : 'Could not cancel campaign.'));
+                    if (data.success) { location.reload(); }
+                    else { btn.disabled = false; btn.textContent = 'Cancel'; }
+                })
+                .catch(() => { btn.disabled = false; btn.textContent = 'Cancel'; });
+        });
     </script>
 </body>
 </html>
