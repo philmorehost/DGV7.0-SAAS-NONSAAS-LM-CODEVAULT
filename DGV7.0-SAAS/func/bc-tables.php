@@ -2148,7 +2148,11 @@ foreach ($voveid_cols as $col => $def) {
     }
 }
 
-// Add VoveID settings to sas_vendor_settings
+// Add VoveID settings to sas_vendor_settings.
+// NOTE: bc-tables.php is a migration file that also runs (first load after an
+// update) BEFORE the calling config resolves a single vendor, so $vendor_id is
+// undefined here. Seed the default rows for every vendor instead, mirroring the
+// "default KYC config for all vendors" migration in bc-config.php.
 $voveid_settings = [
     'voveid_api_key' => '',
     'voveid_environment' => 'production',
@@ -2157,10 +2161,22 @@ $voveid_settings = [
     'voveid_enabled' => '0',
 ];
 
-foreach ($voveid_settings as $setting => $default) {
-    $check_setting = mysqli_query($connection_server, "SELECT id FROM sas_vendor_settings WHERE vendor_id='$vendor_id' AND option_name='$setting' LIMIT 1");
-    if ($check_setting && mysqli_num_rows($check_setting) == 0) {
-        mysqli_query($connection_server, "INSERT INTO sas_vendor_settings (vendor_id, option_name, option_value) VALUES ('$vendor_id', '$setting', '$default')");
+$voveid_table_ok = mysqli_query($connection_server, "SHOW TABLES LIKE 'sas_vendor_settings'");
+if ($voveid_table_ok && mysqli_num_rows($voveid_table_ok) > 0) {
+    $voveid_vendor_ids = mysqli_query($connection_server, "SELECT id FROM sas_vendors");
+    if ($voveid_vendor_ids) {
+        while ($vv_row = mysqli_fetch_assoc($voveid_vendor_ids)) {
+            $vv_id = (int)$vv_row['id'];
+            if ($vv_id <= 0) continue;
+            foreach ($voveid_settings as $setting => $default) {
+                $setting_esc = mysqli_real_escape_string($connection_server, $setting);
+                $default_esc = mysqli_real_escape_string($connection_server, $default);
+                $check_setting = mysqli_query($connection_server, "SELECT id FROM sas_vendor_settings WHERE vendor_id='$vv_id' AND option_name='$setting_esc' LIMIT 1");
+                if ($check_setting && mysqli_num_rows($check_setting) == 0) {
+                    mysqli_query($connection_server, "INSERT INTO sas_vendor_settings (vendor_id, option_name, option_value) VALUES ('$vv_id', '$setting_esc', '$default_esc')");
+                }
+            }
+        }
     }
 }
 
