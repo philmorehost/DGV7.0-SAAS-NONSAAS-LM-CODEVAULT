@@ -44,6 +44,16 @@ if (isset($_POST['check-numbers'])) {
                 $form['data_type']
             );
             $checker_result['_norm'] = $norm;
+
+            // Export action (CSV or Excel) — streams a file and stops rendering.
+            if (isset($_POST['export_format']) && $checker_error === '') {
+                $export_format = trim(strip_tags($_POST['export_format']));
+                if ($export_format === 'excel') {
+                    bc_checker_export_excel($checker_result, $form, true);
+                } else {
+                    bc_checker_export_csv($checker_result, $form, true);
+                }
+            }
         }
     }
 }
@@ -197,7 +207,23 @@ if (isset($_POST['check-numbers'])) {
                                 <i class="bi bi-list-check me-1"></i>
                                 Result — <?php echo bc_checker_month_label($form['month']); ?> · <?php echo $service_label; ?>
                             </h6>
-                            <span class="small text-muted">Green = credited · Red = not credited this month</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="small text-muted me-1">Green = credited · Red = not credited this month</span>
+                                <form method="post" action="" class="d-inline-flex gap-1">
+                                    <input type="hidden" name="check-numbers" value="1" />
+                                    <input type="hidden" name="month" value="<?php echo htmlspecialchars($form['month']); ?>" />
+                                    <input type="hidden" name="service" value="<?php echo htmlspecialchars($form['service']); ?>" />
+                                    <input type="hidden" name="data_type" value="<?php echo htmlspecialchars($form['data_type']); ?>" />
+                                    <input type="hidden" name="username" value="<?php echo htmlspecialchars($form['username']); ?>" />
+                                    <input type="hidden" name="numbers" value="<?php echo htmlspecialchars($form['numbers']); ?>" />
+                                    <button type="submit" name="export_format" value="csv" class="btn btn-success btn-sm" title="Export report as CSV">
+                                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                                    </button>
+                                    <button type="submit" name="export_format" value="excel" class="btn btn-outline-success btn-sm" title="Export report as Excel (.xls)">
+                                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                         <div class="table-responsive">
                             <table class="table table-hover align-middle mb-0">

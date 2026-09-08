@@ -235,3 +235,190 @@ if (!function_exists('bc_checker_network_badge')) {
         return '<span class="badge bg-light border text-dark">' . strtoupper(htmlspecialchars($net)) . '</span>';
     }
 }
+
+if (!function_exists('bc_checker_network_name')) {
+    /** Plain-text network name (no HTML) for exports. */
+    function bc_checker_network_name($network, $phone) {
+        $net = strtolower(trim((string)$network));
+        if ($net === '' || $net === 'unknown' || $net === null) {
+            $net = strtolower((string)identifyISP($phone));
+        }
+        return $net === '' ? 'Unknown' : strtoupper($net);
+    }
+}
+
+if (!function_exists('bc_checker_service_label')) {
+    /** Human label for the report, e.g. "Data (SME Data)" or "Airtime". */
+    function bc_checker_service_label($form) {
+        if (($form['service'] ?? 'data') === 'airtime') return 'Airtime';
+        $dt = $form['data_type'] ?? 'any';
+        return 'Data' . ($dt === 'any' ? ' (All)' : ' (' . strtoupper(str_replace('-', ' ', $dt)) . ')');
+    }
+}
+
+if (!function_exists('bc_checker_build_report')) {
+    /**
+     * Flatten a checker result into export-ready rows.
+     * Returns array('meta' => [...], 'header' => [...], 'rows' => [[...], ...]).
+     * Columns: S/N, Phone, Network, Status, Credited Date, Amount, Reference / Detail.
+     * When $include_user is true, a leading 'Username' column is added (admin view).
+     */
+    function bc_checker_build_report($result, $form, $include_user = false) {
+        $phones = $result['_norm']['phones'] ?? array();
+        $summary = $result['summary'] ?? array('credited' => 0, 'not_credited' => 0);
+        $invalid = (int)($result['_norm']['invalid'] ?? 0);
+
+        $meta = array(
+            'Report'     => 'Number Credit Checker Report',
+            'Month'      => bc_checker_month_label($form['month'] ?? ''),
+            'Service'    => bc_checker_service_label($form),
+            'Generated'  => date('Y-m-d H:i:s'),
+            'Total'      => count($phones),
+            'Credited'   => (int)($summary['credited'] ?? 0),
+            'NotCredited'=> (int)($summary['not_credited'] ?? 0),
+            'Invalid'    => $invalid,
+        );
+
+        $header = array('S/N', 'Phone Number', 'Network', 'Status', 'Credited Date', 'Amount (₦)', 'Reference / Detail');
+        if ($include_user) array_unshift($header, 'Username');
+
+        $rows = array();
+        $n = 0;
+        foreach ($phones as $phone) {
+            $n++;
+            $credited = $result['credited'][$phone] ?? array();
+            $attempts = $result['attempts'][$phone] ?? array();
+
+            $network = bc_checker_network_name(($credited[0]['network'] ?? '') ?: '', $phone);
+            $username = '';
+            $status = 'Not Credited';
+            $dates = array();
+            $amount = 0.0;
+            $detail = '';
+
+            if (count($credited) > 0) {
+                $status = 'Credited';
+                $seen_dates = array();
+                foreach ($credited as $c) {
+                    $username = $username ?: ($c['username'] ?? '');
+                    $d = date('Y-m-d', strtotime($c['date']));
+                    if (!in_array($d, $seen_dates, true)) $seen_dates[] = $d;
+                    $amount += (float)($c['discounted_amount'] ?? $c['amount'] ?? 0);
+                    $detail = ($detail === '') ? ($c['type_alternative'] ?? '') : $detail;
+                }
+                $dates = $seen_dates;
+                if (count($credited) > count($seen_dates)) {
+                    $detail .= ' (' . count($credited) . ' credit(s) this month)';
+                }
+            }
+
+            if ($status === 'Not Credited' && count($attempts) > 0) {
+                $attempt_parts = array();
+                foreach (array_slice($attempts, 0, 5) as $att) {
+                    $attempt_parts[] = $att['reference'] . (($att['status'] ?? '') == 2 ? ' [PENDING]' : ' [FAILED]');
+                }
+                $detail = implode(', ', $attempt_parts);
+            }
+
+            $amount_str = $amount > 0 ? number_format($amount, 2) : '';
+            $date_str = implode(', ', $dates);
+
+            $row = array($n, $phone, $network, $status, $date_str, $amount_str, $detail);
+            if ($include_user) array_unshift($row, $username);
+            $rows[] = $row;
+        }
+
+        return array('meta' => $meta, 'header' => $header, 'rows' => $rows);
+    }
+}
+
+if (!function_exists('bc_checker_export_csv')) {
+    /** Stream the report as a CSV download. */
+    function bc_checker_export_csv($result, $form, $include_user = false) {
+        $report = bc_checker_build_report($result, $form, $include_user);
+        $stamp = date('Ymd-His');
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=NumberChecker-' . $stamp . '.csv');
+
+        $out = fopen('php://output', 'w');
+        // UTF-8 BOM so Excel renders ₦ / accented text correctly.
+        fwrite($out, "\xEF\xBB\xBF");
+
+        fputcsv($out, array($report['meta']['Report'], 'Month: ' . $report['meta']['Month'], 'Service: ' . $report['meta']['Service'], 'Generated: ' . $report['meta']['Generated']));
+        fputcsv($out, array('Total Checked', $report['meta']['Total'], 'Credited', $report['meta']['Credited'], 'Not Credited', $report['meta']['NotCredited'], 'Invalid', $report['meta']['Invalid']));
+        fputcsv($out, array()); // blank spacer row
+
+        fputcsv($out, $report['header']);
+        foreach ($report['rows'] as $row) {
+            fputcsv($out, $row);
+        }
+        fclose($out);
+        exit;
+    }
+}
+
+if (!function_exists('bc_checker_export_excel')) {
+    /**
+     * Stream the report as an Excel-compatible .xls (SpreadsheetML 2003).
+     * Phone/reference cells are forced to text so leading zeros are preserved.
+     */
+    function bc_checker_export_excel($result, $form, $include_user = false) {
+        $report = bc_checker_build_report($result, $form, $include_user);
+        $stamp = date('Ymd-His');
+
+        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+        header('Content-Disposition: attachment; filename=NumberChecker-' . $stamp . '.xls');
+
+        $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+
+        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' . "\n";
+        echo '<Styles><Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#D9E2F3" ss:Pattern="Solid"/></Style></Styles>' . "\n";
+        echo '<Worksheet ss:Name="Report"><Table>' . "\n";
+
+        // Meta block (title + filter summary), one cell per line.
+        $meta_lines = array(
+            $report['meta']['Report'],
+            'Month: ' . $report['meta']['Month'] . '   |   Service: ' . $report['meta']['Service'],
+            'Generated: ' . $report['meta']['Generated'],
+            'Total Checked: ' . $report['meta']['Total'] . '   |   Credited: ' . $report['meta']['Credited'] . '   |   Not Credited: ' . $report['meta']['NotCredited'] . '   |   Invalid: ' . $report['meta']['Invalid'],
+        );
+        foreach ($meta_lines as $line) {
+            echo '<Row><Cell><Data ss:Type="String">' . $e($line) . '</Data></Cell></Row>' . "\n";
+        }
+        echo '<Row><Cell><Data ss:Type="String"></Data></Cell></Row>' . "\n"; // spacer
+
+        // Header row
+        echo '<Row>';
+        foreach ($report['header'] as $h) {
+            echo '<Cell ss:StyleID="hdr"><Data ss:Type="String">' . $e($h) . '</Data></Cell>';
+        }
+        echo '</Row>' . "\n";
+
+        // Data rows. Phone / reference / status columns are kept as text so
+        // Excel never strips leading zeros or reformats phone numbers.
+        $header = $report['header'];
+        $number_col = null;
+        foreach ($header as $ci => $colname) {
+            if ($colname === 'Amount (₦)') $number_col = $ci;
+        }
+        foreach ($report['rows'] as $row) {
+            echo '<Row>';
+            foreach ($row as $ci => $val) {
+                $val = (string)$val;
+                if ($val === '') {
+                    echo '<Cell><Data ss:Type="String"></Data></Cell>';
+                } elseif ($ci === $number_col) {
+                    echo '<Cell><Data ss:Type="Number">' . $e($val) . '</Data></Cell>';
+                } else {
+                    echo '<Cell><Data ss:Type="String">' . $e($val) . '</Data></Cell>';
+                }
+            }
+            echo '</Row>' . "\n";
+        }
+
+        echo '</Table></Worksheet></Workbook>';
+        exit;
+    }
+}
