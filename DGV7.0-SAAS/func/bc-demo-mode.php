@@ -139,3 +139,16 @@ function bc_demo_block_feature($feature_name = 'This feature') {
     }
     exit;
 }
+
+/**
+ * Returns an HTML string for a sidebar link that is locked in demo mode.
+ * Shows a tooltip explaining the lock; the href is retained so the page is still
+ * reachable but the send action itself will be blocked by bc_demo_block_feature().
+ */
+function bc_demo_locked_link($href, $label, $icon = 'bi bi-lock', $feature = null) {
+    $tip = $feature ? " title=\"Locked in Demo Mode: $feature\"" : " title=\"Locked in Demo Mode\"";
+    $feat_attr = $feature ? ' data-demo-feature="' . htmlspecialchars($feature) . '"' : '';
+    return '<a href="' . htmlspecialchars($href) . '" class="demo-locked"' . $tip . $feat_attr . '>'
+         . '<i class="' . $icon . '"></i><span>' . htmlspecialchars($label) . '</span>'
+         . '</a>';
+}

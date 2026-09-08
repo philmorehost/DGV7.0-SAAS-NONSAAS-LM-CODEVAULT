@@ -381,7 +381,7 @@ if (!isset($get_all_super_admin_site_details) || empty($get_all_super_admin_site
             </a>
           </li>
           <li>
-            <?php if (bc_is_demo_mode($connection_server)): ?>
+            <?php if (function_exists('bc_is_demo_mode') && function_exists('bc_demo_locked_link') && bc_is_demo_mode($connection_server)): ?>
               <?php echo bc_demo_locked_link($web_http_host . '/bc-spadmin/SendMail.php', 'Send Mail', 'bi bi-circle', 'Broadcast Email'); ?>
             <?php else: ?>
               <a href="<?php echo $web_http_host; ?>/bc-spadmin/SendMail.php" class="<?php echo ($current_page == 'SendMail.php') ? 'active' : ''; ?>">
