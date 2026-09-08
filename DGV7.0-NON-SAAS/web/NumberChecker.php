@@ -229,6 +229,7 @@ if (isset($_POST['check-numbers'])) {
                                         <th class="border-0 py-3">Phone Number</th>
                                         <th class="border-0 py-3">Network</th>
                                         <th class="border-0 py-3">Status</th>
+                                        <th class="border-0 py-3 text-end">Amount (₦)</th>
                                         <th class="border-0 py-3">Credited Date</th>
                                         <th class="border-0 py-3 text-end px-4">Reference / Action</th>
                                     </tr>
@@ -242,12 +243,17 @@ if (isset($_POST['check-numbers'])) {
                                             $attempt_rows = $checker_result['attempts'][$phone] ?? array();
                                             if (count($credited_rows) > 0):
                                                 $latest = end($credited_rows);
+                                                $credited_total = 0;
+                                                foreach ($credited_rows as $cr) {
+                                                    $credited_total += (float)($cr['amount'] ?? $cr['discounted_amount'] ?? 0);
+                                                }
                                     ?>
                                         <tr>
                                             <td class="px-4"><?php echo $n; ?></td>
                                             <td class="fw-semibold"><?php echo htmlspecialchars($phone); ?></td>
                                             <td><?php echo bc_checker_network_badge($credited_rows[0]['network'] ?? '', $phone); ?></td>
                                             <td><span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="bi bi-check-circle-fill me-1"></i>Credited</span></td>
+                                            <td class="text-success fw-semibold text-end"><?php echo '₦' . number_format($credited_total, 2); ?></td>
                                             <td class="text-success fw-semibold"><?php echo date('d M Y', strtotime($latest['date'])); ?></td>
                                             <td class="text-end px-4">
                                                 <small class="text-muted d-block"><?php echo htmlspecialchars($latest['type_alternative']); ?></small>
@@ -262,6 +268,7 @@ if (isset($_POST['check-numbers'])) {
                                             <td class="fw-semibold"><?php echo htmlspecialchars($phone); ?></td>
                                             <td><?php echo bc_checker_network_badge('', $phone); ?></td>
                                             <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger"><i class="bi bi-x-circle-fill me-1"></i>Not Credited</span></td>
+                                            <td class="text-danger text-end">—</td>
                                             <td class="text-danger">— <?php echo bc_checker_month_label($form['month']); ?></td>
                                             <td class="text-end px-4">
                                                 <?php if (count($attempt_rows) > 0): ?>

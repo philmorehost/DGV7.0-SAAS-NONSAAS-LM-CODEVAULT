@@ -303,7 +303,9 @@ if (!function_exists('bc_checker_build_report')) {
                     $username = $username ?: ($c['username'] ?? '');
                     $d = date('Y-m-d', strtotime($c['date']));
                     if (!in_array($d, $seen_dates, true)) $seen_dates[] = $d;
-                    $amount += (float)($c['discounted_amount'] ?? $c['amount'] ?? 0);
+                    // Report the top-up value actually credited: the airtime face
+                    // value for airtime, or the bundle price paid for data.
+                    $amount += (float)($c['amount'] ?? $c['discounted_amount'] ?? 0);
                     $detail = ($detail === '') ? ($c['type_alternative'] ?? '') : $detail;
                 }
                 $dates = $seen_dates;
@@ -410,7 +412,9 @@ if (!function_exists('bc_checker_export_excel')) {
                 if ($val === '') {
                     echo '<Cell><Data ss:Type="String"></Data></Cell>';
                 } elseif ($ci === $number_col) {
-                    echo '<Cell><Data ss:Type="Number">' . $e($val) . '</Data></Cell>';
+                    // Amount cells are numeric; strip thousands separators so the
+                    // XML stays a valid Number (Excel tolerates no commas here).
+                    echo '<Cell><Data ss:Type="Number">' . $e(str_replace(',', '', $val)) . '</Data></Cell>';
                 } else {
                     echo '<Cell><Data ss:Type="String">' . $e($val) . '</Data></Cell>';
                 }
