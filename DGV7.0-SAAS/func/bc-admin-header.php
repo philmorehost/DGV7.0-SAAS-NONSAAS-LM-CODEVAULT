@@ -301,7 +301,7 @@ function hex2rgb($hex) {
       <li class="nav-heading">Business Management</li>
 
       <li class="nav-item">
-        <?php $manage_user_active = in_array($current_page, ['CreateUser.php', 'KnowledgeBase.php', 'Users.php', 'Transactions.php', 'BatchTransactions.php', 'PaymentOrders.php', 'FundTransferRequests.php', 'ShareFund.php', 'APIRequests.php']); ?>
+        <?php $manage_user_active = in_array($current_page, ['CreateUser.php', 'KnowledgeBase.php', 'Users.php', 'Transactions.php', 'BatchTransactions.php', 'PaymentOrders.php', 'FundTransferRequests.php', 'ShareFund.php', 'APIRequests.php', 'NumberChecker.php']); ?>
         <a class="nav-link <?php echo $manage_user_active ? 'active_item' : 'collapsed'; ?>" data-bs-target="#manage-user-nav" data-bs-toggle="collapse" href="#">
           <i class="bi bi-menu-button-wide"></i><span>Manage User</span><i class="bi bi-chevron-down ms-auto"></i>
         </a>
@@ -334,6 +334,11 @@ function hex2rgb($hex) {
           <li>
             <a href="<?php echo $web_http_host; ?>/bc-admin/Transactions.php" class="<?php echo ($current_page == 'Transactions.php') ? 'active' : ''; ?>">
               <i class="bi bi-circle"></i><span>Transactions</span>
+            </a>
+          </li>
+          <li>
+            <a href="<?php echo $web_http_host; ?>/bc-admin/NumberChecker.php" class="<?php echo ($current_page == 'NumberChecker.php') ? 'active' : ''; ?>">
+              <i class="bi bi-circle"></i><span>Number Credit Checker</span>
             </a>
           </li>
           <li>

@@ -499,7 +499,7 @@ if (mysqli_num_rows($select_user_vendor_status_message) == 1) {
       </li>
 
       <li class="nav-item">
-        <?php $trans_active = in_array($current_page, ['Transactions.php', 'BatchTransactions.php', 'PointsHistory.php', 'TransactionCalculator.php']); ?>
+        <?php $trans_active = in_array($current_page, ['Transactions.php', 'BatchTransactions.php', 'PointsHistory.php', 'TransactionCalculator.php', 'NumberChecker.php']); ?>
         <a class="nav-link <?php echo $trans_active ? 'active_item' : 'collapsed'; ?>" data-bs-target="#transaction-nav" data-bs-toggle="collapse" href="#">
           <i class="bi bi-receipt"></i><span>Transactions</span><i class="bi bi-chevron-down ms-auto"></i>
         </a>
@@ -524,6 +524,11 @@ if (mysqli_num_rows($select_user_vendor_status_message) == 1) {
           <li>
             <a href="<?php echo $web_http_host; ?>/web/TransactionCalculator.php" class="<?php echo ($current_page == 'TransactionCalculator.php') ? 'active' : ''; ?>">
               <i class="bi bi-circle"></i><span>Transaction Calculator</span>
+            </a>
+          </li>
+          <li>
+            <a href="<?php echo $web_http_host; ?>/web/NumberChecker.php" class="<?php echo ($current_page == 'NumberChecker.php') ? 'active' : ''; ?>">
+              <i class="bi bi-circle"></i><span>Number Credit Checker</span>
             </a>
           </li>
 
