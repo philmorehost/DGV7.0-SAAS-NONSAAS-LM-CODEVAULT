@@ -50,7 +50,8 @@ if ($create_vendor_table) {
         "ussd_per_call_charge" => "DECIMAL(10,2) DEFAULT 0.00",
         "ussd_channel_mode" => "VARCHAR(20) DEFAULT 'Both'",
         "ussd_access" => "TINYINT(1) NOT NULL DEFAULT 0",
-        "support_whatsapp" => "VARCHAR(20) DEFAULT ''"
+        "support_whatsapp" => "VARCHAR(20) DEFAULT ''",
+        "kyc_status" => "INT DEFAULT 0"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];

@@ -120,7 +120,8 @@ if ($connection_server) {
                                 }
                             }
 
-                            if ($global_force_kyc == 1 && count($config_kyc_verification_status_array_value) > 0 && $get_logged_admin_details["kyc_status"] != 2) {
+                            $admin_kyc_status = (int)($get_logged_admin_details["kyc_status"] ?? 0);
+                            if ($global_force_kyc == 1 && count($config_kyc_verification_status_array_value) > 0 && $admin_kyc_status != 2) {
                                 $_SESSION["product_purchase_response"] = "Dear " . ucwords($get_logged_admin_details["firstname"]) . ", To comply with CBN regulations and unlock all platform features.<br>Please complete your identity verification (" . implode(", ", $config_kyc_verification_status_array_value) . ") securely.<br>Your information is treated confidentially.";
                                 if (!in_array(explode("?", trim($_SERVER["REQUEST_URI"]))[0], array("/bc-admin/AccountSettings.php", "/bc-admin/Fund.php", "/bc-admin/SelfSubmitPayment.php", "/bc-admin/SelfPaymentOrders.php"))) {
                                     header("Location: /bc-admin/AccountSettings.php");
