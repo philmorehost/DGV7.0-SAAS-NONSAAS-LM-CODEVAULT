@@ -33,8 +33,8 @@ function bc_demo_tables() {
 
 function bc_demo_state($connection_server) {
     bc_demo_ensure_schema($connection_server);
-    $row = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT mode, lock_key_hash, snapshot_created_at FROM sas_demo_mode WHERE id=1 LIMIT 1"));
-    return $row ?: ['mode' => 'production', 'lock_key_hash' => null, 'snapshot_created_at' => null];
+    $row = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT mode, lock_key_hash, snapshot_json, snapshot_created_at FROM sas_demo_mode WHERE id=1 LIMIT 1"));
+    return $row ?: ['mode' => 'production', 'lock_key_hash' => null, 'snapshot_json' => null, 'snapshot_created_at' => null];
 }
 
 function bc_demo_has_lock_key($connection_server) {
@@ -100,6 +100,8 @@ function bc_demo_toggle($connection_server, $mode, $lock_key = '') {
     mysqli_begin_transaction($connection_server);
     try {
         if ($mode === 'demo') {
+            // Entering demo starts a fresh, locked session for settings edits.
+            bc_demo_revoke_edit_unlock();
             $snapshot = mysqli_real_escape_string($connection_server, json_encode(bc_demo_snapshot($connection_server), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
             if (!mysqli_query($connection_server, "UPDATE sas_demo_mode SET mode='demo', snapshot_json='$snapshot', snapshot_created_at=NOW() WHERE id=1")) throw new Exception('Unable to save the locked production snapshot.');
         } else {
@@ -151,4 +153,67 @@ function bc_demo_locked_link($href, $label, $icon = 'bi bi-lock', $feature = nul
     return '<a href="' . htmlspecialchars($href) . '" class="demo-locked"' . $tip . $feat_attr . '>'
          . '<i class="' . $icon . '"></i><span>' . htmlspecialchars($label) . '</span>'
          . '</a>';
+}
+
+/**
+ * ---- Demo write-lock (settings become read-only) ---------------------------
+ * When the platform is in Demo Mode, website / account settings are read-only:
+ * everyone can still view and browse, but saving site info, uploading a logo, or
+ * editing the vendor's personal / bank details is blocked until the holder of the
+ * Super Admin Demo security lock key unlocks editing for this browser session.
+ */
+if (!defined('BC_DEMO_EDIT_FLAG')) {
+    define('BC_DEMO_EDIT_FLAG', 'bc_demo_edit_unlocked');
+}
+
+if (!function_exists('bc_demo_edit_unlocked')) {
+    /** True when the current session has been unlocked for demo editing. */
+    function bc_demo_edit_unlocked() {
+        return !empty($_SESSION[BC_DEMO_EDIT_FLAG]);
+    }
+}
+
+if (!function_exists('bc_demo_grant_edit_unlock')) {
+    /** Unlock demo editing for this session when the key matches the stored lock. */
+    function bc_demo_grant_edit_unlock($connection_server, $key) {
+        if (bc_demo_verify_lock_key($connection_server, $key)) {
+            $_SESSION[BC_DEMO_EDIT_FLAG] = true;
+            return true;
+        }
+        return false;
+    }
+}
+
+if (!function_exists('bc_demo_revoke_edit_unlock')) {
+    /** Lock demo editing again for this session. */
+    function bc_demo_revoke_edit_unlock() {
+        unset($_SESSION[BC_DEMO_EDIT_FLAG]);
+    }
+}
+
+if (!function_exists('bc_demo_edits_allowed')) {
+    /**
+     * True when settings edits are permitted right now. Production always permits;
+     * Demo Mode permits only after the Demo security lock unlocked the session.
+     */
+    function bc_demo_edits_allowed($connection_server) {
+        return !bc_is_demo_mode($connection_server) || bc_demo_edit_unlocked();
+    }
+}
+
+if (!function_exists('bc_demo_guard_edit')) {
+    /**
+     * Guard for settings-save handlers. Call as the very first line of any handler
+     * that changes website/account settings. When Demo Mode is on and editing has
+     * not been unlocked, it sets a friendly message and stops the request, so no
+     * change is ever written.
+     */
+    function bc_demo_guard_edit($connection_server) {
+        if (bc_demo_edits_allowed($connection_server)) return;
+        $_SESSION['product_purchase_response'] = 'Demo Mode is ON — website settings are read-only. Enter the Super Admin Demo security lock key (top of this page) to make changes.';
+        if (!headers_sent()) {
+            header('Location: ' . ($_SERVER['REQUEST_URI'] ?? 'AccountSettings.php'));
+        }
+        exit;
+    }
 }

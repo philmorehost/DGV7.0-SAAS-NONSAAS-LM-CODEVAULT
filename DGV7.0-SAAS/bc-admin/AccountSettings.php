@@ -5,6 +5,24 @@ include ("../func/bc-admin-config.php");
 $mail_queue_batch_size = (int)getSuperAdminOption('mail_queue_batch_size', 5);
 $mail_queue_cron_secret = bc_get_or_create_cron_secret($connection_server);
 
+// Demo Mode: unlock / relock settings editing for this session with the Super Admin
+// Demo security lock key (see func/bc-demo-mode.php). In Demo Mode the page stays
+// fully viewable but is read-only until the key is entered, letting the site owner
+// edit while prospects remain view-only.
+if (isset($_POST['demo-unlock-session'])) {
+    $_SESSION["product_purchase_response"] = bc_demo_grant_edit_unlock($connection_server, trim($_POST['demo_unlock_key'] ?? ''))
+        ? 'Demo editing unlocked for this session — you can now save changes.'
+        : 'Incorrect Demo security lock key. Website settings remain read-only.';
+    header('Location: ' . ($_SERVER['REQUEST_URI'] ?? 'AccountSettings.php'));
+    exit;
+}
+if (isset($_POST['demo-relock-session'])) {
+    bc_demo_revoke_edit_unlock();
+    $_SESSION["product_purchase_response"] = 'Demo editing locked again for this session.';
+    header('Location: ' . ($_SERVER['REQUEST_URI'] ?? 'AccountSettings.php'));
+    exit;
+}
+
 // AJAX: quick PIN-only save for the forced-setup modal (func/bc-admin-header.php).
 // Deliberately touches ONLY security_pin — the full "update-security-settings"
 // handler further down also writes SMTP/2FA/SSO fields together in one UPDATE,
@@ -46,6 +64,7 @@ if (isset($_POST['set-mail-batch-size'])) {
 }
 
 if (isset($_POST["change-logo"])) {
+    bc_demo_guard_edit($connection_server);
     $logo_name = $_FILES["logo"]["name"];
     $logo_tmp_name = $_FILES["logo"]["tmp_name"];
     $logo_size = $_FILES["logo"]["size"];
@@ -93,6 +112,7 @@ if (isset($_POST["change-logo"])) {
 }
 
 if (isset($_POST["change-pwa-icon"])) {
+    bc_demo_guard_edit($connection_server);
     $icon_name = $_FILES["pwa_icon"]["name"];
     $icon_tmp_name = $_FILES["pwa_icon"]["tmp_name"];
     $icon_size = $_FILES["pwa_icon"]["size"];
@@ -116,6 +136,7 @@ if (isset($_POST["change-pwa-icon"])) {
 }
 
 if (isset($_POST["change-pwa-splash"])) {
+    bc_demo_guard_edit($connection_server);
     $splash_name = $_FILES["pwa_splash"]["name"];
     $splash_tmp_name = $_FILES["pwa_splash"]["tmp_name"];
     $splash_size = $_FILES["pwa_splash"]["size"];
@@ -148,6 +169,7 @@ if (mysqli_num_rows($check_col) == 0) {
 $style_templates = array("bc-style-template-1.css", "bc-style-template-2.css", "bc-style-template-3.css", "bc-style-template-4.css", "bc-style-template-5.css");
 
 if (isset($_POST["update-theme"])) {
+    bc_demo_guard_edit($connection_server);
     $template = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["template-name"])));
     $primary_color = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["primary-color"])));
 
@@ -181,6 +203,7 @@ if (isset($_POST["update-theme"])) {
 }
 
 if (isset($_POST["update-profile"])) {
+    bc_demo_guard_edit($connection_server);
     $first = mysqli_real_escape_string($connection_server, trim(strip_tags(ucwords($_POST["first"]))));
     $last = mysqli_real_escape_string($connection_server, trim(strip_tags(ucwords($_POST["last"]))));
     $address = mysqli_real_escape_string($connection_server, trim(strip_tags(ucwords($_POST["address"]))));
@@ -424,6 +447,7 @@ if (isset($_POST["change-password"])) {
 }
 
 if (isset($_POST["update-bank-details"])) {
+    bc_demo_guard_edit($connection_server);
     $fullname = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["name"])));
     $bank_name = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["bank"])));
     $account_number = mysqli_real_escape_string($connection_server, preg_replace("/[^0-9]+/", "", trim(strip_tags($_POST["number"]))));
@@ -999,6 +1023,7 @@ if (isset($_POST["update-referral-details"])) {
 }
 
 if (isset($_POST["update-site-details"])) {
+    bc_demo_guard_edit($connection_server);
     $site_title     = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["site-title"])));
     $site_desc      = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["site-desc"])));
     $apk_download_url = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["apk-download-url"] ?? "")));
@@ -1196,6 +1221,30 @@ if ($q_site_details && mysqli_num_rows($q_site_details) > 0) {
 
 <body>
     <?php include ("../func/bc-admin-header.php"); ?>
+
+    <?php if (bc_is_demo_mode($connection_server)): $demo_edit_open = bc_demo_edit_unlocked(); ?>
+    <div class="px-3 pt-3">
+      <div class="alert <?php echo $demo_edit_open ? 'alert-success' : 'alert-warning'; ?> border-0 rounded-4 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi <?php echo $demo_edit_open ? 'bi-unlock-fill' : 'bi-lock-fill'; ?> fs-4"></i>
+          <div>
+            <strong>Demo Mode</strong> — website settings are
+            <?php echo $demo_edit_open ? 'unlocked for this session.' : 'read-only: you can view everything, but saving is locked.'; ?>
+            <?php if (!$demo_edit_open): ?><div class="small text-muted">Only the Super Admin Demo security lock key can unlock editing.</div><?php endif; ?>
+          </div>
+        </div>
+        <?php if ($demo_edit_open): ?>
+          <form method="post" class="m-0"><button name="demo-relock-session" class="btn btn-sm btn-outline-secondary fw-bold"><i class="bi bi-lock me-1"></i>Lock again</button></form>
+        <?php else: ?>
+          <form method="post" class="d-flex align-items-center gap-2 m-0">
+            <input type="password" name="demo_unlock_key" class="form-control form-control-sm" minlength="10" style="width:220px" placeholder="Super Admin Demo lock key" required />
+            <button name="demo-unlock-session" class="btn btn-sm btn-warning text-dark fw-bold"><i class="bi bi-unlock me-1"></i>Unlock editing</button>
+          </form>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+
   <div class="pagetitle">
       <h1>VENDOR ACCOUNT SETTINGS</h1>
       <nav>
