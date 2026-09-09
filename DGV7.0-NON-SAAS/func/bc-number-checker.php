@@ -335,15 +335,14 @@ if (!function_exists('bc_checker_build_report')) {
 }
 
 if (!function_exists('bc_checker_export_csv')) {
-    /** Stream the report as a CSV download. */
+    /** Stream the report as a modern RFC-4180 CSV (UTF-8 BOM, CRLF) download. */
     function bc_checker_export_csv($result, $form, $include_user = false) {
         $report = bc_checker_build_report($result, $form, $include_user);
         $stamp = date('Ymd-His');
 
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=NumberChecker-' . $stamp . '.csv');
-
-        $out = fopen('php://output', 'w');
+        // Build into memory first so we can guarantee CRLF line endings
+        // (works on every PHP version regardless of the server's EOL).
+        $out = fopen('php://temp', 'w');
         // UTF-8 BOM so Excel renders ₦ / accented text correctly.
         fwrite($out, "\xEF\xBB\xBF");
 
@@ -355,74 +354,228 @@ if (!function_exists('bc_checker_export_csv')) {
         foreach ($report['rows'] as $row) {
             fputcsv($out, $row);
         }
+        rewind($out);
+        $csv = stream_get_contents($out);
         fclose($out);
+
+        // RFC-4180 uses CRLF. fputcsv writes "\n"; normalise any bare \n to \r\n.
+        $csv = preg_replace("/(?<!\r)\n/", "\r\n", $csv);
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=NumberChecker-' . $stamp . '.csv');
+        header('Content-Length: ' . strlen($csv));
+        echo $csv;
         exit;
+    }
+}
+
+if (!function_exists('bc_checker_zip_store')) {
+    /**
+     * Build a valid ZIP archive (STORE method, no compression) using only core
+     * PHP functions (crc32() + pack()). Produces real .xlsx files on hosts that
+     * do not have the php-zip extension enabled.
+     *
+     * @param array $files map of archive entry name => file content (string)
+     * @return string binary ZIP data
+     */
+    function bc_checker_zip_store($files) {
+        $local  = '';
+        $central = '';
+        $offset = 0;
+        foreach ($files as $name => $content) {
+            $name = (string)$name;
+            $content = (string)$content;
+            $crc  = crc32($content);
+            $size = strlen($content);
+            $nlen = strlen($name);
+
+            // Local file header (30 bytes fixed) + name + data.
+            $local .= pack('VvvvvvVVVvv', 0x04034b50, 20, 0, 0, 0, 0, $crc, $size, $size, $nlen, 0);
+            $local .= $name . $content;
+
+            // Central directory header (46 bytes fixed) + name.
+            $central .= pack('VvvvvvvVVVvvvvvVV', 0x02014b50, 20, 20, 0, 0, 0, 0, $crc, $size, $size, $nlen, 0, 0, 0, 0, 0, $offset);
+            $central .= $name;
+
+            $offset += 30 + $nlen + $size;
+        }
+        // End of central directory record (22 bytes fixed).
+        $end = pack('VvvvvVVv', 0x06054b50, 0, 0, count($files), count($files), strlen($central), $offset, 0);
+        return $local . $central . $end;
     }
 }
 
 if (!function_exists('bc_checker_export_excel')) {
     /**
-     * Stream the report as an Excel-compatible .xls (SpreadsheetML 2003).
-     * Phone/reference cells are forced to text so leading zeros are preserved.
+     * Stream the report as a real Excel workbook (.xlsx, Office Open XML).
+     * Uses ZipArchive when available, otherwise a dependency-free built-in ZIP
+     * writer, so the download always matches the .xlsx extension and never
+     * triggers the "file format and extension don't match" warning.
+     * Phone numbers are stored as text so leading zeros are preserved.
      */
     function bc_checker_export_excel($result, $form, $include_user = false) {
         $report = bc_checker_build_report($result, $form, $include_user);
         $stamp = date('Ymd-His');
 
-        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-        header('Content-Disposition: attachment; filename=NumberChecker-' . $stamp . '.xls');
-
-        $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
-
-        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' . "\n";
-        echo '<Styles><Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#D9E2F3" ss:Pattern="Solid"/></Style></Styles>' . "\n";
-        echo '<Worksheet ss:Name="Report"><Table>' . "\n";
-
-        // Meta block (title + filter summary), one cell per line.
-        $meta_lines = array(
-            $report['meta']['Report'],
-            'Month: ' . $report['meta']['Month'] . '   |   Service: ' . $report['meta']['Service'],
-            'Generated: ' . $report['meta']['Generated'],
-            'Total Checked: ' . $report['meta']['Total'] . '   |   Credited: ' . $report['meta']['Credited'] . '   |   Not Credited: ' . $report['meta']['NotCredited'] . '   |   Invalid: ' . $report['meta']['Invalid'],
-        );
-        foreach ($meta_lines as $line) {
-            echo '<Row><Cell><Data ss:Type="String">' . $e($line) . '</Data></Cell></Row>' . "\n";
-        }
-        echo '<Row><Cell><Data ss:Type="String"></Data></Cell></Row>' . "\n"; // spacer
-
-        // Header row
-        echo '<Row>';
-        foreach ($report['header'] as $h) {
-            echo '<Cell ss:StyleID="hdr"><Data ss:Type="String">' . $e($h) . '</Data></Cell>';
-        }
-        echo '</Row>' . "\n";
-
-        // Data rows. Phone / reference / status columns are kept as text so
-        // Excel never strips leading zeros or reformats phone numbers.
+        // Locate the numeric Amount column so we can emit real numeric cells.
         $header = $report['header'];
         $number_col = null;
         foreach ($header as $ci => $colname) {
             if ($colname === 'Amount (₦)') $number_col = $ci;
         }
-        foreach ($report['rows'] as $row) {
-            echo '<Row>';
-            foreach ($row as $ci => $val) {
-                $val = (string)$val;
-                if ($val === '') {
-                    echo '<Cell><Data ss:Type="String"></Data></Cell>';
-                } elseif ($ci === $number_col) {
-                    // Amount cells are numeric; strip thousands separators so the
-                    // XML stays a valid Number (Excel tolerates no commas here).
-                    echo '<Cell><Data ss:Type="Number">' . $e(str_replace(',', '', $val)) . '</Data></Cell>';
-                } else {
-                    echo '<Cell><Data ss:Type="String">' . $e($val) . '</Data></Cell>';
-                }
+
+        // XML-escape text and drop control characters that are invalid in XML 1.0.
+        $xml_text = function ($v) {
+            $v = (string)$v;
+            $v = preg_replace('/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u', '', $v);
+            return htmlspecialchars($v, ENT_QUOTES | ENT_XML1, 'UTF-8', false);
+        };
+        // 1-based column index -> spreadsheet column letter (A, B, ..., Z, AA...).
+        $col_letter = function ($n) {
+            $s = '';
+            while ($n > 0) {
+                $mod = ($n - 1) % 26;
+                $s = chr(65 + $mod) . $s;
+                $n = intdiv($n - 1, 26);
             }
-            echo '</Row>' . "\n";
+            return $s;
+        };
+
+        // --- Build the worksheet XML (sheetData with inline strings). ---
+        $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
+        $sheet .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+        $sheet .= '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
+        $sheet .= '<sheetFormatPr defaultRowHeight="15"/>';
+        $sheet .= '<sheetData>';
+
+        $row_no = 0;
+        $text_cell = function ($letter, $value, $style = 0) {
+            $cell = '<c r="' . $letter . '"';
+            if ($style) $cell .= ' s="' . $style . '"';
+            $cell .= ' t="inlineStr"><is><t xml:space="preserve">' . $value . '</t></is></c>';
+            return $cell;
+        };
+
+        // Meta block (title + filter summary), one row per line, col A.
+        $meta_rows = array(
+            array($report['meta']['Report'], 1),
+            array('Month: ' . $report['meta']['Month'] . '   |   Service: ' . $report['meta']['Service'], 0),
+            array('Generated: ' . $report['meta']['Generated'], 0),
+            array('Total Checked: ' . $report['meta']['Total'] . '   |   Credited: ' . $report['meta']['Credited'] . '   |   Not Credited: ' . $report['meta']['NotCredited'] . '   |   Invalid: ' . $report['meta']['Invalid'], 0),
+        );
+        foreach ($meta_rows as $mr) {
+            $row_no++;
+            $sheet .= '<row r="' . $row_no . '">' . $text_cell('A', $xml_text($mr[0]), $mr[1]) . '</row>';
         }
 
-        echo '</Table></Worksheet></Workbook>';
+        // Blank spacer row.
+        $row_no++;
+        $sheet .= '<row r="' . $row_no . '"></row>';
+
+        // Header row (bold).
+        $row_no++;
+        $sheet .= '<row r="' . $row_no . '">';
+        foreach ($header as $ci => $h) {
+            $sheet .= $text_cell($col_letter($ci + 1), $xml_text($h), 1);
+        }
+        $sheet .= '</row>';
+
+        // Data rows. Amount column is numeric; everything else is text so
+        // phone numbers keep their leading zeros.
+        foreach ($report['rows'] as $row) {
+            $row_no++;
+            $sheet .= '<row r="' . $row_no . '">';
+            foreach ($row as $ci => $val) {
+                $letter = $col_letter($ci + 1);
+                $val = (string)$val;
+                if ($ci === $number_col) {
+                    if ($val === '') {
+                        $sheet .= '<c r="' . $letter . '"/>';
+                    } else {
+                        $num = str_replace(',', '', $val);
+                        $sheet .= '<c r="' . $letter . '" s="2"><v>' . $num . '</v></c>';
+                    }
+                } else {
+                    $sheet .= $text_cell($letter, $xml_text($val));
+                }
+            }
+            $sheet .= '</row>';
+        }
+        $sheet .= '</sheetData></worksheet>';
+
+        // --- Assemble the OOXML package parts. ---
+        $parts = array();
+        $parts['[Content_Types].xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            . '</Types>';
+
+        $parts['_rels/.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '</Relationships>';
+
+        $parts['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets>'
+            . '</workbook>';
+
+        $parts['xl/_rels/workbook.xml.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            . '</Relationships>';
+
+        // Styles: 0 = normal, 1 = bold header, 2 = numeric (0.00 with thousands sep).
+        $parts['xl/styles.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
+            . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<fonts count="2">'
+            . '<font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'
+            . '<font><b/><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'
+            . '</fonts>'
+            . '<fills count="2">'
+            . '<fill><patternFill patternType="none"/></fill>'
+            . '<fill><patternFill patternType="gray125"/></fill>'
+            . '</fills>'
+            . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+            . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            . '<cellXfs count="3">'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            . '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+            . '<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+            . '</cellXfs>'
+            . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            . '</styleSheet>';
+
+        $parts['xl/worksheets/sheet1.xml'] = $sheet;
+
+        // --- Compress into .xlsx (ZipArchive when present, else built-in writer). ---
+        if (class_exists('ZipArchive')) {
+            $tmp = tempnam(sys_get_temp_dir(), 'nck');
+            $zip = new ZipArchive();
+            if ($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+                foreach ($parts as $name => $content) {
+                    $zip->addFromString($name, $content);
+                }
+                $zip->close();
+                $bin = file_get_contents($tmp);
+                @unlink($tmp);
+            } else {
+                $bin = bc_checker_zip_store($parts);
+                @unlink($tmp);
+            }
+        } else {
+            $bin = bc_checker_zip_store($parts);
+        }
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8');
+        header('Content-Disposition: attachment; filename=NumberChecker-' . $stamp . '.xlsx');
+        header('Content-Length: ' . strlen($bin));
+        echo $bin;
         exit;
     }
 }

@@ -215,7 +215,7 @@ if (isset($_POST['check-numbers'])) {
                                     <button type="submit" name="export_format" value="csv" class="btn btn-success btn-sm" title="Export report as CSV">
                                         <i class="bi bi-filetype-csv me-1"></i>CSV
                                     </button>
-                                    <button type="submit" name="export_format" value="excel" class="btn btn-outline-success btn-sm" title="Export report as Excel (.xls)">
+                                    <button type="submit" name="export_format" value="excel" class="btn btn-outline-success btn-sm" title="Export report as Excel (.xlsx)">
                                         <i class="bi bi-file-earmark-excel me-1"></i>Excel
                                     </button>
                                 </form>
