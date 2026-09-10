@@ -51,7 +51,8 @@ if ($create_vendor_table) {
         "ussd_channel_mode" => "VARCHAR(20) DEFAULT 'Both'",
         "ussd_access" => "TINYINT(1) NOT NULL DEFAULT 0",
         "support_whatsapp" => "VARCHAR(20) DEFAULT ''",
-        "kyc_status" => "INT DEFAULT 0"
+        "kyc_status" => "INT DEFAULT 0",
+        "identity_api_enabled" => "TINYINT(1) DEFAULT 0"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
@@ -913,6 +914,10 @@ if ($create_super_admin_options_table) {
     $check_payout_fee = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='payout_activation_fee'");
     if (mysqli_num_rows($check_payout_fee) == 0) {
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('payout_activation_fee', '15000')");
+    }
+    $check_identity_api_fee = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
+    if (mysqli_num_rows($check_identity_api_fee) == 0) {
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('identity_api_activation_fee', '7000')");
     }
     $check_identity_provider = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='identity_provider'");
     if (mysqli_num_rows($check_identity_provider) == 0) {

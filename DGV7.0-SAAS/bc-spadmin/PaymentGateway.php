@@ -10,11 +10,13 @@
         $plisio_fee = mysqli_real_escape_string($connection_server, (float)$_POST["plisio_activation_fee"]);
         $nin_card_fee = mysqli_real_escape_string($connection_server, (float)$_POST["nin_card_activation_fee"]);
         $bvn_verify_fee = mysqli_real_escape_string($connection_server, (float)($_POST["bvn_verify_activation_fee"] ?? 5000));
+        $identity_api_fee = mysqli_real_escape_string($connection_server, (float)($_POST["identity_api_activation_fee"] ?? 7000));
 
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_kyc', '$force_kyc') ON DUPLICATE KEY UPDATE option_value='$force_kyc'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('plisio_activation_fee', '$plisio_fee') ON DUPLICATE KEY UPDATE option_value='$plisio_fee'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('nin_card_activation_fee', '$nin_card_fee') ON DUPLICATE KEY UPDATE option_value='$nin_card_fee'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('bvn_verify_activation_fee', '$bvn_verify_fee') ON DUPLICATE KEY UPDATE option_value='$bvn_verify_fee'");
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('identity_api_activation_fee', '$identity_api_fee') ON DUPLICATE KEY UPDATE option_value='$identity_api_fee'");
 
 	$verification_name = $_POST["verification-name"];
 	$verification_array_list = $kyc_verification_array;
@@ -333,6 +335,21 @@
                                         <input name="bvn_verify_activation_fee" type="number" step="0.01" class="form-control form-control-lg border-0 bg-white" value="<?php echo $bvn_verify_fee_val; ?>" placeholder="5000.00">
                                     </div>
                                     <p class="small text-muted mt-2 mb-0">The one-time fee vendors (bc-admins) must pay to unlock the BVN Verification service for their users.</p>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <?php
+                                    $q_idp_act_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
+                                    $identity_api_fee_val = ($q_idp_act_fee && mysqli_num_rows($q_idp_act_fee) > 0) ? mysqli_fetch_assoc($q_idp_act_fee)['option_value'] : '7000';
+                                ?>
+                                <div class="p-4 border rounded-4 bg-light shadow-sm">
+                                    <h6 class="fw-bold text-dark mb-2">Identity API Access Fee (NGN)</h6>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white border-0">₦</span>
+                                        <input name="identity_api_activation_fee" type="number" step="0.01" class="form-control form-control-lg border-0 bg-white" value="<?php echo $identity_api_fee_val; ?>" placeholder="7000.00">
+                                    </div>
+                                    <p class="small text-muted mt-2 mb-0">The one-time fee vendors (bc-admins) must pay from their wallet to unlock Identity Services &rarr; Identity Verification Provider configuration (Dojah, QoreID, Smile Identity, or a Local Marketplace vendor-to-vendor API).</p>
                                 </div>
                             </div>
 

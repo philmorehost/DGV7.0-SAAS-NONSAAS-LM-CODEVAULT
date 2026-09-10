@@ -100,7 +100,7 @@
                 </div>
                 <div class="card-body p-4">
                     <div class="alert alert-info border-0 rounded-4 small mb-4">
-                        Select which identity verification provider to use for BVN/NIN verification. Enter API keys for the providers you want to use. Name matching is always applied.
+                        Identity verification is <strong>optional</strong>. Pick any one of the integrated providers - Dojah, QoreID (VerifyMe), Smile Identity, or your Local Marketplace (vendor-to-vendor) API - and enter its API keys; leave the others blank. Name matching is always applied.
                     </div>
                     <form method="post">
                         <?php

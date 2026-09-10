@@ -2,6 +2,11 @@
     include("../func/bc-admin-config.php");
 	
 	if(isset($_POST["update-identity-provider"])){
+        if ((int)($get_logged_admin_details['identity_api_enabled'] ?? 0) !== 1) {
+            $_SESSION["product_purchase_response"] = "Identity API access is locked. Please activate it (one-time fee) before configuring a provider.";
+            header("Location: IdentityAPI.php");
+            exit();
+        }
         $allowed_providers = ["monnify", "dojah", "qoreid", "smileid", "localhost"];
         $identity_provider_gateways = ["dojah", "qoreid", "smileid"];
         $vendor_id = $get_logged_admin_details["id"];
@@ -30,6 +35,34 @@
         }
         $_SESSION["product_purchase_response"] = "Identity Verification Provider Updated Successfully";
         header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit();
+    }
+
+    // SAAS monetization: unlock Identity API provider configuration with a one-time
+    // fee (set by the super admin, default N7,000) paid from the vendor wallet.
+    if (isset($_POST["activate-identity-api-wallet"])) {
+        $vid = $get_logged_admin_details['id'];
+        $q_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
+        $fee = (float)(($q_fee && mysqli_num_rows($q_fee) > 0) ? mysqli_fetch_assoc($q_fee)['option_value'] : 7000);
+
+        if ((int)($get_logged_admin_details['identity_api_enabled'] ?? 0) === 1) {
+            $_SESSION["product_purchase_response"] = "Identity API access is already active.";
+        } elseif ($fee <= 0) {
+            mysqli_query($connection_server, "UPDATE sas_vendors SET identity_api_enabled=1 WHERE id='$vid'");
+            $_SESSION["product_purchase_response"] = "Identity API access activated successfully!";
+        } elseif ($get_logged_admin_details['balance'] >= $fee) {
+            $ref = "IDP_ACT_" . time();
+            $res = chargeVendor("debit", "identity_api_activation", "Service Activation", $ref, $fee, $fee, "Identity API Access Activation Fee", $_SERVER['HTTP_HOST'], 1);
+            if ($res === "success") {
+                mysqli_query($connection_server, "UPDATE sas_vendors SET identity_api_enabled=1 WHERE id='$vid'");
+                $_SESSION["product_purchase_response"] = "Identity API access activated successfully!";
+            } else {
+                $_SESSION["product_purchase_response"] = "Error: Activation failed during billing.";
+            }
+        } else {
+            $_SESSION["product_purchase_response"] = "Error: Insufficient vendor wallet balance. You need NGN " . number_format($fee, 2);
+        }
+        header("Location: IdentityAPI.php");
         exit();
     }
 
@@ -130,15 +163,44 @@
       <div class="row g-4 justify-content-center">
         <div class="col-lg-10">
 
+            <?php
+                // SAAS monetization: the Identity Verification Provider configuration is
+                // unlocked after a one-time activation fee (super-admin set, default N7,000).
+                $identity_api_enabled = ((int)($get_logged_admin_details['identity_api_enabled'] ?? 0) === 1);
+                if (!$identity_api_enabled):
+                    $q_idp_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
+                    $idp_act_fee = (float)(($q_idp_fee && mysqli_num_rows($q_idp_fee) > 0) ? mysqli_fetch_assoc($q_idp_fee)['option_value'] : 7000);
+            ?>
+            <div class="card shadow-sm border-0 rounded-4 mb-4">
+                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0 text-primary">Identity API Access</h5>
+                    <i class="bi bi-shield-lock text-muted fs-4"></i>
+                </div>
+                <div class="card-body p-4">
+                    <div class="text-center py-5 bg-light rounded-4 border">
+                        <i class="bi bi-lock-fill text-warning display-4 mb-3"></i>
+                        <h4 class="fw-bold mb-2">Identity API Access Locked</h4>
+                        <p class="text-muted mb-4 px-lg-5">Unlock Identity Services to configure any of the integrated providers - Dojah, QoreID (VerifyMe), Smile Identity, or your Local Marketplace (vendor-to-vendor) API - for BVN/NIN verification. All providers are optional; pick the one you prefer.</p>
+                        <div class="h3 fw-bold text-success mb-4">One-time Fee: ₦<?php echo number_format($idp_act_fee, 2); ?></div>
+                        <form method="post" class="m-0 d-inline-block">
+                            <button type="submit" name="activate-identity-api-wallet" class="btn btn-success btn-lg rounded-pill fw-bold px-5"
+                                onclick="return confirm('Charge ₦<?php echo number_format($idp_act_fee, 2); ?> from your vendor wallet to unlock Identity API access?')">
+                                <i class="bi bi-wallet2 me-2"></i> Activate - Pay ₦<?php echo number_format($idp_act_fee, 2); ?> from Wallet
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <?php else: ?>
             <!-- Identity Verification Provider Card -->
             <div class="card shadow-sm border-0 rounded-4 mb-4">
                 <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold mb-0 text-primary">Identity Verification Provider</h5>
+                    <h5 class="fw-bold mb-0 text-primary">Identity Verification Provider <span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:.65rem;">ACTIVE</span></h5>
                     <i class="bi bi-person-badge text-muted fs-4"></i>
                 </div>
                 <div class="card-body p-4">
                     <div class="alert alert-info border-0 rounded-4 small mb-4">
-                        Select which identity verification provider to use for BVN/NIN verification. Enter API keys for the providers you want to use. Name matching is always applied.
+                        Identity verification is <strong>optional</strong>. Pick any one of the integrated providers - Dojah, QoreID (VerifyMe), Smile Identity, or your Local Marketplace (vendor-to-vendor) API - and enter its API keys; leave the others blank. Name matching is always applied.
                     </div>
                     <form method="post">
                         <?php
@@ -226,6 +288,7 @@
                     </script>
                 </div>
             </div>
+            <?php endif; ?>
 
             <!-- NIN Card Service Card -->
             <div class="card shadow-sm border-0 rounded-4 mb-4">
