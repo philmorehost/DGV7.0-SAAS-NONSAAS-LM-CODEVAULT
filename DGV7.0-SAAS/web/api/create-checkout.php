@@ -30,7 +30,12 @@ if (mysqli_num_rows($check_user) == 1) {
     // 2. Log in transactions as pending (status 2)
     $check_trans = mysqli_query($connection_server, "SELECT id FROM sas_transactions WHERE reference='$reference' AND vendor_id='$vendor_id'");
     if (mysqli_num_rows($check_trans) == 0) {
-         mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, description, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', 'Mobile Wallet funding via ATM/Transfer', '2')");
+         // balance_before / balance_after / mode are NOT NULL with no default in
+         // sas_transactions; this is a pending funding row (status 2) so the wallet is
+         // unchanged until approval — record the current balance for both.
+         $balance_before = (float)($user['balance'] ?? 0);
+         $balance_after  = $balance_before;
+         mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$balance_before', '$balance_after', 'Mobile Wallet funding via ATM/Transfer', 'APP', '2')");
     }
 
     echo json_encode(['status' => 'success', 'message' => 'Checkout initialized']);

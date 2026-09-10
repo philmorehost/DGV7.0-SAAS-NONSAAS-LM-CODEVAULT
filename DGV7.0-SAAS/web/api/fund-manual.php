@@ -40,8 +40,14 @@ if (mysqli_num_rows($check_user) == 1) {
         "SELECT amount_charged FROM sas_admin_payments WHERE vendor_id='$vendor_id' LIMIT 1"));
     $charge_fee = (float)($admin_payment['amount_charged'] ?? 0);
 
-    $q = "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, description, mode, status)
-          VALUES ('$vendor_id', 'manual_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', 'Manual Funding Request: $gateway', 'APP', '2')";
+    // sas_transactions.balance_before / balance_after are NOT NULL with no default.
+    // This is a pending funding request (status 2): the wallet is not touched until an
+    // admin approves it, so record the current balance for both.
+    $balance_before = (float)($user['balance'] ?? 0);
+    $balance_after  = $balance_before;
+
+    $q = "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, status)
+          VALUES ('$vendor_id', 'manual_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$balance_before', '$balance_after', 'Manual Funding Request: $gateway', 'APP', '2')";
 
     if (mysqli_query($connection_server, $q)) {
         $response = [
