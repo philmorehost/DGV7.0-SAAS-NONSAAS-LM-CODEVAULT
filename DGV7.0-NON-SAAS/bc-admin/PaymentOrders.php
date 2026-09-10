@@ -1,6 +1,42 @@
 <?php session_start();
     include("../func/bc-admin-config.php");
     
+    // App (mobile) payment requests: mobile-app manual bank deposits are stored in
+    // sas_transactions with product_unique_id='manual_funding' (status 2 = pending),
+    // not in sas_submitted_payments. Approve/reject them here too, using the string
+    // actions approve/cancel so they never collide with the numeric statuses the
+    // website payment-order handler below expects.
+    if(isset($_GET["order-ref"]) && in_array(trim(strip_tags($_GET["order-status"] ?? '')), array("approve", "cancel"))) {
+        $app_ref = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["order-ref"])));
+        $app_action = trim(strip_tags($_GET["order-status"]));
+        $select_app_order = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && reference='".$app_ref."' && product_unique_id='manual_funding' LIMIT 1");
+        if (mysqli_num_rows($select_app_order) == 1) {
+            $get_app_order = mysqli_fetch_array($select_app_order);
+            if ($app_action === "approve") {
+                if ($get_app_order["status"] == "2") {
+                    $app_reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
+                    $app_credit = chargeOtherUser($get_app_order["username"], "credit", "wallet_credit", "Wallet Credit", $app_reference_2, $app_ref, $get_app_order["amount"], $get_app_order["discounted_amount"], "Account credited by admin (approved app payment notification)", "APP", $_SERVER["HTTP_HOST"], "1");
+                    if (in_array($app_credit, array("success"))) {
+                        mysqli_query($connection_server, "UPDATE sas_transactions SET status='1' WHERE vendor_id='".$get_logged_admin_details["id"]."' && reference='".$app_ref."'");
+                        $json_response_array = array("desc" => ucwords($get_app_order["username"]." credited with N".toDecimal($get_app_order["discounted_amount"], 2)." successfully"));
+                    } else {
+                        $json_response_array = array("desc" => "Cannot Proceed Processing Transaction");
+                    }
+                } else {
+                    $json_response_array = array("desc" => "Order Amount Had Already Been Deposited To User Account");
+                }
+            } else {
+                mysqli_query($connection_server, "UPDATE sas_transactions SET status='3' WHERE vendor_id='".$get_logged_admin_details["id"]."' && reference='".$app_ref."'");
+                $json_response_array = array("desc" => ucwords($get_app_order["username"]." Order with N".toDecimal($get_app_order["discounted_amount"], 2)." rejected successfully"));
+            }
+        } else {
+            $json_response_array = array("desc" => "Order Not Exists");
+        }
+        $_SESSION["product_purchase_response"] = $json_response_array["desc"];
+        header("Location: /bc-admin/PaymentOrders.php");
+        exit();
+    }
+
     if(isset($_GET["order-ref"])){
     	$status = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["order-status"])));
     	$reference = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["order-ref"])));
@@ -130,6 +166,11 @@
                 $get_user_pending_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_submitted_payments WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='2' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
                 $get_user_successful_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_submitted_payments WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='1' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
                 $get_user_failed_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_submitted_payments WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='3' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
+
+                // Mobile-app manual bank deposits (sas_transactions.manual_funding)
+                $get_app_pending_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='2' && product_unique_id='manual_funding' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
+                $get_app_successful_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='1' && product_unique_id='manual_funding' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
+                $get_app_failed_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='3' && product_unique_id='manual_funding' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
             ?>
 
             <div class="card shadow-sm border-0 rounded-4 mb-4">
@@ -187,6 +228,49 @@
                         <a href="PaymentOrders.php?<?php echo $search_parameter; ?>page=<?php echo ($page_num - 1); ?>" class="btn btn-outline-primary btn-sm px-4 rounded-pill">Previous Page</a>
                         <?php endif; ?>
                         <a href="PaymentOrders.php?<?php echo $search_parameter; ?>page=<?php echo ($page_num + 1); ?>" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm">Next Page</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile-app payment requests (sas_transactions.manual_funding) -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4">
+                <div class="card-header bg-white py-4 border-0">
+                    <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-phone me-2"></i>App Payment Requests</h5>
+                    <p class="text-muted small mb-0">Manual bank deposit notifications submitted from the mobile app</p>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-5">
+                        <h6 class="fw-bold mb-3 text-warning d-flex align-items-center"><i class="bi bi-hourglass-split me-2"></i>Pending App Requests</h6>
+                        <div class="table-responsive bg-light rounded-4 border p-2">
+                        <?php
+                            $query_result = $get_app_pending_transaction_details;
+                            $is_admin = true; $inline_approve_page = "PaymentOrders.php";
+                            include("../func/history-table.php");
+                            unset($inline_approve_page);
+                        ?>
+                        </div>
+                    </div>
+
+                    <div class="mb-5">
+                        <h6 class="fw-bold mb-3 text-success d-flex align-items-center"><i class="bi bi-check2-circle me-2"></i>Approved App Payments</h6>
+                        <div class="table-responsive bg-light rounded-4 border p-2">
+                        <?php
+                            $query_result = $get_app_successful_transaction_details;
+                            $is_admin = false;
+                            include("../func/history-table.php");
+                        ?>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h6 class="fw-bold mb-3 text-danger d-flex align-items-center"><i class="bi bi-x-circle me-2"></i>Rejected App Payments</h6>
+                        <div class="table-responsive bg-light rounded-4 border p-2">
+                        <?php
+                            $query_result = $get_app_failed_transaction_details;
+                            $is_admin = false;
+                            include("../func/history-table.php");
+                        ?>
+                        </div>
                     </div>
                 </div>
             </div>
