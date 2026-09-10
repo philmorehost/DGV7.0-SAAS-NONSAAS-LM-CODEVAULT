@@ -171,106 +171,183 @@
                 $get_app_pending_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='2' && product_unique_id='manual_funding' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
                 $get_app_successful_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='1' && product_unique_id='manual_funding' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
                 $get_app_failed_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_admin_details["id"]."' && status='3' && product_unique_id='manual_funding' $search_statement ORDER BY date DESC LIMIT $limit OFFSET $offset");
+
+                // Totals for the summary tiles / tab badges.
+                $vid_po = $get_logged_admin_details["id"];
+                $po_count = function ($sql) use ($connection_server) {
+                    $q = mysqli_query($connection_server, $sql);
+                    if (!$q) return 0;
+                    $r = mysqli_fetch_assoc($q);
+                    return (int)($r['c'] ?? 0);
+                };
+                $count_web_pending  = $po_count("SELECT COUNT(*) c FROM sas_submitted_payments WHERE vendor_id='$vid_po' && status='2'");
+                $count_web_approved = $po_count("SELECT COUNT(*) c FROM sas_submitted_payments WHERE vendor_id='$vid_po' && status='1'");
+                $count_web_rejected = $po_count("SELECT COUNT(*) c FROM sas_submitted_payments WHERE vendor_id='$vid_po' && status='3'");
+                $count_app_pending  = $po_count("SELECT COUNT(*) c FROM sas_transactions WHERE vendor_id='$vid_po' && status='2' && product_unique_id='manual_funding'");
+                $count_app_approved = $po_count("SELECT COUNT(*) c FROM sas_transactions WHERE vendor_id='$vid_po' && status='1' && product_unique_id='manual_funding'");
+                $count_app_rejected = $po_count("SELECT COUNT(*) c FROM sas_transactions WHERE vendor_id='$vid_po' && status='3' && product_unique_id='manual_funding'");
+                $count_pending_all  = $count_web_pending + $count_app_pending;
+
+                // Active tab (Pending by default so approvals are the first thing seen).
+                $active_tab = (isset($_GET['tab']) && in_array($_GET['tab'], array('pending', 'approved', 'rejected'))) ? $_GET['tab'] : 'pending';
             ?>
 
-            <div class="card shadow-sm border-0 rounded-4 mb-4">
-                <div class="card-header bg-white py-4 border-0">
-                    <div class="row align-items-center g-3">
-                        <div class="col-md-6">
-                            <h5 class="fw-bold mb-0 text-primary">Payment Approval Portal</h5>
-                            <p class="text-muted small mb-0">Review and approve manual payment submissions</p>
+            <!-- Summary tiles -->
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-lg-3">
+                    <a href="PaymentOrders.php?<?php echo $search_parameter; ?>tab=pending" class="text-decoration-none">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center" style="width:52px;height:52px;"><i class="bi bi-hourglass-split fs-4"></i></div>
+                                <div><div class="fs-3 fw-bold text-dark"><?php echo $count_pending_all; ?></div><div class="small text-muted">Pending Approval</div></div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <form method="get" action="PaymentOrders.php" class="d-flex gap-2 justify-content-md-end">
-                                <input name="searchq" type="text" value="<?php echo $searchq; ?>" placeholder="User, Ref, Amount..." class="form-control" style="max-width: 250px;" />
-                                <button type="submit" class="btn btn-primary px-4 fw-bold">Filter</button>
-                            </form>
-                        </div>
-                    </div>
+                    </a>
                 </div>
-                <div class="card-body p-4">
-                    <div class="mb-5">
-                        <h6 class="fw-bold mb-3 text-warning d-flex align-items-center"><i class="bi bi-hourglass-split me-2"></i>Pending Requests</h6>
-                        <div class="table-responsive bg-light rounded-4 border p-2">
-                        <?php
-                            $query_result = $get_user_pending_transaction_details;
-                            $is_admin = true; $is_payment_order = true;
-                            include("../func/history-table.php");
-                        ?>
+                <div class="col-6 col-lg-3">
+                    <a href="PaymentOrders.php?<?php echo $search_parameter; ?>tab=pending" class="text-decoration-none">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width:52px;height:52px;"><i class="bi bi-globe2 fs-4"></i></div>
+                                <div><div class="fs-3 fw-bold text-dark"><?php echo $count_web_pending; ?></div><div class="small text-muted">Website Pending</div></div>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="mb-5">
-                        <h6 class="fw-bold mb-3 text-success d-flex align-items-center"><i class="bi bi-check2-circle me-2"></i>Approved Payments</h6>
-                        <div class="table-responsive bg-light rounded-4 border p-2">
-                        <?php
-                            $query_result = $get_user_successful_transaction_details;
-                            $is_admin = true; $is_payment_order = true;
-                            include("../func/history-table.php");
-                        ?>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h6 class="fw-bold mb-3 text-danger d-flex align-items-center"><i class="bi bi-x-circle me-2"></i>Rejected Payments</h6>
-                        <div class="table-responsive bg-light rounded-4 border p-2">
-                        <?php
-                            $query_result = $get_user_failed_transaction_details;
-                            $is_admin = true; $is_payment_order = true;
-                            include("../func/history-table.php");
-                        ?>
-                        </div>
-                    </div>
+                    </a>
                 </div>
-                <div class="card-footer bg-white py-4 border-0 text-center">
-                    <div class="d-flex justify-content-center gap-2">
-                        <?php if($page_num > 1): ?>
-                        <a href="PaymentOrders.php?<?php echo $search_parameter; ?>page=<?php echo ($page_num - 1); ?>" class="btn btn-outline-primary btn-sm px-4 rounded-pill">Previous Page</a>
-                        <?php endif; ?>
-                        <a href="PaymentOrders.php?<?php echo $search_parameter; ?>page=<?php echo ($page_num + 1); ?>" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm">Next Page</a>
-                    </div>
+                <div class="col-6 col-lg-3">
+                    <a href="PaymentOrders.php?<?php echo $search_parameter; ?>tab=pending" class="text-decoration-none">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-info bg-opacity-10 text-info d-flex align-items-center justify-content-center" style="width:52px;height:52px;"><i class="bi bi-phone fs-4"></i></div>
+                                <div><div class="fs-3 fw-bold text-dark"><?php echo $count_app_pending; ?></div><div class="small text-muted">App Pending</div></div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <a href="PaymentOrders.php?<?php echo $search_parameter; ?>tab=approved" class="text-decoration-none">
+                        <div class="card border-0 shadow-sm rounded-4 h-100">
+                            <div class="card-body d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center" style="width:52px;height:52px;"><i class="bi bi-check2-circle fs-4"></i></div>
+                                <div><div class="fs-3 fw-bold text-dark"><?php echo $count_web_approved + $count_app_approved; ?></div><div class="small text-muted">Approved</div></div>
+                            </div>
+                        </div>
+                    </a>
                 </div>
             </div>
 
-            <!-- Mobile-app payment requests (sas_transactions.manual_funding) -->
             <div class="card shadow-sm border-0 rounded-4 mb-4">
-                <div class="card-header bg-white py-4 border-0">
-                    <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-phone me-2"></i>App Payment Requests</h5>
-                    <p class="text-muted small mb-0">Manual bank deposit notifications submitted from the mobile app</p>
+                <div class="card-header bg-white py-3 border-0">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-6">
+                            <h5 class="fw-bold mb-0 text-primary">Payment Approval Portal</h5>
+                            <p class="text-muted small mb-0">Approve website and mobile-app manual payments — pending items first</p>
+                        </div>
+                        <div class="col-md-6">
+                            <form method="get" action="PaymentOrders.php" class="d-flex gap-2 justify-content-md-end">
+                                <input type="hidden" name="tab" value="<?php echo htmlspecialchars($active_tab); ?>" />
+                                <input name="searchq" type="text" value="<?php echo $searchq; ?>" placeholder="User, Ref, Amount..." class="form-control" style="max-width: 250px;" />
+                                <button type="submit" class="btn btn-primary px-4 fw-bold">Filter</button>
+                                <a href="PaymentOrders.php" class="btn btn-outline-secondary" title="Refresh"><i class="bi bi-arrow-clockwise"></i></a>
+                            </form>
+                        </div>
+                    </div>
+                    <ul class="nav nav-pills gap-2 mt-3" role="tablist">
+                        <li class="nav-item"><button class="nav-link fw-bold <?php echo $active_tab === 'pending' ? 'active' : ''; ?>" data-bs-toggle="pill" data-bs-target="#po-pending" type="button"><i class="bi bi-hourglass-split me-1"></i>Pending <span class="badge bg-warning text-dark ms-1"><?php echo $count_pending_all; ?></span></button></li>
+                        <li class="nav-item"><button class="nav-link fw-bold <?php echo $active_tab === 'approved' ? 'active' : ''; ?>" data-bs-toggle="pill" data-bs-target="#po-approved" type="button"><i class="bi bi-check2-circle me-1"></i>Approved</button></li>
+                        <li class="nav-item"><button class="nav-link fw-bold <?php echo $active_tab === 'rejected' ? 'active' : ''; ?>" data-bs-toggle="pill" data-bs-target="#po-rejected" type="button"><i class="bi bi-x-circle me-1"></i>Rejected</button></li>
+                    </ul>
                 </div>
                 <div class="card-body p-4">
-                    <div class="mb-5">
-                        <h6 class="fw-bold mb-3 text-warning d-flex align-items-center"><i class="bi bi-hourglass-split me-2"></i>Pending App Requests</h6>
-                        <div class="table-responsive bg-light rounded-4 border p-2">
-                        <?php
-                            $query_result = $get_app_pending_transaction_details;
-                            $is_admin = true; $inline_approve_page = "PaymentOrders.php";
-                            include("../func/history-table.php");
-                            unset($inline_approve_page);
-                        ?>
-                        </div>
-                    </div>
+                    <div class="tab-content">
 
-                    <div class="mb-5">
-                        <h6 class="fw-bold mb-3 text-success d-flex align-items-center"><i class="bi bi-check2-circle me-2"></i>Approved App Payments</h6>
-                        <div class="table-responsive bg-light rounded-4 border p-2">
-                        <?php
-                            $query_result = $get_app_successful_transaction_details;
-                            $is_admin = false;
-                            include("../func/history-table.php");
-                        ?>
+                        <!-- PENDING -->
+                        <div class="tab-pane fade <?php echo $active_tab === 'pending' ? 'show active' : ''; ?>" id="po-pending">
+                            <div class="row g-4">
+                                <div class="col-xl-6">
+                                    <h6 class="fw-bold mb-3 text-primary d-flex align-items-center"><i class="bi bi-globe2 me-2"></i>Website Pending <span class="badge bg-primary bg-opacity-10 text-primary ms-2"><?php echo $count_web_pending; ?></span></h6>
+                                    <div class="table-responsive bg-light rounded-4 border p-2">
+                                    <?php
+                                        $query_result = $get_user_pending_transaction_details;
+                                        $is_admin = true; $is_payment_order = true;
+                                        include("../func/history-table.php");
+                                    ?>
+                                    </div>
+                                </div>
+                                <div class="col-xl-6">
+                                    <h6 class="fw-bold mb-3 text-info d-flex align-items-center"><i class="bi bi-phone me-2"></i>App Pending <span class="badge bg-info bg-opacity-10 text-info ms-2"><?php echo $count_app_pending; ?></span></h6>
+                                    <div class="table-responsive bg-light rounded-4 border p-2">
+                                    <?php
+                                        $query_result = $get_app_pending_transaction_details;
+                                        $is_admin = true; $inline_approve_page = "PaymentOrders.php";
+                                        include("../func/history-table.php");
+                                        unset($inline_approve_page);
+                                    ?>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div>
-                        <h6 class="fw-bold mb-3 text-danger d-flex align-items-center"><i class="bi bi-x-circle me-2"></i>Rejected App Payments</h6>
-                        <div class="table-responsive bg-light rounded-4 border p-2">
-                        <?php
-                            $query_result = $get_app_failed_transaction_details;
-                            $is_admin = false;
-                            include("../func/history-table.php");
-                        ?>
+                        <!-- APPROVED -->
+                        <div class="tab-pane fade <?php echo $active_tab === 'approved' ? 'show active' : ''; ?>" id="po-approved">
+                            <div class="row g-4">
+                                <div class="col-xl-6">
+                                    <h6 class="fw-bold mb-3 text-primary d-flex align-items-center"><i class="bi bi-globe2 me-2"></i>Website Approved <span class="badge bg-primary bg-opacity-10 text-primary ms-2"><?php echo $count_web_approved; ?></span></h6>
+                                    <div class="table-responsive bg-light rounded-4 border p-2">
+                                    <?php
+                                        $query_result = $get_user_successful_transaction_details;
+                                        $is_admin = true; $is_payment_order = true;
+                                        include("../func/history-table.php");
+                                    ?>
+                                    </div>
+                                </div>
+                                <div class="col-xl-6">
+                                    <h6 class="fw-bold mb-3 text-info d-flex align-items-center"><i class="bi bi-phone me-2"></i>App Approved <span class="badge bg-info bg-opacity-10 text-info ms-2"><?php echo $count_app_approved; ?></span></h6>
+                                    <div class="table-responsive bg-light rounded-4 border p-2">
+                                    <?php
+                                        $query_result = $get_app_successful_transaction_details;
+                                        $is_admin = false;
+                                        include("../func/history-table.php");
+                                    ?>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- REJECTED -->
+                        <div class="tab-pane fade <?php echo $active_tab === 'rejected' ? 'show active' : ''; ?>" id="po-rejected">
+                            <div class="row g-4">
+                                <div class="col-xl-6">
+                                    <h6 class="fw-bold mb-3 text-primary d-flex align-items-center"><i class="bi bi-globe2 me-2"></i>Website Rejected <span class="badge bg-primary bg-opacity-10 text-primary ms-2"><?php echo $count_web_rejected; ?></span></h6>
+                                    <div class="table-responsive bg-light rounded-4 border p-2">
+                                    <?php
+                                        $query_result = $get_user_failed_transaction_details;
+                                        $is_admin = true; $is_payment_order = true;
+                                        include("../func/history-table.php");
+                                    ?>
+                                    </div>
+                                </div>
+                                <div class="col-xl-6">
+                                    <h6 class="fw-bold mb-3 text-info d-flex align-items-center"><i class="bi bi-phone me-2"></i>App Rejected <span class="badge bg-info bg-opacity-10 text-info ms-2"><?php echo $count_app_rejected; ?></span></h6>
+                                    <div class="table-responsive bg-light rounded-4 border p-2">
+                                    <?php
+                                        $query_result = $get_app_failed_transaction_details;
+                                        $is_admin = false;
+                                        include("../func/history-table.php");
+                                    ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="card-footer bg-white py-3 border-0 text-center">
+                    <div class="d-flex justify-content-center gap-2">
+                        <?php if($page_num > 1): ?>
+                        <a href="PaymentOrders.php?<?php echo $search_parameter; ?>tab=<?php echo htmlspecialchars($active_tab); ?>&page=<?php echo ($page_num - 1); ?>" class="btn btn-outline-primary btn-sm px-4 rounded-pill">Previous Page</a>
+                        <?php endif; ?>
+                        <a href="PaymentOrders.php?<?php echo $search_parameter; ?>tab=<?php echo htmlspecialchars($active_tab); ?>&page=<?php echo ($page_num + 1); ?>" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm">Next Page</a>
                     </div>
                 </div>
             </div>
