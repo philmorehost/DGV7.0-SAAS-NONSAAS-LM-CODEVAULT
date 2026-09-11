@@ -22,8 +22,13 @@
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_fee', '$local_identity_fee') ON DUPLICATE KEY UPDATE option_value='$local_identity_fee'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_min_balance', '$local_identity_min_balance') ON DUPLICATE KEY UPDATE option_value='$local_identity_min_balance'");
 
-	$verification_name = $_POST["verification-name"];
+	// getSuperAdminOption() caches options per session; the writes above bypass the setter,
+	// so clear the cache or the new KYC enforcement/rule values are not seen until re-login.
+	if (isset($_SESSION['super_admin_options_cache'])) unset($_SESSION['super_admin_options_cache']);
+
+	$verification_name = $_POST["verification-name"] ?? array();
 	$verification_array_list = $kyc_verification_array;
+	$ki_active_rules = 0;
 	
 	$json_response_encode = json_encode(["status" => "failed", "desc" => "No changes made"]);
 	if(count($verification_name) > 0){
@@ -32,6 +37,7 @@
 
 		if(isset($_POST["verification-status-".$each_verification_name])){
 		    $each_verification_status = "1";
+		    $ki_active_rules++;
 		}else{
 		    $each_verification_status = "2";
 		}
@@ -69,9 +75,13 @@
 	}
 	}
 	
-	$json_response_decode = json_decode($json_response_encode,true);
-	$_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+	$ki_msg = "KYC rules saved. Enforcement is " . ($force_kyc == 1 ? "ENABLED" : "DISABLED") . " with " . $ki_active_rules . " required verification step(s).";
+	if ($force_kyc == 1 && $ki_active_rules === 0) {
+		$ki_msg = "Saved - but KYC enforcement is ON while no verification step is enabled, so nothing is enforced yet. Turn on at least one step below and save again.";
+	}
+	$_SESSION["product_purchase_response"] = $ki_msg;
 	header("Location: ".$_SERVER["REQUEST_URI"]);
+	exit();
 	}
 	
     if(isset($_POST["update-gateway-details"])){
@@ -278,27 +288,50 @@
                     <form method="post">
                         <div class="row g-4 mb-4">
                             <div class="col-md-12">
-                                <div class="p-3 border border-primary rounded-4 bg-primary bg-opacity-10 d-flex align-items-center justify-content-between">
-                                    <div>
-                                        <h6 class="fw-bold mb-1 text-dark-primary">Super Admin KYC Enforcement</h6>
-                                        <p class="small text-dark-primary mb-0" style="opacity: 0.8;">Force all users and vendors (bc-admins) to verify identity platform-wide. When enabled, vendors must complete their BVN/NIN compliance before accessing the management website.</p>
-                                    </div>
-                                    <div class="form-check form-switch">
-                                        <?php
-                                            $q_opt = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='force_kyc'");
-                                            $force_kyc_val = ($q_opt && mysqli_num_rows($q_opt) > 0) ? mysqli_fetch_assoc($q_opt)['option_value'] : '0';
+                                <?php
+                                    $q_opt = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='force_kyc'");
+                                    $force_kyc_val = ($q_opt && mysqli_num_rows($q_opt) > 0) ? mysqli_fetch_assoc($q_opt)['option_value'] : '0';
 
-                                            $q_pfee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='plisio_activation_fee'");
-                                            $plisio_fee_val = ($q_pfee && mysqli_num_rows($q_pfee) > 0) ? mysqli_fetch_assoc($q_pfee)['option_value'] : '10000';
-                                        ?>
-                                        <input class="form-check-input fs-3" type="checkbox" role="switch" name="force_kyc" value="1" <?php echo ($force_kyc_val == 1) ? 'checked' : ''; ?>>
+                                    $q_pfee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='plisio_activation_fee'");
+                                    $plisio_fee_val = ($q_pfee && mysqli_num_rows($q_pfee) > 0) ? mysqli_fetch_assoc($q_pfee)['option_value'] : '10000';
+
+                                    $ki_rules_q = mysqli_query($connection_server, "SELECT COUNT(*) c FROM sas_super_admin_kyc_verifications WHERE status='1'");
+                                    $ki_active_rules = (int)(($ki_rules_q ? mysqli_fetch_assoc($ki_rules_q)['c'] : 0));
+                                    $ki_effective = ($force_kyc_val == 1 && $ki_active_rules > 0);
+                                ?>
+                                <div class="p-3 border border-primary rounded-4 bg-primary bg-opacity-10">
+                                    <div class="d-flex align-items-center justify-content-between gap-3">
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                <h6 class="fw-bold mb-0 text-dark-primary"><i class="bi bi-shield-lock me-1"></i>Super Admin KYC Enforcement</h6>
+                                                <?php if ($ki_effective): ?>
+                                                    <span class="badge bg-success">ACTIVE</span>
+                                                <?php elseif ($force_kyc_val == 1): ?>
+                                                    <span class="badge bg-warning text-dark">ON - NO STEPS</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">OFF</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <p class="small text-dark-primary mb-0" style="opacity: 0.85;">Force all users and vendors (bc-admins) to verify their identity platform-wide. <strong>Requires at least one verification step enabled below</strong> to take effect.</p>
+                                        </div>
+                                        <div class="form-check form-switch flex-shrink-0">
+                                            <input class="form-check-input fs-3" type="checkbox" role="switch" name="force_kyc" value="1" id="kiForceKyc" <?php echo ($force_kyc_val == 1) ? 'checked' : ''; ?>>
+                                        </div>
                                     </div>
                                 </div>
-                                <?php if ($force_kyc_val == 1): ?>
-                                <div class="alert alert-warning border-0 rounded-3 mt-2 small">
-                                    <i class="bi bi-exclamation-triangle me-2"></i><strong>KYC is enabled.</strong> All vendors (bc-admins) are required to complete identity verification (BVN/NIN) in their Account Settings before accessing the management website. Vendors can complete verification under <em>Account Settings &rarr; KYC</em>.
+                                <?php if ($force_kyc_val == 1 && $ki_active_rules === 0): ?>
+                                <div class="alert alert-warning border-0 rounded-3 mt-2 small mb-0">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Enforcement is ON but nothing is enforced yet.</strong> Enable at least one verification step below, then save.
+                                </div>
+                                <?php elseif ($force_kyc_val == 1): ?>
+                                <div class="alert alert-success border-0 rounded-3 mt-2 small mb-0">
+                                    <i class="bi bi-check-circle-fill me-2"></i><strong>KYC enforcement is active</strong> with <?php echo $ki_active_rules; ?> required step(s). Vendors must complete them under <em>Account Settings &rarr; KYC</em> before accessing the management website.
                                 </div>
                                 <?php endif; ?>
+                            </div>
+
+                            <div class="col-12">
+                                <h6 class="fw-bold text-dark mb-0 border-bottom pb-2"><i class="bi bi-cash-coin me-2"></i>Service Activation Fees</h6>
                             </div>
 
                             <div class="col-md-12">
@@ -387,6 +420,10 @@
                                 </div>
                             </div>
 
+                            <div class="col-12 mt-2">
+                                <h6 class="fw-bold text-dark mb-0 border-bottom pb-2"><i class="bi bi-list-check me-2"></i>Required Verification Steps</h6>
+                            </div>
+
                             <?php foreach($kyc_verification_array as $verification_name):
                                 $get_verification_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_super_admin_kyc_verifications WHERE verification_name='$verification_name'"));
                                 $is_active = ($get_verification_details && $get_verification_details["status"] == 1);
@@ -413,7 +450,10 @@
                             </div>
                             <?php endforeach; ?>
                         </div>
-                        <button name="update-kyc-details" type="submit" class="btn btn-primary px-5 rounded-pill fw-bold">Update KYC Rules</button>
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 pt-3 border-top">
+                            <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Changes apply immediately after saving.</span>
+                            <button name="update-kyc-details" type="submit" class="btn btn-primary px-5 rounded-pill fw-bold"><i class="bi bi-save2 me-2"></i>Save KYC Rules</button>
+                        </div>
                     </form>
                 </div>
             </div>
