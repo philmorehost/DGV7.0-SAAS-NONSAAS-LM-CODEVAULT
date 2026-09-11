@@ -2921,7 +2921,7 @@ function verifyBvnNinWithMonnify($bvn_nin, $type, $bank_code, $account_number, $
  */
 if (!function_exists('bc_identity_local_fee')) {
     function bc_identity_local_fee() {
-        return (float) getSuperAdminOption('local_identity_fee', '0');
+        return (float) getSuperAdminOption('local_identity_fee', '50');
     }
 }
 

@@ -175,7 +175,7 @@
                 $q_idp_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
                 $idp_act_fee = (float)(($q_idp_fee && mysqli_num_rows($q_idp_fee) > 0) ? mysqli_fetch_assoc($q_idp_fee)['option_value'] : 7000);
                 $q_local_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_fee'");
-                $local_ver_fee = (float)(($q_local_fee && mysqli_num_rows($q_local_fee) > 0) ? mysqli_fetch_assoc($q_local_fee)['option_value'] : 0);
+                $local_ver_fee = (float)(($q_local_fee && mysqli_num_rows($q_local_fee) > 0) ? mysqli_fetch_assoc($q_local_fee)['option_value'] : 50);
                 $q_local_min = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_min_balance'");
                 $local_min_bal = (float)(($q_local_min && mysqli_num_rows($q_local_min) > 0) ? mysqli_fetch_assoc($q_local_min)['option_value'] : 1000);
             ?>

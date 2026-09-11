@@ -11,7 +11,7 @@
         $nin_card_fee = mysqli_real_escape_string($connection_server, (float)$_POST["nin_card_activation_fee"]);
         $bvn_verify_fee = mysqli_real_escape_string($connection_server, (float)($_POST["bvn_verify_activation_fee"] ?? 5000));
         $identity_api_fee = mysqli_real_escape_string($connection_server, (float)($_POST["identity_api_activation_fee"] ?? 7000));
-        $local_identity_fee = mysqli_real_escape_string($connection_server, (float)($_POST["local_identity_fee"] ?? 0));
+        $local_identity_fee = mysqli_real_escape_string($connection_server, (float)($_POST["local_identity_fee"] ?? 50));
         $local_identity_min_balance = mysqli_real_escape_string($connection_server, (float)($_POST["local_identity_min_balance"] ?? 1000));
 
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_kyc', '$force_kyc') ON DUPLICATE KEY UPDATE option_value='$force_kyc'");
@@ -360,13 +360,13 @@
                             <div class="col-md-12">
                                 <?php
                                     $q_local_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_fee'");
-                                    $local_fee_val = ($q_local_fee && mysqli_num_rows($q_local_fee) > 0) ? mysqli_fetch_assoc($q_local_fee)['option_value'] : '0';
+                                    $local_fee_val = ($q_local_fee && mysqli_num_rows($q_local_fee) > 0) ? mysqli_fetch_assoc($q_local_fee)['option_value'] : '50';
                                 ?>
                                 <div class="p-4 border rounded-4 bg-light shadow-sm">
                                     <h6 class="fw-bold text-dark mb-2">Local Marketplace Verification Fee (NGN)</h6>
                                     <div class="input-group">
                                         <span class="input-group-text bg-white border-0">₦</span>
-                                        <input name="local_identity_fee" type="number" step="0.01" min="0" class="form-control form-control-lg border-0 bg-white" value="<?php echo $local_fee_val; ?>" placeholder="0.00">
+                                        <input name="local_identity_fee" type="number" step="0.01" min="0" class="form-control form-control-lg border-0 bg-white" value="<?php echo $local_fee_val; ?>" placeholder="50.00">
                                     </div>
                                     <p class="small text-muted mt-2 mb-0">Charged to the vendor's wallet for <strong>each successful verification</strong> done through the free Local Marketplace (vendor-to-vendor) API. Set 0 to make it free.</p>
                                 </div>

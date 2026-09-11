@@ -921,7 +921,7 @@ if ($create_super_admin_options_table) {
     }
     $check_local_id_fee = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='local_identity_fee'");
     if (mysqli_num_rows($check_local_id_fee) == 0) {
-        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_fee', '0')");
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_fee', '50')");
     }
     $check_local_id_min = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='local_identity_min_balance'");
     if (mysqli_num_rows($check_local_id_min) == 0) {
