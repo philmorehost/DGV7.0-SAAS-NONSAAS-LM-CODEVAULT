@@ -919,6 +919,14 @@ if ($create_super_admin_options_table) {
     if (mysqli_num_rows($check_identity_api_fee) == 0) {
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('identity_api_activation_fee', '7000')");
     }
+    $check_local_id_fee = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='local_identity_fee'");
+    if (mysqli_num_rows($check_local_id_fee) == 0) {
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_fee', '0')");
+    }
+    $check_local_id_min = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='local_identity_min_balance'");
+    if (mysqli_num_rows($check_local_id_min) == 0) {
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_min_balance', '1000')");
+    }
     $check_identity_provider = mysqli_query($connection_server, "SELECT * FROM sas_super_admin_options WHERE option_name='identity_provider'");
     if (mysqli_num_rows($check_identity_provider) == 0) {
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('identity_provider', 'monnify')");

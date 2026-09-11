@@ -11,12 +11,16 @@
         $nin_card_fee = mysqli_real_escape_string($connection_server, (float)$_POST["nin_card_activation_fee"]);
         $bvn_verify_fee = mysqli_real_escape_string($connection_server, (float)($_POST["bvn_verify_activation_fee"] ?? 5000));
         $identity_api_fee = mysqli_real_escape_string($connection_server, (float)($_POST["identity_api_activation_fee"] ?? 7000));
+        $local_identity_fee = mysqli_real_escape_string($connection_server, (float)($_POST["local_identity_fee"] ?? 0));
+        $local_identity_min_balance = mysqli_real_escape_string($connection_server, (float)($_POST["local_identity_min_balance"] ?? 1000));
 
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_kyc', '$force_kyc') ON DUPLICATE KEY UPDATE option_value='$force_kyc'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('plisio_activation_fee', '$plisio_fee') ON DUPLICATE KEY UPDATE option_value='$plisio_fee'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('nin_card_activation_fee', '$nin_card_fee') ON DUPLICATE KEY UPDATE option_value='$nin_card_fee'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('bvn_verify_activation_fee', '$bvn_verify_fee') ON DUPLICATE KEY UPDATE option_value='$bvn_verify_fee'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('identity_api_activation_fee', '$identity_api_fee') ON DUPLICATE KEY UPDATE option_value='$identity_api_fee'");
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_fee', '$local_identity_fee') ON DUPLICATE KEY UPDATE option_value='$local_identity_fee'");
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('local_identity_min_balance', '$local_identity_min_balance') ON DUPLICATE KEY UPDATE option_value='$local_identity_min_balance'");
 
 	$verification_name = $_POST["verification-name"];
 	$verification_array_list = $kyc_verification_array;
@@ -349,7 +353,37 @@
                                         <span class="input-group-text bg-white border-0">₦</span>
                                         <input name="identity_api_activation_fee" type="number" step="0.01" class="form-control form-control-lg border-0 bg-white" value="<?php echo $identity_api_fee_val; ?>" placeholder="7000.00">
                                     </div>
-                                    <p class="small text-muted mt-2 mb-0">The one-time fee vendors (bc-admins) must pay from their wallet to unlock Identity Services &rarr; Identity Verification Provider configuration (Dojah, QoreID, Smile Identity, or a Local Marketplace vendor-to-vendor API).</p>
+                                    <p class="small text-muted mt-2 mb-0">The one-time fee vendors (bc-admins) must pay from their wallet to unlock the <strong>premium</strong> identity providers (Monnify, Dojah, QoreID, Smile Identity). The Local Marketplace (vendor-to-vendor) API is free.</p>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <?php
+                                    $q_local_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_fee'");
+                                    $local_fee_val = ($q_local_fee && mysqli_num_rows($q_local_fee) > 0) ? mysqli_fetch_assoc($q_local_fee)['option_value'] : '0';
+                                ?>
+                                <div class="p-4 border rounded-4 bg-light shadow-sm">
+                                    <h6 class="fw-bold text-dark mb-2">Local Marketplace Verification Fee (NGN)</h6>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white border-0">₦</span>
+                                        <input name="local_identity_fee" type="number" step="0.01" min="0" class="form-control form-control-lg border-0 bg-white" value="<?php echo $local_fee_val; ?>" placeholder="0.00">
+                                    </div>
+                                    <p class="small text-muted mt-2 mb-0">Charged to the vendor's wallet for <strong>each successful verification</strong> done through the free Local Marketplace (vendor-to-vendor) API. Set 0 to make it free.</p>
+                                </div>
+                            </div>
+
+                            <div class="col-md-12">
+                                <?php
+                                    $q_local_min = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_min_balance'");
+                                    $local_min_val = ($q_local_min && mysqli_num_rows($q_local_min) > 0) ? mysqli_fetch_assoc($q_local_min)['option_value'] : '1000';
+                                ?>
+                                <div class="p-4 border rounded-4 bg-light shadow-sm">
+                                    <h6 class="fw-bold text-dark mb-2">Local Marketplace Minimum Vendor Balance (NGN)</h6>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white border-0">₦</span>
+                                        <input name="local_identity_min_balance" type="number" step="0.01" min="0" class="form-control form-control-lg border-0 bg-white" value="<?php echo $local_min_val; ?>" placeholder="1000.00">
+                                    </div>
+                                    <p class="small text-muted mt-2 mb-0">A vendor must hold at least this wallet balance to use the Local Marketplace (vendor-to-vendor) identity API.</p>
                                 </div>
                             </div>
 

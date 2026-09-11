@@ -2914,6 +2914,53 @@ function verifyBvnNinWithMonnify($bvn_nin, $type, $bank_code, $account_number, $
  *                 "lastname"=>..., "birthdate"=>..., "gender"=>..., "photo_data"=>...(base64),
  *                 "phone"=>..., "address"=>..., "residence_state"=>..., "state_of_origin"=>..., "provider"=>...]
  */
+/**
+ * ---- Local Marketplace (vendor-to-vendor) identity API --------------------
+ * Free to install; instead the vendor is charged a super-admin-set fee on each
+ * successful verification, and must hold a super-admin-set minimum wallet balance.
+ */
+if (!function_exists('bc_identity_local_fee')) {
+    function bc_identity_local_fee() {
+        return (float) getSuperAdminOption('local_identity_fee', '0');
+    }
+}
+
+if (!function_exists('bc_identity_local_min_balance')) {
+    function bc_identity_local_min_balance() {
+        return (float) getSuperAdminOption('local_identity_min_balance', '1000');
+    }
+}
+
+if (!function_exists('bc_identity_local_charge_vendor')) {
+    /**
+     * Debit a vendor's bc-admin wallet for a Local Marketplace identity
+     * verification. Minimal, email-free debit that is safe to call from a
+     * user-facing request context. Returns true on success.
+     */
+    function bc_identity_local_charge_vendor($vid, $amount, $description = 'Local Marketplace Identity Verification Fee') {
+        global $connection_server;
+        $amount = (float)$amount;
+        $vid = (int)$vid;
+        if ($amount <= 0) return true;
+        if ($vid <= 0) return false;
+
+        $row = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='$vid' LIMIT 1"));
+        if (!$row) return false;
+
+        $bal_before = (float)$row['balance'];
+        if ($bal_before < $amount) return false;
+        $bal_after = $bal_before - $amount;
+
+        $ref  = "IDL_" . strtoupper(substr(md5(uniqid('', true)), 0, 12));
+        $desc = mysqli_real_escape_string($connection_server, $description);
+        $host = mysqli_real_escape_string($connection_server, $_SERVER['HTTP_HOST'] ?? 'localhost');
+        $ins = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$vid', 'identity_local_fee', 'Identity API Fee', '$ref', '$amount', '$amount', '$bal_before', '$bal_after', '$desc', '$host', '1')");
+        if (!$ins) return false;
+        $upd = mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$bal_after' WHERE id='$vid'");
+        return (bool)$upd;
+    }
+}
+
 function fetchNINProfile($nin, $vid) {
     global $connection_server;
     $provider = getIdentityProvider($vid);
@@ -2923,7 +2970,19 @@ function fetchNINProfile($nin, $vid) {
     } elseif ($provider === "qoreid") {
         return fetchNINProfileWithQoreID($nin, $vid);
     } elseif ($provider === "localhost") {
-        return fetchNINProfileWithLocalhost($nin, $vid);
+        // Local Marketplace: require the super-admin minimum wallet balance, and
+        // charge the super-admin per-verification fee on each successful lookup.
+        $local_min_bal = bc_identity_local_min_balance();
+        $vbal_row = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='".(int)$vid."' LIMIT 1"));
+        if ((float)($vbal_row['balance'] ?? 0) < $local_min_bal) {
+            return ["status" => "failed", "message" => "Local Marketplace identity verification requires a minimum wallet balance of ₦" . number_format($local_min_bal, 2) . ". Please fund your wallet to continue."];
+        }
+        $result = fetchNINProfileWithLocalhost($nin, $vid);
+        if (($result['status'] ?? '') === 'success') {
+            $local_fee = bc_identity_local_fee();
+            if ($local_fee > 0) bc_identity_local_charge_vendor($vid, $local_fee, "Local Marketplace NIN Verification Fee");
+        }
+        return $result;
     } else {
         return fetchNINProfileWithMonnify($nin, $vid);
     }
@@ -5868,7 +5927,19 @@ function fetchBVNProfile($bvn, $vid) {
     } elseif ($provider === "qoreid") {
         return fetchBVNProfileWithQoreID($bvn, $vid);
     } elseif ($provider === "localhost") {
-        return fetchBVNProfileWithLocalhost($bvn, $vid);
+        // Local Marketplace: require the super-admin minimum wallet balance, and
+        // charge the super-admin per-verification fee on each successful lookup.
+        $local_min_bal = bc_identity_local_min_balance();
+        $vbal_row = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='".(int)$vid."' LIMIT 1"));
+        if ((float)($vbal_row['balance'] ?? 0) < $local_min_bal) {
+            return ["status" => "failed", "message" => "Local Marketplace identity verification requires a minimum wallet balance of ₦" . number_format($local_min_bal, 2) . ". Please fund your wallet to continue."];
+        }
+        $result = fetchBVNProfileWithLocalhost($bvn, $vid);
+        if (($result['status'] ?? '') === 'success') {
+            $local_fee = bc_identity_local_fee();
+            if ($local_fee > 0) bc_identity_local_charge_vendor($vid, $local_fee, "Local Marketplace BVN Verification Fee");
+        }
+        return $result;
     } else {
         return fetchBVNProfileWithMonnify($bvn, $vid);
     }

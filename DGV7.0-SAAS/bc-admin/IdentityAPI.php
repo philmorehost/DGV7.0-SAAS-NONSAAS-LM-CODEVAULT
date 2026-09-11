@@ -2,12 +2,15 @@
     include("../func/bc-admin-config.php");
 	
 	if(isset($_POST["update-identity-provider"])){
-        if ((int)($get_logged_admin_details['identity_api_enabled'] ?? 0) !== 1) {
-            $_SESSION["product_purchase_response"] = "Identity API access is locked. Please activate it (one-time fee) before configuring a provider.";
+        $allowed_providers = ["monnify", "dojah", "qoreid", "smileid", "localhost"];
+        $requested_provider = trim(strip_tags($_POST["identity_provider"] ?? "monnify"));
+        // Premium providers (Monnify/Dojah/QoreID/Smile) require activation; the Local
+        // Marketplace (vendor-to-vendor) API is FREE to install.
+        if ($requested_provider !== 'localhost' && (int)($get_logged_admin_details['identity_api_enabled'] ?? 0) !== 1) {
+            $_SESSION["product_purchase_response"] = "Premium identity providers are locked. Activate Identity API access (one-time fee) or choose the free Local Marketplace (vendor-to-vendor) API.";
             header("Location: IdentityAPI.php");
             exit();
         }
-        $allowed_providers = ["monnify", "dojah", "qoreid", "smileid", "localhost"];
         $identity_provider_gateways = ["dojah", "qoreid", "smileid"];
         $vendor_id = $get_logged_admin_details["id"];
 
@@ -164,38 +167,37 @@
         <div class="col-lg-10">
 
             <?php
-                // SAAS monetization: the Identity Verification Provider configuration is
-                // unlocked after a one-time activation fee (super-admin set, default N7,000).
+                // SAAS monetization: premium providers (Monnify/Dojah/QoreID/Smile) require a
+                // one-time activation fee (super-admin set, default N7,000). The Local
+                // Marketplace (vendor-to-vendor) API is FREE to install and instead charged
+                // per verification (super-admin set) with a minimum wallet balance.
                 $identity_api_enabled = ((int)($get_logged_admin_details['identity_api_enabled'] ?? 0) === 1);
-                if (!$identity_api_enabled):
-                    $q_idp_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
-                    $idp_act_fee = (float)(($q_idp_fee && mysqli_num_rows($q_idp_fee) > 0) ? mysqli_fetch_assoc($q_idp_fee)['option_value'] : 7000);
+                $q_idp_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='identity_api_activation_fee'");
+                $idp_act_fee = (float)(($q_idp_fee && mysqli_num_rows($q_idp_fee) > 0) ? mysqli_fetch_assoc($q_idp_fee)['option_value'] : 7000);
+                $q_local_fee = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_fee'");
+                $local_ver_fee = (float)(($q_local_fee && mysqli_num_rows($q_local_fee) > 0) ? mysqli_fetch_assoc($q_local_fee)['option_value'] : 0);
+                $q_local_min = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='local_identity_min_balance'");
+                $local_min_bal = (float)(($q_local_min && mysqli_num_rows($q_local_min) > 0) ? mysqli_fetch_assoc($q_local_min)['option_value'] : 1000);
             ?>
-            <div class="card shadow-sm border-0 rounded-4 mb-4">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold mb-0 text-primary">Identity API Access</h5>
-                    <i class="bi bi-shield-lock text-muted fs-4"></i>
+            <?php if (!$identity_api_enabled): ?>
+            <div class="alert alert-warning border-0 rounded-4 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <strong><i class="bi bi-shield-lock me-1"></i>Premium providers are locked.</strong>
+                    Monnify, Dojah, QoreID (VerifyMe) and Smile Identity require a one-time activation of <strong>₦<?php echo number_format($idp_act_fee, 2); ?></strong>.
+                    The <strong>Local Marketplace (vendor-to-vendor) API is free</strong> to install.
                 </div>
-                <div class="card-body p-4">
-                    <div class="text-center py-5 bg-light rounded-4 border">
-                        <i class="bi bi-lock-fill text-warning display-4 mb-3"></i>
-                        <h4 class="fw-bold mb-2">Identity API Access Locked</h4>
-                        <p class="text-muted mb-4 px-lg-5">Unlock Identity Services to configure any of the integrated providers - Dojah, QoreID (VerifyMe), Smile Identity, or your Local Marketplace (vendor-to-vendor) API - for BVN/NIN verification. All providers are optional; pick the one you prefer.</p>
-                        <div class="h3 fw-bold text-success mb-4">One-time Fee: ₦<?php echo number_format($idp_act_fee, 2); ?></div>
-                        <form method="post" class="m-0 d-inline-block">
-                            <button type="submit" name="activate-identity-api-wallet" class="btn btn-success btn-lg rounded-pill fw-bold px-5"
-                                onclick="return confirm('Charge ₦<?php echo number_format($idp_act_fee, 2); ?> from your vendor wallet to unlock Identity API access?')">
-                                <i class="bi bi-wallet2 me-2"></i> Activate - Pay ₦<?php echo number_format($idp_act_fee, 2); ?> from Wallet
-                            </button>
-                        </form>
-                    </div>
-                </div>
+                <form method="post" class="m-0">
+                    <button type="submit" name="activate-identity-api-wallet" class="btn btn-sm btn-warning text-dark fw-bold"
+                        onclick="return confirm('Charge ₦<?php echo number_format($idp_act_fee, 2); ?> from your vendor wallet to unlock the premium providers?')">
+                        <i class="bi bi-wallet2 me-1"></i> Activate Premium - ₦<?php echo number_format($idp_act_fee, 2); ?>
+                    </button>
+                </form>
             </div>
-            <?php else: ?>
+            <?php endif; ?>
             <!-- Identity Verification Provider Card -->
             <div class="card shadow-sm border-0 rounded-4 mb-4">
                 <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold mb-0 text-primary">Identity Verification Provider <span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:.65rem;">ACTIVE</span></h5>
+                    <h5 class="fw-bold mb-0 text-primary">Identity Verification Provider <?php echo $identity_api_enabled ? '<span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:.65rem;">PREMIUM ACTIVE</span>' : '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning ms-2" style="font-size:.65rem;">LOCAL FREE</span>'; ?></h5>
                     <i class="bi bi-person-badge text-muted fs-4"></i>
                 </div>
                 <div class="card-body p-4">
@@ -222,10 +224,15 @@
                         <div class="mb-4">
                             <label class="form-label fw-bold small">Active Provider</label>
                             <select name="identity_provider" class="form-select" id="idp-select">
-                                <?php foreach ($idp_providers as $val => $label): ?>
-                                <option value="<?php echo $val; ?>" <?php echo ($current_idp === $val) ? 'selected' : ''; ?>><?php echo $label; ?></option>
+                                <?php foreach ($idp_providers as $val => $label):
+                                    $opt_is_premium = ($val !== 'localhost');
+                                    $opt_locked = ($opt_is_premium && !$identity_api_enabled);
+                                    $opt_label = $label . ($opt_locked ? ' - locked (activate)' : ($val === 'localhost' ? ' - FREE' : ''));
+                                ?>
+                                <option value="<?php echo $val; ?>" <?php echo $opt_locked ? 'disabled' : ''; ?> <?php echo ($current_idp === $val) ? 'selected' : ''; ?>><?php echo htmlspecialchars($opt_label); ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <div class="form-text mt-2 small">Premium providers require activation. The <strong>Local Marketplace (vendor-to-vendor) API is free</strong>.</div>
                         </div>
                         <?php foreach ($idp_gateways as $gw): ?>
                         <?php
@@ -268,6 +275,12 @@
                                         <?php endwhile; ?>
                                     </select>
                                     <div class="form-text mt-2 small">These are Identity Verification APIs you have installed from the MarketPlace. Ensure the selected API is "Active".</div>
+                                    <div class="alert alert-info border-0 rounded-3 small mt-3 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <strong>Local Marketplace is free to install.</strong>
+                                        You are charged <strong>₦<?php echo number_format($local_ver_fee, 2); ?></strong> per successful verification.
+                                        Minimum wallet balance required: <strong>₦<?php echo number_format($local_min_bal, 2); ?></strong>.
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -288,7 +301,6 @@
                     </script>
                 </div>
             </div>
-            <?php endif; ?>
 
             <!-- NIN Card Service Card -->
             <div class="card shadow-sm border-0 rounded-4 mb-4">
