@@ -349,17 +349,20 @@ include '../includes/dashboard-head.php';
                             <p class="text-sm font-bold text-red-500" x-text="'-₦' + parseFloat(selectedTx?.fee_amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></p>
                         </div>
                     </div>
-                    <template x-if="selectedTx && selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) !== parseFloat(selectedTx.amount)">
+                    <template x-if="selectedTx && (selectedTx.failure_reason || (selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) !== parseFloat(selectedTx.amount)))">
                         <div class="mb-8 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
                             <i data-lucide="shield-alert" class="w-5 h-5 text-red-600 shrink-0 mt-0.5"></i>
                             <div>
-                                <p class="text-sm font-bold text-red-800">Amount mismatch detected</p>
-                                <p class="text-xs text-red-700 mt-1">
+                                <p class="text-sm font-bold text-red-800" x-text="selectedTx.failure_reason ? 'Blocked by an integrity check' : 'Amount mismatch detected'"></p>
+                                <p class="text-xs text-red-700 mt-1" x-show="selectedTx.gateway_amount">
                                     The gateway settled
                                     <strong x-text="'₦' + parseFloat(selectedTx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>
                                     but this transaction was created for
                                     <strong x-text="'₦' + parseFloat(selectedTx.amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>.
                                     Fulfilment was blocked and the transaction was marked failed.
+                                </p>
+                                <p class="text-xs text-red-700 mt-1" x-show="!selectedTx.gateway_amount && selectedTx.failure_reason">
+                                    No credit was made and the merchant was not notified of a successful payment.
                                 </p>
                             </div>
                         </div>
@@ -370,6 +373,15 @@ include '../includes/dashboard-head.php';
                             <span class="text-sm font-bold"
                                   :class="!selectedTx?.gateway_amount ? 'text-slate-400' : (parseFloat(selectedTx?.gateway_amount) === parseFloat(selectedTx?.amount) ? 'text-emerald-600' : 'text-red-600')"
                                   x-text="selectedTx?.gateway_amount ? '₦' + parseFloat(selectedTx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits: 2}) : 'Not recorded'"></span>
+                        </div>
+                        <div class="flex justify-between items-center" x-show="selectedTx?.failure_reason">
+                            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Failure Reason</span>
+                            <span class="text-sm font-bold text-red-600 uppercase" x-text="selectedTx?.failure_reason"></span>
+                        </div>
+                        <div class="flex justify-between items-center" x-show="selectedTx?.card_last4">
+                            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Card</span>
+                            <span class="text-sm font-mono text-slate-600"
+                                  x-text="(selectedTx?.card_type || 'card') + ' \u2022\u2022\u2022\u2022' + (selectedTx?.card_last4 || '') + (selectedTx?.card_country ? ' (' + selectedTx.card_country + ')' : '')"></span>
                         </div>
                         <div class="flex justify-between items-center">
                             <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Customer Email</span>

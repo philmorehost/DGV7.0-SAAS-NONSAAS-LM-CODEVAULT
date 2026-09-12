@@ -59,9 +59,35 @@ if ($verified_with === null) {
 // sandbox install sharing a single key keeps working.
 $mode_ambiguous = ($paystack_secret !== '' && $paystack_secret === $paystack_test_secret);
 
+// Prime the payment-integrity columns and the reversals table BEFORE any transaction is
+// opened - MySQL implicitly commits on DDL, which would release a fulfilment claim early.
+ensure_payment_schema();
+
+/*
+ * Normalise Paystack's event name. Paystack prefixes dispute events with `charge.`
+ * (charge.dispute.create / .remind / .resolve), while this handler used to match the bare
+ * `dispute.create` - so disputes were silently dropped. That is consistent with the
+ * `disputes` table being completely empty despite live card volume. Both spellings are
+ * accepted so a future rename cannot silently re-break it.
+ */
+$event_map = [
+    'charge.success'         => 'charge_success',
+    'charge.dispute.create'  => 'dispute_open',
+    'charge.dispute.remind'  => 'dispute_open',
+    'charge.dispute.resolve' => 'dispute_resolve',
+    'charge.dispute.closed'  => 'dispute_resolve',
+    'dispute.create'         => 'dispute_open',
+    'dispute.resolve'        => 'dispute_resolve',
+    'chargeback'             => 'chargeback',
+    'refund.processed'       => 'refund_processed',
+    'refund.pending'         => 'refund_pending',
+    'refund.failed'          => 'refund_failed',
+];
+$event_type = $event_map[strtolower((string)($event['event'] ?? ''))] ?? null;
+
 $db = Database::connect();
 
-if ($event['event'] === 'charge.success') {
+if ($event_type === 'charge_success') {
     $data = $event['data'];
     $ref = $data['reference'];
     $amount = $data['amount'] / 100;
@@ -172,6 +198,12 @@ if ($event['event'] === 'charge.success') {
             $msg = "BLOCKED signature/transaction mode mismatch for Ref: $ref"
                  . " (payload signed with the {$verified_with} key but the transaction has is_test=" . (int)$tx['is_test'] . ")";
             log_transaction_event($tx['id'], 'mode_mismatch', $msg);
+            // Label why it failed, so 'failed' stays unambiguous in reporting: "nothing was
+            // ever paid" (benign) vs "we blocked something" (a fraud signal).
+            try {
+                $db->prepare("UPDATE transactions SET status = 'failed', failure_reason = 'mode_mismatch' WHERE id = ? AND (status IS NULL OR status <> 'success')")
+                   ->execute([$tx['id']]);
+            } catch (\Throwable $e) { /* non-fatal */ }
             error_log('[PayHub] ' . $msg);
             file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] " . $msg . PHP_EOL, FILE_APPEND);
             http_response_code(200);
@@ -203,6 +235,9 @@ if ($event['event'] === 'charge.success') {
             // Persist the gateway-confirmed figure so every later integrity check
             // (and the merchant webhook) works from evidence, not from the request.
             record_gateway_amount($tx['id'], $amount);
+
+            // Card fingerprint, for repeat-abuse detection and dispute defence.
+            store_card_fingerprint($tx['id'], $data['authorization'] ?? null);
 
             // Calculate fees
             $is_intl = ($currency !== 'NGN');
@@ -272,36 +307,121 @@ if ($event['event'] === 'charge.success') {
                     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                     curl_close($ch);
 
-                    // Log Webhook Forwarding
+                    // Record the delivery attempt in the schema admin/webhooks.php reads.
+                    // The previous insert named columns that do not exist in webhook_logs
+                    // (user_id, event_type, response_code) inside a swallowed catch, so no
+                    // outbound webhook was ever logged.
                     try {
-                        $stmtLog = $db->prepare("INSERT INTO webhook_logs (user_id, event_type, payload, response_code) VALUES (?, ?, ?, ?)");
-                        $stmtLog->execute([$tx['user_id'], 'charge.success', json_encode($payload), (int)$code]);
-                    } catch (\Throwable $t) {}
+                        $stmtLog = $db->prepare("INSERT INTO webhook_logs (transaction_id, status, attempt_count, last_attempt_at, payload, response) VALUES (?, ?, 1, CURRENT_TIMESTAMP, ?, ?)");
+                        $stmtLog->execute([
+                            $tx['id'],
+                            (($code >= 200 && $code < 300) ? 'success' : 'failed'),
+                            json_encode($payload),
+                            'HTTP ' . (int)$code
+                        ]);
+                    } catch (\Throwable $t) {
+                        error_log('[PayHub] webhook_logs write failed: ' . $t->getMessage());
+                    }
                 }
             }
         }
     }
-} elseif ($event['event'] === 'refund.processed') {
+} elseif ($event_type === 'dispute_open') {
     $data = $event['data'];
-    $ref = $data['transaction_reference'];
+    $ref = $data['transaction_reference'] ?? ($data['reference'] ?? '');
+
+    $stmt = $db->prepare("SELECT * FROM transactions WHERE gateway_reference = ? OR reference = ?");
+    $stmt->execute([$data['transaction_id'] ?? null, $ref]);
+    $tx = $stmt->fetch();
+
+    if ($tx) {
+        // Opening a dispute does NOT move money - Paystack has not necessarily taken it,
+        // and reversing the credit now would over-debit a merchant who goes on to win.
+        // Record it and wait for the resolution.
+        $open = $db->prepare("SELECT id FROM disputes WHERE transaction_id = ? AND status = 'open' LIMIT 1");
+        $open->execute([$tx['id']]);
+        $existing = $open->fetch();
+
+        $reason = $data['reason'] ?? 'Chargeback initiated';
+        if ($existing) {
+            // A `remind` for the same open dispute - refresh the reason, do not duplicate.
+            $db->prepare("UPDATE disputes SET reason = ? WHERE id = ?")->execute([$reason, $existing['id']]);
+        } else {
+            $db->prepare("INSERT INTO disputes (user_id, transaction_id, reason, status) VALUES (?, ?, ?, 'open')")
+               ->execute([$tx['user_id'], $tx['id'], $reason]);
+        }
+        log_transaction_event($tx['id'], 'dispute_opened', "Chargeback opened ($reason). Credit held pending resolution - not yet reversed.");
+    }
+} elseif ($event_type === 'dispute_resolve') {
+    $data = $event['data'];
+    $ref = $data['transaction_reference'] ?? ($data['reference'] ?? '');
+
+    $stmt = $db->prepare("SELECT * FROM transactions WHERE gateway_reference = ? OR reference = ?");
+    $stmt->execute([$data['transaction_id'] ?? null, $ref]);
+    $tx = $stmt->fetch();
+
+    if ($tx) {
+        $dispute_ref = 'dispute:' . ($data['id'] ?? ($data['dispute_id'] ?? $ref));
+        $credited = (float)$tx['settled_amount'] > 0 ? (float)$tx['settled_amount'] : (float)$tx['amount'];
+        $resolved = strtolower(trim((string)($data['resolved'] ?? '')));
+
+        if ($resolved === 'won') {
+            $res = restore_transaction_reversal($tx['id'], $dispute_ref);
+            $db->prepare("UPDATE disputes SET status = 'won' WHERE transaction_id = ? AND status = 'open'")->execute([$tx['id']]);
+            log_transaction_event($tx['id'], 'dispute_won', 'Dispute resolved in the merchant favour (' . $res['reason'] . ').');
+        } elseif (in_array($resolved, ['lost', 'accepted', 'chargeback'], true)) {
+            $res = record_transaction_reversal($tx['id'], $dispute_ref, $credited, 'chargeback');
+            $db->prepare("UPDATE disputes SET status = 'lost' WHERE transaction_id = ? AND status = 'open'")->execute([$tx['id']]);
+            if (!$res['applied']) {
+                file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] Dispute loss reversal not applied for Ref: $ref (" . $res['reason'] . ")" . PHP_EOL, FILE_APPEND);
+            }
+        } else {
+            // Never guess with money on an unrecognised resolution.
+            log_transaction_event($tx['id'], 'dispute_resolve_unrecognised', "Unrecognised dispute resolution '" . ($data['resolved'] ?? '') . "' - no ledger change. Review manually.");
+            error_log('[PayHub] unrecognised dispute resolution for ' . $ref . ': ' . json_encode($data['resolved'] ?? null));
+        }
+    }
+} elseif ($event_type === 'refund_processed' || $event_type === 'chargeback') {
+    $data = $event['data'];
+    $ref = $data['transaction_reference'] ?? ($data['reference'] ?? '');
+
+    $stmt = $db->prepare("SELECT * FROM transactions WHERE gateway_reference = ? OR reference = ?");
+    $stmt->execute([$data['transaction_id'] ?? null, $ref]);
+    $tx = $stmt->fetch();
+
+    if ($tx) {
+        $credited = (float)$tx['settled_amount'] > 0 ? (float)$tx['settled_amount'] : (float)$tx['amount'];
+        // Prefer the amount the gateway reports: partial refunds are common and must not
+        // be treated as a full reversal of the credit.
+        $event_amount = (isset($data['amount']) && is_numeric($data['amount']) && (float)$data['amount'] > 0)
+            ? ((float)$data['amount'] / 100)
+            : $credited;
+
+        $kind = ($event_type === 'chargeback') ? 'chargeback' : 'refund';
+        $reversal_ref = $kind . ':' . ($data['refund_reference'] ?? ($data['id'] ?? ($data['transaction_id'] ?? $ref)));
+
+        $res = record_transaction_reversal($tx['id'], $reversal_ref, $event_amount, $kind);
+        if (!$res['applied']) {
+            // 'duplicate' / 'already_reversed' are the guards doing their job, not errors.
+            file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] $kind reversal not applied for Ref: $ref (" . $res['reason'] . ")" . PHP_EOL, FILE_APPEND);
+        }
+    }
+} elseif ($event_type === 'refund_pending' || $event_type === 'refund_failed') {
+    $data = $event['data'];
+    $ref = $data['transaction_reference'] ?? ($data['reference'] ?? '');
 
     $stmt = $db->prepare("SELECT id FROM transactions WHERE gateway_reference = ? OR reference = ?");
-    $stmt->execute([$data['transaction_id'], $ref]);
+    $stmt->execute([$data['transaction_id'] ?? null, $ref]);
     $tx = $stmt->fetch();
 
     if ($tx) {
-        log_transaction_event($tx['id'], 'refund_completed', "Refund of " . formatCurrency($data['amount']/100) . " has been completed by Paystack.");
+        // No money has moved, so no ledger change - just leave an audit trail.
+        log_transaction_event($tx['id'], $event_type, 'Gateway reported refund state: ' . ($data['status'] ?? $event_type) . '. No ledger change.');
     }
-} elseif ($event['event'] === 'dispute.create') {
-    $data = $event['data'];
-    $stmt = $db->prepare("SELECT id, user_id FROM transactions WHERE gateway_reference = ?");
-    $stmt->execute([$data['transaction_id']]);
-    $tx = $stmt->fetch();
-
-    if ($tx) {
-        $stmt = $db->prepare("INSERT INTO disputes (user_id, transaction_id, reason, status) VALUES (?, ?, ?, 'open')");
-        $stmt->execute([$tx['user_id'], $tx['id'], $data['reason'] ?? 'Chargeback initiated']);
-        log_transaction_event($tx['id'], 'dispute_opened', "A chargeback dispute has been opened for this transaction.");
+} else {
+    // Unknown event: still 200 so Paystack does not retry forever, but leave a trace.
+    if (!empty($event['event'])) {
+        file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] Unhandled event type: " . $event['event'] . PHP_EOL, FILE_APPEND);
     }
 }
 

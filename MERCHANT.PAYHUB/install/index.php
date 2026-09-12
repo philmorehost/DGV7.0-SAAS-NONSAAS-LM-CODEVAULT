@@ -85,6 +85,12 @@ if ($stage === 2 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 gateway_reference VARCHAR(100),
                 amount DECIMAL(15, 2) NOT NULL,
                 gateway_amount DECIMAL(15, 2) DEFAULT NULL,
+                failure_reason VARCHAR(50) DEFAULT NULL,
+                card_bin VARCHAR(20) DEFAULT NULL,
+                card_last4 VARCHAR(8) DEFAULT NULL,
+                card_type VARCHAR(40) DEFAULT NULL,
+                card_country VARCHAR(8) DEFAULT NULL,
+                checkout_token VARCHAR(64) DEFAULT NULL,
                 fee_amount DECIMAL(15, 2) DEFAULT 0.00,
                 settled_amount DECIMAL(15, 2) DEFAULT 0.00,
                 status ENUM('pending', 'success', 'failed', 'refunded') DEFAULT 'pending',
@@ -238,6 +244,19 @@ if ($stage === 2 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 response TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB;
+
+            -- One row per money-pullback (refund / chargeback / lost dispute).
+            -- uniq_reversal_reference is what makes a retried webhook idempotent.
+            CREATE TABLE IF NOT EXISTS transaction_reversals (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                transaction_id INT NOT NULL,
+                reversal_reference VARCHAR(120) NOT NULL,
+                kind VARCHAR(40) NOT NULL,
+                amount DECIMAL(15, 2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_reversal_reference (reversal_reference),
+                KEY idx_tx (transaction_id)
             ) ENGINE=InnoDB;
 
             CREATE TABLE IF NOT EXISTS blog_posts (

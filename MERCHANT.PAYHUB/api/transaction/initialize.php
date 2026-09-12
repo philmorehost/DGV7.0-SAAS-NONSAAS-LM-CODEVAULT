@@ -46,6 +46,34 @@ $ref = 'PH_' . bin2hex(random_bytes(8));
 // Determine if it's test mode based on the Secret Key used
 $is_test = (strpos($sk, 'sk_test_') === 0);
 
+/*
+ * Card-testing guard. A card tester fires many small charges against many references and
+ * never completes them, so the visible signature is a burst of unresolved transactions for
+ * one customer on one merchant. Cap that. Live only (sandbox volume is irrelevant) and
+ * configurable, with a permissive default so a healthy merchant is never surprised.
+ *
+ * Note: Paystack sends no webhook for *declined* charges, so declines are not observable
+ * server-side - velocity has to be measured here, at initialize time.
+ */
+if ($amount > 0 && !$is_test) {
+    ensure_payment_schema();
+    $max_open = max(1, (int)getConfig('max_open_pending_per_customer', '5'));
+    $window_minutes = max(1, (int)getConfig('pending_velocity_window_minutes', '15'));
+
+    // $window_minutes is cast to int above, so interpolating it cannot inject.
+    $stmt = $db->prepare("SELECT COUNT(*) FROM transactions WHERE user_id = ? AND customer_email = ? AND is_test = 0 AND status = 'pending' AND created_at >= DATE_SUB(NOW(), INTERVAL $window_minutes MINUTE)");
+    $stmt->execute([$user['id'], $email]);
+
+    if ((int)$stmt->fetchColumn() >= $max_open) {
+        http_response_code(429);
+        echo json_encode([
+            'status' => false,
+            'message' => 'Too many unresolved payment attempts for this customer. Please complete or abandon the existing attempt first.',
+        ]);
+        exit;
+    }
+}
+
 // Only create a transaction if amount is greater than 0
 if ($amount > 0) {
     // Create transaction in pending state

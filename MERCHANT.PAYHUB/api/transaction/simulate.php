@@ -7,6 +7,7 @@ require_once '../../includes/functions.php';
 header('Content-Type: application/json');
 
 $db = Database::connect();
+ensure_payment_schema();
 
 $ref = $_GET['reference'] ?? '';
 if (!$ref) {
@@ -31,6 +32,20 @@ if (!(bool)$tx['is_test']) {
     exit;
 }
 
+/*
+ * Require the single-use token that checkout.php issued for this transaction. The endpoint
+ * previously accepted any caller at all - checkout.php sent an Authorization header that
+ * was never checked - so anyone who learned a sandbox reference could flip it. The token is
+ * single-use so a leaked URL cannot be replayed, and it is verified in constant time.
+ */
+$presented_token = (string)($_GET['token'] ?? '');
+$stored_token    = (string)($tx['checkout_token'] ?? '');
+if ($stored_token === '' || $presented_token === '' || !hash_equals($stored_token, $presented_token)) {
+    http_response_code(403);
+    echo json_encode(['status' => false, 'message' => 'Forbidden: missing or invalid checkout token']);
+    exit;
+}
+
 $user_id = $tx['user_id'];
 
 if ($tx['status'] === 'success') {
@@ -44,7 +59,8 @@ try {
     $fee = calculate_fees($amount, false, $user_id);
     $settled = $amount - $fee;
 
-    $stmt = $db->prepare("UPDATE transactions SET status = 'success', fee_amount = ?, settled_amount = ?, gateway_reference = ? WHERE id = ?");
+    // Spend the token as part of the same statement, so it cannot be replayed.
+    $stmt = $db->prepare("UPDATE transactions SET status = 'success', fee_amount = ?, settled_amount = ?, gateway_reference = ?, checkout_token = NULL WHERE id = ?");
     $stmt->execute([$fee, $settled, 'SIMULATED_' . strtoupper(bin2hex(random_bytes(4))), $tx['id']]);
 
     // Sandbox simulation settles exactly what was recorded, so mirror that into
@@ -52,7 +68,8 @@ try {
     record_gateway_amount($tx['id'], $amount);
 
     log_ledger_entry($user_id, $settled, 'credit', 'payment', "Sandbox simulated payment: $ref", true);
-    log_transaction_event($tx['id'], 'simulated', 'Payment marked successful via sandbox simulate endpoint');
+    log_transaction_event($tx['id'], 'simulated', 'Sandbox payment marked successful from ' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown')
+        . ' (UA: ' . substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 120) . ').');
 
     $db->commit();
 

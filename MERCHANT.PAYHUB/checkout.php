@@ -16,6 +16,24 @@ $tx = $stmt->fetch();
 $isTest = $tx ? (bool)$tx['is_test'] : false;
 $pk = $isTest ? getConfig('paystack_test_public_key') : getConfig('paystack_public_key');
 
+/*
+ * Sandbox only: issue a single-use token so api/transaction/simulate.php can tell a real
+ * visit to this page apart from a blind request against the endpoint. A merchant secret
+ * key cannot be used here - this page runs in the payer's browser - and the Authorization
+ * header this page used to send was never validated, so it implied a check that did not
+ * exist. The token is stored against the transaction and cleared when it is spent.
+ */
+$simulateToken = '';
+if ($isTest && $tx) {
+    ensure_payment_schema();
+    $simulateToken = bin2hex(random_bytes(16));
+    try {
+        $db->prepare("UPDATE transactions SET checkout_token = ? WHERE id = ?")->execute([$simulateToken, $tx['id']]);
+    } catch (\Throwable $e) {
+        $simulateToken = ''; // no token means the sandbox button will refuse, never silently credit
+    }
+}
+
 $amount = $tx ? (float)$tx['amount'] : (float)($_GET['amount'] ?? 1000);
 // Sanitize the query-string branch: only the $tx branch has been through
 // sanitize() (at initialize time). This value is rendered into the page and
@@ -151,11 +169,8 @@ function simulateSuccess() {
     btn.disabled = true;
     btn.textContent = 'Processing...';
 
-    fetch(<?php echo $jsEnc(BASE_URL . 'api/transaction/simulate.php?reference=' . urlencode($ref)); ?>, {
-        method: 'GET',
-        headers: {
-            'Authorization': 'Bearer ' + <?php echo $jsEnc($pk); ?>
-        }
+    fetch(<?php echo $jsEnc(BASE_URL . 'api/transaction/simulate.php?reference=' . urlencode($ref) . '&token=' . urlencode($simulateToken)); ?>, {
+        method: 'GET'
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {

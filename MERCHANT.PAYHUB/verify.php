@@ -7,6 +7,11 @@ $ref = sanitize($_GET['reference'] ?? '');
 if (!$ref) redirect('index.php');
 
 $db = Database::connect();
+
+// Prime the payment-integrity columns and the reversals table before any transaction is
+// opened - MySQL implicitly commits on DDL, which would release a fulfilment claim early.
+ensure_payment_schema();
+
 $stmt = $db->prepare("SELECT * FROM transactions WHERE reference = ?");
 $stmt->execute([$ref]);
 $tx = $stmt->fetch();
@@ -153,6 +158,9 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
                     // Persist the gateway-confirmed figure so the merchant webhook
                     // can validate the amount it is about to announce.
                     record_gateway_amount($tx['id'], $gateway_amount);
+
+                    // Card fingerprint, for repeat-abuse detection and dispute defence.
+                    store_card_fingerprint($tx['id'], $res['data']['authorization'] ?? null);
 
                     // Update or Create Customer record
                     $stmt = $db->prepare("SELECT id FROM customers WHERE user_id = ? AND email = ?");

@@ -503,11 +503,21 @@ function paystack_call($endpoint, $method = 'GET', $data = [], $is_test = null) 
         $user = getAuthUser();
         $is_test = $user ? ($user['is_test_mode'] == 1) : false;
     }
+    $is_test = (bool)$is_test;
 
+    /*
+     * STRICT MODE SEPARATION. The key for the requested mode is used and nothing else.
+     * This previously fell back to the live key when no test key was configured, which
+     * let a sandbox operation act on the live Paystack account (and a live one be
+     * verified against whatever key happened to be configured). Fail closed instead:
+     * callers treat a failed call as "unverified", and every fulfilment path already
+     * refuses to credit an unverified payment.
+     */
     $secret_key = $is_test ? getConfig('paystack_test_secret_key') : getConfig('paystack_secret_key');
-    if (!$secret_key) $secret_key = getConfig('paystack_secret_key'); // Fallback to live key if test not set
-
-    if (!$secret_key) return ['status' => false, 'message' => 'Paystack not configured'];
+    if (!$secret_key) {
+        error_log('[PayHub] paystack_call refused: no ' . ($is_test ? 'test' : 'live') . ' Paystack secret key configured.');
+        return ['status' => false, 'message' => 'Paystack ' . ($is_test ? 'test' : 'live') . ' secret key is not configured'];
+    }
 
     $url = "https://api.paystack.co/" . $endpoint;
     $headers = [
@@ -544,6 +554,15 @@ function paystack_call($endpoint, $method = 'GET', $data = [], $is_test = null) 
     } catch (\Throwable $t) {}
 
     $result = json_decode($response, true);
+
+    // Surface the HTTP status so callers can tell "gateway unreachable" (retry later) apart
+    // from "this reference does not exist" (Paystack answers 404 transaction_not_found, which
+    // for reconciliation means the charge was never created and can be safely expired).
+    // Prefixed so it can never collide with a Paystack field.
+    if (is_array($result)) {
+        $result['_http_code'] = (int)$http_code;
+    }
+
     return $result;
 }
 
@@ -816,6 +835,14 @@ function ensure_column($table, $column, $definition) {
         $stmt->execute([$column]);
         if ($stmt->fetch()) return $cache[$key] = true;
 
+        // MySQL implicitly commits on DDL, so an ALTER issued inside an open transaction
+        // would release a fulfilment claim early and break the exactly-once guarantee.
+        // Entry points call ensure_payment_schema() before opening one.
+        if ($db->inTransaction()) {
+            error_log("[PayHub] ensure_column($key) skipped: DDL refused inside an open transaction.");
+            return false; // deliberately not cached - a later call outside one may still succeed
+        }
+
         $db->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
         return $cache[$key] = true;
     } catch (\Throwable $e) {
@@ -872,10 +899,13 @@ function flag_amount_mismatch($tx, $expected, $paid, $context = 'fulfilment') {
     if ($txId) {
         log_transaction_event($txId, 'amount_mismatch', $desc);
 
-        // Mark failed so a later gateway retry cannot quietly re-fulfil it.
+        // Mark failed, and label *why*. 'failed' alone conflates "nothing was ever
+        // paid" (benign, thousands of them) with "we blocked a manipulation attempt"
+        // (a fraud signal worth alerting on).
+        ensure_column('transactions', 'failure_reason', 'VARCHAR(50) DEFAULT NULL');
         try {
             $db = Database::connect();
-            $db->prepare("UPDATE transactions SET status = 'failed' WHERE id = ? AND (status IS NULL OR status <> 'success')")
+            $db->prepare("UPDATE transactions SET status = 'failed', failure_reason = 'amount_mismatch' WHERE id = ? AND (status IS NULL OR status <> 'success')")
                ->execute([$txId]);
         } catch (\Throwable $e) {
             // Non-fatal: the transaction simply stays pending for review.
@@ -919,6 +949,210 @@ function claim_transaction_for_fulfilment($transactionId) {
     $stmt = $db->prepare("UPDATE transactions SET status = 'success' WHERE id = ? AND (status IS NULL OR status <> 'success')");
     $stmt->execute([$transactionId]);
     return $stmt->rowCount() === 1;
+}
+
+/**
+ * Creates a table when it does not exist yet. Same contract as ensure_column():
+ * never throws, refuses to run DDL inside a transaction, and is idempotent.
+ */
+function ensure_table($table, $ddl) {
+    static $cache = [];
+    if (array_key_exists($table, $cache)) return $cache[$table];
+
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table)) return $cache[$table] = false;
+
+    try {
+        $db = Database::connect();
+        $stmt = $db->prepare("SHOW TABLES LIKE ?");
+        $stmt->execute([$table]);
+        if ($stmt->fetch()) return $cache[$table] = true;
+
+        if ($db->inTransaction()) {
+            error_log("[PayHub] ensure_table($table) skipped: DDL refused inside an open transaction.");
+            return false;
+        }
+
+        $db->exec($ddl);
+        return $cache[$table] = true;
+    } catch (\Throwable $e) {
+        return $cache[$table] = false;
+    }
+}
+
+/**
+ * Primes everything the payment-integrity code needs.
+ *
+ * MUST be called before a transaction is opened, because MySQL implicitly commits on
+ * DDL. Every payment entry point (webhook, verify pages, API verify, expiry cron)
+ * calls this first so the columns are guaranteed to exist by the time money moves.
+ */
+function ensure_payment_schema() {
+    ensure_column('transactions', 'gateway_amount', 'DECIMAL(15,2) DEFAULT NULL');
+    ensure_column('transactions', 'failure_reason', 'VARCHAR(50) DEFAULT NULL');
+    ensure_column('transactions', 'card_bin', 'VARCHAR(20) DEFAULT NULL');
+    ensure_column('transactions', 'card_last4', 'VARCHAR(8) DEFAULT NULL');
+    ensure_column('transactions', 'card_type', 'VARCHAR(40) DEFAULT NULL');
+    ensure_column('transactions', 'card_country', 'VARCHAR(8) DEFAULT NULL');
+    ensure_column('transactions', 'checkout_token', 'VARCHAR(64) DEFAULT NULL');
+
+    ensure_table('transaction_reversals', "CREATE TABLE IF NOT EXISTS transaction_reversals (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id INT NOT NULL,
+        reversal_reference VARCHAR(120) NOT NULL,
+        kind VARCHAR(40) NOT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_reversal_reference (reversal_reference),
+        KEY idx_tx (transaction_id)
+    ) ENGINE=InnoDB");
+}
+
+/**
+ * Persists the card fingerprint from a gateway response so repeat abuse is detectable
+ * and chargebacks can be defended with evidence.
+ *
+ * Safe to call inside a fulfilment transaction: ensure_payment_schema() has already
+ * created the columns, and ensure_column() refuses DDL here.
+ */
+function store_card_fingerprint($transactionId, $authorization) {
+    if (!is_array($authorization) || empty($authorization)) return false;
+
+    $candidates = [
+        'card_bin'     => $authorization['bin'] ?? null,
+        'card_last4'   => $authorization['last4'] ?? null,
+        'card_type'    => $authorization['card_type'] ?? ($authorization['brand'] ?? null),
+        'card_country' => $authorization['country_code'] ?? null,
+    ];
+
+    $sets = [];
+    $params = [];
+    foreach ($candidates as $col => $value) {
+        if ($value === null || $value === '') continue;
+        $sets[] = "`$col` = ?";
+        $params[] = substr((string)$value, 0, 20);
+    }
+    if (!$sets) return false;
+
+    $params[] = $transactionId;
+    try {
+        $db = Database::connect();
+        $stmt = $db->prepare("UPDATE transactions SET " . implode(', ', $sets) . " WHERE id = ?");
+        return $stmt->execute($params);
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Records money being pulled back from a merchant - a refund, a lost dispute or a
+ * chargeback - and debits the ledger exactly once per reversal reference.
+ *
+ * Two independent guards, because over-debiting a merchant is a real-money error:
+ *  1. `reversal_reference` is UNIQUE, so a retried webhook cannot debit twice.
+ *  2. The running total can never exceed what was credited in the first place, so two
+ *     different references describing the same refund (e.g. a dashboard refund that
+ *     also arrives as refund.processed) cannot debit twice either.
+ * Partial reversals accumulate; `status` only flips to 'refunded' once fully reversed.
+ *
+ * @return array{applied:bool, debited:float, reason:string}
+ */
+function record_transaction_reversal($transactionId, $reversalReference, $amount, $kind = 'refund') {
+    $db = Database::connect();
+
+    $stmt = $db->prepare("SELECT * FROM transactions WHERE id = ?");
+    $stmt->execute([$transactionId]);
+    $tx = $stmt->fetch();
+    if (!$tx) return ['applied' => false, 'debited' => 0.0, 'reason' => 'not_found'];
+
+    // What did we actually credit? That is the hard ceiling on any reversal.
+    $credited = (float)$tx['settled_amount'];
+    if ($credited <= 0) $credited = (float)$tx['amount'];
+
+    // Guard 1: per-event idempotency. INSERT IGNORE + rowCount() is atomic.
+    try {
+        $ins = $db->prepare("INSERT IGNORE INTO transaction_reversals (transaction_id, reversal_reference, kind, amount) VALUES (?, ?, ?, ?)");
+        $ins->execute([$transactionId, substr((string)$reversalReference, 0, 120), substr((string)$kind, 0, 40), (float)$amount]);
+        if ($ins->rowCount() !== 1) {
+            return ['applied' => false, 'debited' => 0.0, 'reason' => 'duplicate'];
+        }
+    } catch (\Throwable $e) {
+        error_log('[PayHub] reversal record failed: ' . $e->getMessage());
+        return ['applied' => false, 'debited' => 0.0, 'reason' => 'db_error'];
+    }
+
+    // Guard 2: never reverse more in total than was credited.
+    $already = 0.0;
+    try {
+        $sum = $db->prepare("SELECT COALESCE(SUM(amount), 0) FROM transaction_reversals WHERE transaction_id = ? AND reversal_reference <> ?");
+        $sum->execute([$transactionId, substr((string)$reversalReference, 0, 120)]);
+        $already = (float)$sum->fetchColumn();
+    } catch (\Throwable $e) { /* treat as zero; guard 1 still applies */ }
+
+    $remaining = round($credited - $already, 2);
+    $debit = min(round((float)$amount, 2), max(0.0, $remaining));
+
+    if ($debit <= 0) {
+        log_transaction_event($transactionId, 'reversal_capped', "Reversal '$kind' for " . number_format((float)$amount, 2)
+            . " not applied: the credit of " . number_format($credited, 2) . " is already fully reversed.");
+        return ['applied' => false, 'debited' => 0.0, 'reason' => 'already_reversed'];
+    }
+
+    // Credit test transactions in the ledger only - a sandbox reversal must never move
+    // a real balance.
+    log_ledger_entry($tx['user_id'], $debit, 'debit', $kind,
+        ucfirst($kind) . ' for Ref: ' . $tx['reference'] . " (" . $reversalReference . ")",
+        ((int)$tx['is_test'] === 1));
+
+    $total = $already + $debit;
+    if ($total >= $credited - 0.01) {
+        try {
+            $db->prepare("UPDATE transactions SET status = 'refunded' WHERE id = ? AND status = 'success'")->execute([$transactionId]);
+        } catch (\Throwable $e) { /* status is cosmetic; the ledger is authoritative */ }
+    }
+
+    log_transaction_event($transactionId, 'reversal_applied', ucfirst($kind) . " of " . number_format($debit, 2)
+        . " debited (" . number_format($total, 2) . " of " . number_format($credited, 2) . " reversed). Ref: " . $reversalReference);
+
+    return ['applied' => true, 'debited' => $debit, 'reason' => 'ok'];
+}
+
+/**
+ * Undoes a reversal when a dispute is won, putting the credit back. Guarded on the
+ * reversal actually having been applied, so a won dispute on an untouched (or not yet
+ * reversed) transaction cannot conjure money.
+ */
+function restore_transaction_reversal($transactionId, $reversalReference) {
+    $db = Database::connect();
+
+    try {
+        // Only restore a reversal we know about, and only once.
+        $sel = $db->prepare("SELECT amount, kind FROM transaction_reversals WHERE transaction_id = ? AND reversal_reference = ? AND kind <> 'restored' LIMIT 1");
+        $sel->execute([$transactionId, substr((string)$reversalReference, 0, 120)]);
+        $row = $sel->fetch();
+        if (!$row) return ['applied' => false, 'reason' => 'nothing_to_restore'];
+
+        $mark = $db->prepare("UPDATE transaction_reversals SET kind = 'restored' WHERE transaction_id = ? AND reversal_reference = ? AND kind <> 'restored'");
+        $mark->execute([$transactionId, substr((string)$reversalReference, 0, 120)]);
+        if ($mark->rowCount() !== 1) return ['applied' => false, 'reason' => 'already_restored'];
+
+        $stmt = $db->prepare("SELECT * FROM transactions WHERE id = ?");
+        $stmt->execute([$transactionId]);
+        $tx = $stmt->fetch();
+        if (!$tx) return ['applied' => false, 'reason' => 'not_found'];
+
+        log_ledger_entry($tx['user_id'], (float)$row['amount'], 'credit', 'chargeback_won',
+            'Dispute won - reversal restored for Ref: ' . $tx['reference'], ((int)$tx['is_test'] === 1));
+
+        try {
+            $db->prepare("UPDATE transactions SET status = 'success' WHERE id = ? AND status = 'refunded'")->execute([$transactionId]);
+        } catch (\Throwable $e) { /* cosmetic */ }
+
+        log_transaction_event($transactionId, 'reversal_restored', 'Dispute won - ' . number_format((float)$row['amount'], 2) . ' credited back.');
+        return ['applied' => true, 'reason' => 'ok'];
+    } catch (\Throwable $e) {
+        error_log('[PayHub] restore_transaction_reversal failed: ' . $e->getMessage());
+        return ['applied' => false, 'reason' => 'db_error'];
+    }
 }
 
 function calculate_fees($amount, $is_international = false, $userId = null) {
@@ -1023,11 +1257,22 @@ function trigger_merchant_webhook($transactionId) {
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
-            // Log Webhook Forwarding
+            // Record the delivery attempt in the schema admin/webhooks.php reads
+            // (transaction_id, status, attempt_count, last_attempt_at, payload, response).
+            // This previously inserted (user_id, event_type, response_code) - columns that
+            // do not exist in webhook_logs - inside a swallowed catch, so *every* outbound
+            // merchant webhook went unlogged and the admin page was permanently empty.
             try {
-                $stmtLog = $db->prepare("INSERT INTO webhook_logs (user_id, event_type, payload, response_code) VALUES (?, ?, ?, ?)");
-                $stmtLog->execute([$tx['user_id'], 'charge.success', json_encode($payload), (int)$code]);
-            } catch (\Throwable $t) {}
+                $stmtLog = $db->prepare("INSERT INTO webhook_logs (transaction_id, status, attempt_count, last_attempt_at, payload, response) VALUES (?, ?, 1, CURRENT_TIMESTAMP, ?, ?)");
+                $stmtLog->execute([
+                    $tx['id'],
+                    (($code >= 200 && $code < 300) ? 'success' : 'failed'),
+                    json_encode($payload),
+                    'HTTP ' . (int)$code
+                ]);
+            } catch (\Throwable $t) {
+                error_log('[PayHub] webhook_logs write failed: ' . $t->getMessage());
+            }
         }
     } catch (\Throwable $e) {}
 }

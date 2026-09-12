@@ -34,9 +34,10 @@ if (!$ref) {
     exit;
 }
 
-// Self-heal the settled-amount column before the SELECT * below, so installs that
-// have not run install/migrate.php still return the authoritative figure.
-ensure_column('transactions', 'gateway_amount', 'DECIMAL(15,2) DEFAULT NULL');
+// Self-heal every payment-integrity column and the reversals table before the SELECT *,
+// so installs that have not run install/migrate.php still work - and so no DDL is
+// attempted later, inside the fulfilment transaction.
+ensure_payment_schema();
 
 $stmt = $db->prepare("SELECT * FROM transactions WHERE reference = ? AND user_id = ?");
 $stmt->execute([$ref, $user['id']]);
@@ -97,6 +98,9 @@ if ($tx['status'] !== 'success') {
                 // Persist the gateway-confirmed figure so downstream consumers (the
                 // merchant webhook, admin reporting) work from evidence.
                 record_gateway_amount($tx['id'], $amount);
+
+                // Card fingerprint, for repeat-abuse detection and dispute defence.
+                store_card_fingerprint($tx['id'], $data['authorization'] ?? null);
 
                 log_ledger_entry($user['id'], $settled, 'credit', 'payment', "Real-time Verified Payment: $ref", $is_test);
                 log_transaction_event($tx['id'], 'verified', 'Payment verified and fulfilled via real-time API check');

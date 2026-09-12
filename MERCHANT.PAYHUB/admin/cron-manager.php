@@ -22,6 +22,12 @@ $cron_jobs = [
         'desc' => 'Monitors API uptime and database performance.',
         'schedule' => '*/5 * * * *',
         'command' => $php_path . ' ' . $base_path . '/includes/health-cron.php'
+    ],
+    [
+        'name' => 'Transaction Expiry Reconciliation',
+        'desc' => 'Verifies abandoned pending transactions against Paystack, recovers any that were actually paid, and only then marks the rest failed. Do not replace with a blind timeout.',
+        'schedule' => '*/30 * * * *',
+        'command' => $php_path . ' ' . $base_path . '/includes/transaction-expiry-cron.php'
     ]
 ];
 

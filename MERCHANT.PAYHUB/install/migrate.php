@@ -162,6 +162,16 @@ function run_migrations() {
                 event_type VARCHAR(100) NOT NULL,
                 description TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB",
+            'transaction_reversals' => "CREATE TABLE IF NOT EXISTS transaction_reversals (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                transaction_id INT NOT NULL,
+                reversal_reference VARCHAR(120) NOT NULL,
+                kind VARCHAR(40) NOT NULL,
+                amount DECIMAL(15, 2) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_reversal_reference (reversal_reference),
+                KEY idx_tx (transaction_id)
             ) ENGINE=InnoDB"
         ];
 
@@ -217,6 +227,12 @@ function run_migrations() {
             'transactions' => [
                 'currency' => "VARCHAR(10) DEFAULT 'NGN'",
                 'gateway_amount' => "DECIMAL(15, 2) DEFAULT NULL",
+                'failure_reason' => "VARCHAR(50) DEFAULT NULL",
+                'card_bin' => "VARCHAR(20) DEFAULT NULL",
+                'card_last4' => "VARCHAR(8) DEFAULT NULL",
+                'card_type' => "VARCHAR(40) DEFAULT NULL",
+                'card_country' => "VARCHAR(8) DEFAULT NULL",
+                'checkout_token' => "VARCHAR(64) DEFAULT NULL",
                 'fee_amount' => "DECIMAL(15, 2) DEFAULT 0.00",
                 'settled_amount' => "DECIMAL(15, 2) DEFAULT 0.00",
                 'gateway_reference' => "VARCHAR(100)",

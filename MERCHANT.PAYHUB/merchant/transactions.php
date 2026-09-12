@@ -21,27 +21,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $tx = $stmt->fetch();
 
     if ($tx) {
-        // Perform Refund via Paystack API
+        // Perform Refund via Paystack API.
+        // The transaction's OWN mode picks the Paystack key: passing nothing let
+        // paystack_call fall back to the merchant's account-wide flag, so refunding a
+        // sandbox payment could hit the LIVE Paystack API.
         $refund_res = paystack_call('refund', 'POST', [
             'transaction' => $tx['gateway_reference'] ?: $tx['reference'],
             'amount' => $tx['amount'] * 100
-        ]);
+        ], (bool)$tx['is_test']);
 
         if ($refund_res && $refund_res['status']) {
+            ensure_payment_schema();
             $db->beginTransaction();
             try {
-                // Update transaction status
-                $stmt = $db->prepare("UPDATE transactions SET status = 'refunded' WHERE id = ?");
-                $stmt->execute([$txId]);
-
-                // Log ledger entry for refund (debit merchant balance)
-                log_ledger_entry($user['id'], $tx['amount'], 'debit', 'refund', "Refund for transaction {$tx['reference']}");
-
-                // Log timeline event
-                log_transaction_event($txId, 'refund_processed', "Refund of " . formatCurrency($tx['amount']) . " processed via Paystack.");
+                // Reverse the credit through the shared, idempotent reversal path. It debits
+                // on the same basis as a gateway-initiated refund and records the reversal, so
+                // when Paystack also reports refund.processed the merchant is not debited twice.
+                $credited = (float)$tx['settled_amount'] > 0 ? (float)$tx['settled_amount'] : (float)$tx['amount'];
+                $refund_ref = 'refund:local:' . ($refund_res['data']['id'] ?? ($refund_res['data']['reference'] ?? $tx['reference']));
+                $reversal = record_transaction_reversal($txId, $refund_ref, $credited, 'refund');
 
                 $db->commit();
-                $success_msg = "Refund processed successfully!";
+
+                if ($reversal['applied']) {
+                    $success_msg = "Refund processed successfully!";
+                } else {
+                    // Paystack refunded but our ledger already reflected it (or the charge was
+                    // never credited). Never debit twice - surface it for a human instead.
+                    $error_msg = "Paystack processed the refund, but no ledger debit was needed (" . $reversal['reason'] . "). Please verify the merchant balance.";
+                }
             } catch (Exception $e) {
                 $db->rollBack();
                 $error_msg = "Database Error: " . $e->getMessage();

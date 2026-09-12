@@ -44,10 +44,12 @@ if (!empty($merchant_id)) {
     $params[] = $merchant_id;
 }
 
-// Amount-manipulation review: rows where the gateway settled a different figure
-// than the merchant asked us to collect.
+// Integrity review: transactions that were credited at a different amount than requested,
+// or blocked outright. failure_reason is written only by the integrity guards
+// (amount_mismatch / mode_mismatch) and by the expiry cron (expired), so this is the
+// filter for "something was wrong here" as opposed to "nothing was ever paid".
 if ($mismatch === '1') {
-    $query .= " AND t.gateway_amount IS NOT NULL AND t.gateway_amount <> t.amount";
+    $query .= " AND ((t.gateway_amount IS NOT NULL AND t.gateway_amount <> t.amount) OR t.failure_reason IS NOT NULL)";
 }
 
 $query .= " ORDER BY t.created_at DESC LIMIT $limit OFFSET $offset";
@@ -73,7 +75,7 @@ try {
         $countParams[] = $merchant_id;
     }
     if ($mismatch === '1') {
-        $countQuery .= " AND t.gateway_amount IS NOT NULL AND t.gateway_amount <> t.amount";
+        $countQuery .= " AND ((t.gateway_amount IS NOT NULL AND t.gateway_amount <> t.amount) OR t.failure_reason IS NOT NULL)";
     }
     $cStmt = $db->prepare($countQuery);
     $cStmt->execute($countParams);
