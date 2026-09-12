@@ -95,7 +95,28 @@ if ($event == 'charge.success' || ($catch['status'] ?? '') == 'success' || ($cat
     }
 
     // 3. Process payment and credit wallet
-    $result_ref = processPayhubSuccess($vid, $reference, $data, $payhub_keys, $username);
+    //
+    // SECURITY: credit from the SERVER-VERIFIED PayHub response, never from the posted
+    // webhook body. The body is unsigned, so anyone can POST
+    // {"status":"success","amount":<anything>,"metadata":{...}}. The verification above
+    // only proves the REFERENCE was paid - it says nothing about whether this body is
+    // truthful. Passing $data here would let the caller dictate `amount`, and the
+    // domain/gateway_amount guards inside processPayhubSuccess would then be reading
+    // attacker-supplied values as well.
+    $v_tx_meta = [];
+    if (!empty($v_tx_data['metadata'])) {
+        $v_tx_meta = is_array($v_tx_data['metadata']) ? $v_tx_data['metadata'] : json_decode($v_tx_data['metadata'], true);
+        if (!is_array($v_tx_meta)) $v_tx_meta = [];
+    }
+    // Verified metadata is what PayHub recorded at initialize time, so it is the authority
+    // on which account this payment belongs to. Fall back to the posted body only when
+    // PayHub returned none (older transactions).
+    if (!empty($v_tx_meta['vendor_id'])) $vid = (int)$v_tx_meta['vendor_id'];
+    if (!empty($v_tx_meta['username']))  $username = $v_tx_meta['username'];
+    if (!empty($v_tx_meta['target']))    $target = $v_tx_meta['target'];
+    if (empty($v_tx_data['reference']))  $v_tx_data['reference'] = $reference;
+
+    $result_ref = processPayhubSuccess($vid, $v_tx_data['reference'], $v_tx_data, $payhub_keys, $username);
 
     if ($result_ref) {
         logPayhub("Successfully processed $reference. Local Ref: $result_ref");

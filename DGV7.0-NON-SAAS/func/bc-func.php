@@ -3708,8 +3708,11 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
     }
 
     // 2. Account Number lookup fallback (for direct VA payments where we only have receiver account)
-    // Support both receiver_bank_account_number and account_number fields, even nested
-    $acc_no = $data['receiver_bank_account_number'] ?? ($data['account_number'] ?? ($data['virtual_account']['account_number'] ?? ""));
+    // Support both receiver_bank_account_number and account_number fields, even nested.
+    // $meta['receiver_account_number'] is the copy PayHub stores in the transaction metadata, so
+    // checking it keeps VA resolution working now that callers pass the verified PayHub response
+    // rather than the forwarded Paystack payload (which carried the top-level field).
+    $acc_no = $data['receiver_bank_account_number'] ?? ($data['account_number'] ?? ($data['virtual_account']['account_number'] ?? ($meta['receiver_account_number'] ?? "")));
     if ((empty($username) || $vendor_id <= 0) && !empty($acc_no)) {
         $log("Attempting resolution via account number: $acc_no");
         $acc_no_esc = mysqli_real_escape_string($connection_server, $acc_no);
@@ -3780,6 +3783,26 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
     // 4. Amount Calculation
     $customer_email = $data["email"] ?? ($data["customer"]["email"] ?? "");
     $raw_amount = (float)($data["amount"] ?? ($data["amount_paid"] ?? 0));
+
+    // SECURITY: only the test/live marker PayHub returns may gate crediting. This $data comes
+    // from OUR server-to-server verify call, so unlike a browser callback it cannot be forged
+    // by the payer. An absent value means an older PayHub build - default to live rather than
+    // breaking real payments.
+    $payhub_domain = strtolower(trim((string)($data["domain"] ?? '')));
+    if ($payhub_domain === 'test') {
+        $log("BLOCKED: PayHub reports this payment as TEST/sandbox (ref: $transaction_ref). Refusing to fund a real wallet with sandbox money.");
+        return false;
+    }
+
+    // PayHub reports the amount the GATEWAY ACTUALLY SETTLED separately from the amount we
+    // asked for. `amount` is our own requested figure echoed back, so comparing it with the
+    // record below can never detect an underpayment - it matches by construction. Only the
+    // settled figure is evidence that money arrived. PayHub reports it in minor units (kobo).
+    $settled_naira = 0;
+    if (isset($data["gateway_amount"]) && is_numeric($data["gateway_amount"]) && (float)$data["gateway_amount"] > 0) {
+        $settled_naira = (float)$data["gateway_amount"] / 100;
+    }
+
     $channel = strtolower($data['channel'] ?? '');
 
     // Try to find expected amount from existing record to resolve Naira/Kobo ambiguity
@@ -3801,23 +3824,39 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
     }
 
     if ($expected_naira > 0) {
-        if (abs($raw_amount - $expected_naira) < 0.1) {
-            $amount_paid = $raw_amount;
-            $fees = (float)($data["fees"] ?? 0);
-            $log("Match Found: Naira ($raw_amount)");
-        } elseif (abs(($raw_amount / 100) - $expected_naira) < 0.1) {
-            $amount_paid = $raw_amount / 100;
-            $fees = (float)($data["fees"] ?? 0) / 100;
-            $log("Match Found: Kobo ($raw_amount -> $amount_paid)");
-        } else {
-            // No direct match, fallback to heuristic
-            $is_kobo = ($raw_amount >= 500 && strpos((string)$raw_amount, '.') === false) || ($channel == 'dedicated_account');
-            $amount_paid = $is_kobo ? ($raw_amount / 100) : $raw_amount;
-            $fees = $is_kobo ? ((float)($data["fees"] ?? 0) / 100) : (float)($data["fees"] ?? 0);
-            $log("No Match: Heuristic " . ($is_kobo ? "Kobo" : "Naira") . " -> $amount_paid");
+        // Compare what the gateway SETTLED against what this reference was created for.
+        // Older PayHub builds do not send gateway_amount, so fall back to our requested
+        // figure read as both Naira and Kobo for backwards compatibility.
+        // Each candidate is [naira value, whether the incoming figure was in minor units].
+        $candidates = ($settled_naira > 0)
+            ? [[$settled_naira, true]]
+            : [[$raw_amount, false], [$raw_amount / 100, true]];
+
+        $amount_paid = null;
+        $reported_in_minor_units = false;
+        foreach ($candidates as $candidate) {
+            if (abs($candidate[0] - $expected_naira) < 0.1) {
+                $amount_paid = $candidate[0];
+                $reported_in_minor_units = $candidate[1];
+                break;
+            }
         }
+
+        if ($amount_paid === null) {
+            // SECURITY: a record exists for this reference, so the amount the customer was
+            // asked to pay is known exactly. Do NOT fall back to a heuristic and credit
+            // anyway - that is how a manipulated payment (PayHub reporting 10,175 against a
+            // settled 102.54) funds a wallet that was never paid for. Leave the record
+            // pending so it can be reviewed and credited by hand if the payment is genuine.
+            $log("BLOCKED amount mismatch: gateway settled $settled_naira (gateway_amount=" . ($data["gateway_amount"] ?? 'n/a') . ", amount=$raw_amount) but the recorded amount for this reference is $expected_naira. Refusing to credit.");
+            return false;
+        }
+
+        $fees = $reported_in_minor_units ? ((float)($data["fees"] ?? 0) / 100) : (float)($data["fees"] ?? 0);
+        $log("Match Found: $amount_paid (expected $expected_naira)");
     } else {
-        // New record (e.g. VA payment), use heuristic
+        // No local record (e.g. a dedicated-account deposit): the amount received IS the
+        // amount to credit, so the Naira/Kobo heuristic is the correct reading here.
         $is_kobo = ($raw_amount >= 500 && strpos((string)$raw_amount, '.') === false) || ($channel == 'dedicated_account');
         $amount_paid = $is_kobo ? ($raw_amount / 100) : $raw_amount;
         $fees = $is_kobo ? ((float)($data["fees"] ?? 0) / 100) : (float)($data["fees"] ?? 0);

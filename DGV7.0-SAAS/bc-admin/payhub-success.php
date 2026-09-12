@@ -73,7 +73,11 @@ if (!empty($reference) || !empty($payhub_ref)) {
                     $tx_status = strtolower($tx_data['status'] ?? '');
                     // PayHub's top-level status:true only means "transaction retrieved"; the real
                     // payment status is data.status. Only credit on an explicit success/successful.
-                    if ($tx_status == 'success' || $tx_status == 'successful') {
+                    if (strtolower(trim((string)($tx_data['domain'] ?? ''))) === 'test') {
+                        // Sandbox money must never fund a real wallet.
+                        $credit_status = 'error';
+                        $credit_message = 'This payment was made in TEST/sandbox mode, so your wallet was not funded.';
+                    } elseif ($tx_status == 'success' || $tx_status == 'successful') {
                         if (empty($tx_data['reference'])) $tx_data['reference'] = $verify_ref;
                         $tx_data['metadata'] = json_encode([
                             'vendor_id' => $vid,

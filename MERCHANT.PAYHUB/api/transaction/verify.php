@@ -34,6 +34,10 @@ if (!$ref) {
     exit;
 }
 
+// Self-heal the settled-amount column before the SELECT * below, so installs that
+// have not run install/migrate.php still return the authoritative figure.
+ensure_column('transactions', 'gateway_amount', 'DECIMAL(15,2) DEFAULT NULL');
+
 $stmt = $db->prepare("SELECT * FROM transactions WHERE reference = ? AND user_id = ?");
 $stmt->execute([$ref, $user['id']]);
 $tx = $stmt->fetch();
@@ -126,10 +130,23 @@ echo json_encode([
         'currency' => 'NGN',
         // Lets an integrating script refuse to credit sandbox payments.
         'domain' => ((int)$tx['is_test'] === 1) ? 'test' : 'live',
+        /*
+         * The amount the gateway ACTUALLY settled, in KOBO. `amount` above is the
+         * amount the merchant requested, echoed back - it matches the merchant's own
+         * record by construction and so can never reveal an underpayment. Only these
+         * three fields are evidence that money arrived. NULL when the gateway figure
+         * is not recorded (a row fulfilled before PayHub started capturing it).
+         */
+        'gateway_amount' => (isset($tx['gateway_amount']) && $tx['gateway_amount'] !== null && $tx['gateway_amount'] !== '')
+            ? to_minor_units($tx['gateway_amount'])
+            : null,
+        'fee_amount' => to_minor_units($tx['fee_amount'] ?? 0),
+        'settled_amount' => to_minor_units($tx['settled_amount'] ?? 0),
         'customer' => [
             'email' => $tx['customer_email']
         ],
         'gateway_response' => $tx['status'] === 'success' ? 'Successful' : ($response['data']['status'] ?? 'Pending'),
+        'channel' => $tx['payment_method'],
         'created_at' => $tx['created_at'],
         'metadata' => json_decode($tx['metadata'] ?? '[]', true)
     ]

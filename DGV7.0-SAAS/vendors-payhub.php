@@ -60,8 +60,21 @@ if ($event == 'charge.success' || ($catch['status'] ?? '') == 'success' || ($cat
         exit;
     }
 
-    $vid = (int)($meta['vendor_id'] ?? 0);
-    $result_ref = processPayhubSuccess($vid, $reference, $data, $payhub_keys);
+    // SECURITY: credit from the SERVER-VERIFIED PayHub response, never from the posted
+    // webhook body. The body is unsigned - verification above only proves the REFERENCE
+    // was paid, not that the body is truthful - so passing $data would let the caller
+    // dictate `amount` and the account the credit lands in.
+    $v_tx_meta = [];
+    if (!empty($v_tx_data['metadata'])) {
+        $v_tx_meta = is_array($v_tx_data['metadata']) ? $v_tx_data['metadata'] : json_decode($v_tx_data['metadata'], true);
+        if (!is_array($v_tx_meta)) $v_tx_meta = [];
+    }
+    // Prefer the vendor PayHub recorded against the transaction; fall back to the body.
+    $vid = (int)($v_tx_meta['vendor_id'] ?? 0);
+    if ($vid <= 0) $vid = (int)($meta['vendor_id'] ?? 0);
+    if (empty($v_tx_data['reference'])) $v_tx_data['reference'] = $reference;
+
+    $result_ref = processPayhubSuccess($vid, $v_tx_data['reference'], $v_tx_data, $payhub_keys);
 
     if ($result_ref) {
         logPayhubVendor("Successfully processed $reference. Local Ref: $result_ref");
