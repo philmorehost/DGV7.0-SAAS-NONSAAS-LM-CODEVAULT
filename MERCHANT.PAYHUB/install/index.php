@@ -84,6 +84,7 @@ if ($stage === 2 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 reference VARCHAR(100) UNIQUE NOT NULL,
                 gateway_reference VARCHAR(100),
                 amount DECIMAL(15, 2) NOT NULL,
+                gateway_amount DECIMAL(15, 2) DEFAULT NULL,
                 fee_amount DECIMAL(15, 2) DEFAULT 0.00,
                 settled_amount DECIMAL(15, 2) DEFAULT 0.00,
                 status ENUM('pending', 'success', 'failed', 'refunded') DEFAULT 'pending',

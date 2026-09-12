@@ -755,6 +755,172 @@ function calculate_payout_fee($amount) {
     return $transferFee + $stampDuty + $payhubMargin;
 }
 
+/* =============================================================================
+ * PAYMENT AMOUNT INTEGRITY
+ * =============================================================================
+ * `transactions.amount` is the amount a merchant ASKED us to collect. It is
+ * merchant-controlled and, for every hosted-checkout flow, it is also rendered
+ * into the page that calls Paystack Inline - so it can be rewritten in the
+ * browser, or skipped entirely by calling Paystack's API directly with the same
+ * reference. The amount the customer ACTUALLY settled is only ever known from
+ * the gateway response.
+ *
+ * Nothing used to compare the two. A customer could therefore pay a token sum
+ * (observed in production: NGN 102.54) while the stored record still said
+ * NGN 10,175.00. Every fulfilment path trusted the local figure, so the merchant
+ * webhook announced "charge.success, amount=1017500" and the merchant credited
+ * a wallet that was never funded.
+ *
+ * Every path that marks a transaction paid MUST:
+ *   1. call amounts_match() with the gateway figure, and
+ *   2. persist that figure via record_gateway_amount().
+ * ========================================================================== */
+
+/**
+ * Converts a currency value to integer minor units (kobo) so comparisons are
+ * exact and immune to binary floating-point representation drift.
+ */
+function to_minor_units($amount) {
+    return (int)round(((float)$amount) * 100);
+}
+
+/**
+ * True when the amount settled at the gateway equals the amount we expected to
+ * collect. The tolerance is in minor units and defaults to 1 kobo purely to
+ * absorb representation noise - far below any economically meaningful
+ * underpayment.
+ */
+function amounts_match($expected, $paid, $tolerance_minor = 1) {
+    return abs(to_minor_units($expected) - to_minor_units($paid)) <= $tolerance_minor;
+}
+
+/**
+ * Idempotently adds a column when the live database predates it, so installs
+ * that have not run install/migrate.php still gain the schema they need.
+ * Never throws: a read-only database user must not be able to break payments.
+ */
+function ensure_column($table, $column, $definition) {
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) return $cache[$key];
+
+    // Identifiers are whitelisted rather than escaped: they are interpolated
+    // into DDL, where bound placeholders are not permitted.
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+        return $cache[$key] = false;
+    }
+
+    try {
+        $db = Database::connect();
+        $stmt = $db->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
+        $stmt->execute([$column]);
+        if ($stmt->fetch()) return $cache[$key] = true;
+
+        $db->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+        return $cache[$key] = true;
+    } catch (\Throwable $e) {
+        return $cache[$key] = false;
+    }
+}
+
+/**
+ * Persists the amount the gateway actually settled. Returns false when the
+ * column could not be created; the payment itself must still proceed.
+ */
+function record_gateway_amount($transactionId, $paidAmount) {
+    if (!ensure_column('transactions', 'gateway_amount', 'DECIMAL(15,2) DEFAULT NULL')) {
+        return false;
+    }
+    try {
+        $db = Database::connect();
+        $stmt = $db->prepare("UPDATE transactions SET gateway_amount = ? WHERE id = ?");
+        return $stmt->execute([(float)$paidAmount, $transactionId]);
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * The amount the gateway is believed to have settled for a transaction, or null
+ * when there is no recorded evidence. Rows fulfilled before gateway_amount
+ * existed fall back to null so they can still be announced to merchants.
+ */
+function trusted_paid_amount($tx) {
+    if (isset($tx['gateway_amount']) && $tx['gateway_amount'] !== null && $tx['gateway_amount'] !== '') {
+        return (float)$tx['gateway_amount'];
+    }
+    return null;
+}
+
+/**
+ * Records an amount-manipulation attempt: the transaction is left unfulfilled,
+ * no wallet is credited, and the merchant is never told the payment succeeded.
+ * Returns the description that was logged.
+ */
+function flag_amount_mismatch($tx, $expected, $paid, $context = 'fulfilment') {
+    $txId = is_array($tx) ? ($tx['id'] ?? null) : $tx;
+    $ref  = is_array($tx) ? ($tx['reference'] ?? '?') : '?';
+
+    $desc = sprintf(
+        'BLOCKED amount mismatch during %s: expected %s, gateway settled %s for Ref: %s',
+        $context,
+        number_format((float)$expected, 2),
+        number_format((float)$paid, 2),
+        $ref
+    );
+
+    if ($txId) {
+        log_transaction_event($txId, 'amount_mismatch', $desc);
+
+        // Mark failed so a later gateway retry cannot quietly re-fulfil it.
+        try {
+            $db = Database::connect();
+            $db->prepare("UPDATE transactions SET status = 'failed' WHERE id = ? AND (status IS NULL OR status <> 'success')")
+               ->execute([$txId]);
+        } catch (\Throwable $e) {
+            // Non-fatal: the transaction simply stays pending for review.
+        }
+    }
+
+    error_log('[PayHub] ' . $desc);
+    return $desc;
+}
+
+/**
+ * Raised when a transaction was already fulfilled by a concurrent worker.
+ * Callers treat it as "already done" rather than as a failure: the payment is
+ * good, we simply must not credit it a second time.
+ */
+class AlreadyFulfilledException extends \RuntimeException {}
+
+/**
+ * Atomically transitions a transaction out of its pre-success state as the
+ * precondition for crediting money. Returns true only for the single caller
+ * that wins the race; every other concurrent worker gets false and MUST NOT
+ * credit.
+ *
+ * Why this exists: every fulfilment path guarded on a plain
+ * `SELECT * FROM transactions WHERE reference = ?` followed by
+ * `if ($tx['status'] !== 'success')`. Two workers - a Paystack webhook retry
+ * alongside the merchant polling api/transaction/verify.php, or a double page
+ * load of verify.php - could both read 'pending' and both credit the merchant
+ * wallet, because log_ledger_entry() is a read-modify-write (SELECT
+ * wallet_balance, then UPDATE).
+ *
+ * A single conditional UPDATE is atomic under InnoDB row locking: exactly one
+ * concurrent writer can observe the row still outside 'success'. Call this
+ * INSIDE the fulfilment transaction so the claim and the credit commit together.
+ */
+function claim_transaction_for_fulfilment($transactionId) {
+    // Deliberately no try/catch: `false` must mean exactly "another worker
+    // already fulfilled this". A database error has to propagate so the caller
+    // rolls back rather than being told the payment was handled.
+    $db = Database::connect();
+    $stmt = $db->prepare("UPDATE transactions SET status = 'success' WHERE id = ? AND (status IS NULL OR status <> 'success')");
+    $stmt->execute([$transactionId]);
+    return $stmt->rowCount() === 1;
+}
+
 function calculate_fees($amount, $is_international = false, $userId = null) {
     $percent = null;
     $flat = null;
@@ -799,13 +965,30 @@ function trigger_merchant_webhook($transactionId) {
         $tx = $stmt->fetch();
 
         if ($tx && !empty($tx['webhook_url']) && $tx['status'] === 'success') {
+            // SECURITY: only announce a payment we can independently account for.
+            // When the gateway figure is known and disagrees with the recorded
+            // amount, this "success" is the artefact of an amount-manipulation
+            // attempt - never tell the merchant to credit it.
+            $paid = trusted_paid_amount($tx);
+            if ($paid !== null && !amounts_match($tx['amount'], $paid)) {
+                flag_amount_mismatch($tx, $tx['amount'], $paid, 'merchant webhook');
+                return;
+            }
+
             $payload = [
                 'event' => 'charge.success',
                 'data' => [
                     'id' => $tx['gateway_reference'] ?? $tx['id'],
                     'reference' => $tx['reference'],
-                    'amount' => $tx['amount'] * 100,
+                    // Report what actually settled. `amount` is merchant-supplied
+                    // and must never be trusted as evidence of payment.
+                    'amount' => to_minor_units($paid !== null ? $paid : $tx['amount']),
                     'status' => 'success',
+                    // Tell the merchant whether this was real money. Paystack's own
+                    // webhooks carry this field; without it a sandbox payment is
+                    // indistinguishable from a live one and a merchant script that
+                    // credits on charge.success would fund a wallet for free.
+                    'domain' => ((int)$tx['is_test'] === 1) ? 'test' : 'live',
                     'currency' => $tx['currency'],
                     'customer' => ['email' => $tx['customer_email']],
                     'metadata' => json_decode($tx['metadata'] ?? '[]', true),

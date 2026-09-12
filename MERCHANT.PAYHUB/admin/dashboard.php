@@ -220,28 +220,49 @@ include '../includes/dashboard-head.php';
             <!-- Transaction Report -->
             <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden mb-8">
                 <div class="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                        <h3 class="font-bold text-lg text-slate-900">Live Transaction Report</h3>
-                        <p class="text-sm text-slate-500">Real-time feed of payments across all merchants</p>
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                            <i data-lucide="list" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-900">Live Transaction Report</h3>
+                            <p class="text-sm text-slate-500">Real-time feed of payments across all merchants</p>
+                        </div>
                     </div>
-                    <button class="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
-                        <i data-lucide="download" class="w-5 h-5"></i>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <div class="relative">
+                            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                            <input type="text" x-model="txSearch" @input.debounce.300ms="fetchTransactions()" 
+                                   placeholder="Search..." 
+                                   class="pl-9 pr-4 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500 outline-none transition-all w-full sm:w-64">
+                        </div>
+                        <button class="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                            <i data-lucide="download" class="w-5 h-5"></i>
+                        </button>
+                        <button @click="mismatchOnly = !mismatchOnly; resetPageAndFetch()"
+                                :class="mismatchOnly ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-500 border-slate-200 hover:text-red-600 hover:border-red-200'"
+                                title="Show only transactions where the gateway settled a different amount than requested"
+                                class="px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                            <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                            <span class="hidden sm:inline">Amount mismatch</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
-                        <thead>
-                            <tr class="bg-slate-50/50">
+                        <thead class="bg-slate-50/50">
+                            <tr>
                                 <th class="px-4 sm:px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Reference</th>
                                 <th class="hidden sm:table-cell px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Merchant</th>
                                 <th class="hidden lg:table-cell px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Customer</th>
                                 <th class="px-4 sm:px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Amount</th>
+                                <th class="hidden md:table-cell px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Settled</th>
                                 <th class="px-4 sm:px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</th>
                                 <th class="px-4 sm:px-8 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
-                            <template x-for="tx in (transactions || [])" :key="tx.id">
+                            <template x-for="tx in filteredTransactions" :key="tx.id">
                                 <tr class="hover:bg-slate-50/50 transition-colors">
                                     <td class="px-4 sm:px-8 py-4 font-mono text-xs text-slate-500" x-text="tx.reference"></td>
                                     <td class="hidden sm:table-cell px-8 py-4">
@@ -249,6 +270,11 @@ include '../includes/dashboard-head.php';
                                     </td>
                                     <td class="hidden lg:table-cell px-8 py-4 text-sm text-slate-600" x-text="tx.customer_email"></td>
                                     <td class="px-4 sm:px-8 py-4 text-sm font-bold text-slate-900" x-text="'₦' + parseFloat(tx.amount).toLocaleString(undefined, {minimumFractionDigits:2})"></td>
+                                    <td class="hidden md:table-cell px-8 py-4">
+                                        <span class="px-2 py-0.5 rounded-md font-mono text-xs font-bold"
+                                              :class="!tx.gateway_amount ? 'bg-slate-100 text-slate-400' : (parseFloat(tx.gateway_amount) === parseFloat(tx.amount) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-100 text-red-700')"
+                                              x-text="tx.gateway_amount ? '₦' + parseFloat(tx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits:2}) : 'unverified'"></span>
+                                    </td>
                                     <td class="px-4 sm:px-8 py-4">
                                         <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
                                               :class="tx.status === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'"
@@ -260,9 +286,35 @@ include '../includes/dashboard-head.php';
                                     </td>
                                 </tr>
                             </template>
+                            <template x-if="filteredTransactions.length === 0">
+                                <tr>
+                                    <td colspan="7" class="px-8 py-10 text-center text-slate-400 italic">
+                                        <span x-show="!loading">No transactions found.</span>
+                                        <span x-show="loading">Loading transactions...</span>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>
+                <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <p class="text-xs text-slate-500 font-medium">
+                        Showing <span class="font-bold text-slate-900" x-text="pagination.from"></span> to 
+                        <span class="font-bold text-slate-900" x-text="pagination.to"></span> of 
+                        <span class="font-bold text-slate-900" x-text="pagination.total"></span> transactions
+                    </p>
+                    <div class="flex gap-2">
+                        <button @click="prevPage()" :disabled="pagination.current_page === 1" 
+                                class="px-3 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold disabled:opacity-50 hover:bg-slate-50 transition-all">
+                            Previous
+                        </button>
+                        <button @click="nextPage()" :disabled="pagination.current_page === pagination.total_pages" 
+                                class="px-3 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold disabled:opacity-50 hover:bg-slate-50 transition-all">
+                            Next
+                        </button>
+                    </div>
+                </div>
+            </div>
             </div>
         </div>
 
@@ -297,7 +349,28 @@ include '../includes/dashboard-head.php';
                             <p class="text-sm font-bold text-red-500" x-text="'-₦' + parseFloat(selectedTx?.fee_amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></p>
                         </div>
                     </div>
+                    <template x-if="selectedTx && selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) !== parseFloat(selectedTx.amount)">
+                        <div class="mb-8 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
+                            <i data-lucide="shield-alert" class="w-5 h-5 text-red-600 shrink-0 mt-0.5"></i>
+                            <div>
+                                <p class="text-sm font-bold text-red-800">Amount mismatch detected</p>
+                                <p class="text-xs text-red-700 mt-1">
+                                    The gateway settled
+                                    <strong x-text="'₦' + parseFloat(selectedTx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>
+                                    but this transaction was created for
+                                    <strong x-text="'₦' + parseFloat(selectedTx.amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>.
+                                    Fulfilment was blocked and the transaction was marked failed.
+                                </p>
+                            </div>
+                        </div>
+                    </template>
                     <div class="space-y-4 pt-8 border-t border-slate-100">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Settled by Gateway</span>
+                            <span class="text-sm font-bold"
+                                  :class="!selectedTx?.gateway_amount ? 'text-slate-400' : (parseFloat(selectedTx?.gateway_amount) === parseFloat(selectedTx?.amount) ? 'text-emerald-600' : 'text-red-600')"
+                                  x-text="selectedTx?.gateway_amount ? '₦' + parseFloat(selectedTx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits: 2}) : 'Not recorded'"></span>
+                        </div>
                         <div class="flex justify-between items-center">
                             <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Customer Email</span>
                             <span class="text-sm font-bold text-slate-900" x-text="selectedTx?.customer_email"></span>
@@ -331,6 +404,18 @@ include '../includes/dashboard-head.php';
             Alpine.data('adminDashboardView', () => ({
                 mobileMenuOpen: false,
                 selectedTx: null,
+                txSearch: '',
+                mismatchOnly: false,
+                page: 1,
+                perPage: 50,
+                transactions: <?php echo json_encode($allTransactions ?: []); ?>,
+                pagination: {
+                    total: 0,
+                    current_page: 1,
+                    total_pages: 1,
+                    from: 0,
+                    to: 0
+                },
                 stats: {
                     total_gtv: '<?php echo addslashes(formatCurrency($total_gtv)); ?>',
                     active_merchants: '<?php echo (int)$active_merchants; ?>',
@@ -338,7 +423,51 @@ include '../includes/dashboard-head.php';
                     total_va: '<?php echo (int)$total_va; ?>',
                     pending_kyc: '<?php echo (int)$pending_kyc; ?>'
                 },
-                transactions: <?php echo json_encode($allTransactions ?: []); ?>,
+                get filteredTransactions() {
+                    if (!this.txSearch) return this.transactions;
+                    const s = this.txSearch.toLowerCase();
+                    return this.transactions.filter(tx => 
+                        (tx.reference && tx.reference.toLowerCase().includes(s)) ||
+                        (tx.customer_email && tx.customer_email.toLowerCase().includes(s)) ||
+                        (tx.business_name && tx.business_name.toLowerCase().includes(s))
+                    );
+                },
+                async fetchTransactions() {
+                    this.loading = true;
+                    const offset = (this.page - 1) * this.perPage;
+                    try {
+                        const response = await fetch(`ajax-transactions.php?search=${encodeURIComponent(this.txSearch)}&mismatch=${this.mismatchOnly ? '1' : ''}&limit=${this.perPage}&offset=${offset}`);
+                        const result = await response.json();
+                        if (result.status) {
+                            this.transactions = result.data;
+                            this.pagination = {
+                                ...result.pagination,
+                                from: result.pagination.total === 0 ? 0 : (result.pagination.current_page - 1) * result.pagination.per_page + 1,
+                                to: Math.min(result.pagination.current_page * result.pagination.per_page, result.pagination.total)
+                            };
+                        }
+                    } catch (e) {
+                        console.error('Fetch error:', e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                resetPageAndFetch() {
+                    this.page = 1;
+                    this.fetchTransactions();
+                },
+                nextPage() {
+                    if (this.page < this.pagination.total_pages) {
+                        this.page++;
+                        this.fetchTransactions();
+                    }
+                },
+                prevPage() {
+                    if (this.page > 1) {
+                        this.page--;
+                        this.fetchTransactions();
+                    }
+                },
                 updateStats() {
                     fetch('ajax-stats.php?action=stats')
                         .then(r => r.json())
@@ -351,6 +480,7 @@ include '../includes/dashboard-head.php';
                 },
                 init() {
                     setInterval(() => this.updateStats(), 10000);
+                    this.fetchTransactions();
                 }
             }));
         });

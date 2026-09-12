@@ -216,6 +216,7 @@ function run_migrations() {
             ],
             'transactions' => [
                 'currency' => "VARCHAR(10) DEFAULT 'NGN'",
+                'gateway_amount' => "DECIMAL(15, 2) DEFAULT NULL",
                 'fee_amount' => "DECIMAL(15, 2) DEFAULT 0.00",
                 'settled_amount' => "DECIMAL(15, 2) DEFAULT 0.00",
                 'gateway_reference' => "VARCHAR(100)",

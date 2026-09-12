@@ -28,26 +28,36 @@ if (!in_array($request_ip, $paystack_ips) && getConfig('webhook_ip_check', '0') 
     die('Unauthorized IP address');
 }
 
-// Verify Paystack Signature
+// Verify Paystack Signature.
+// The key that signed is recorded, not merely the fact that a signature was
+// valid: signing with the TEST secret must not be able to speak for a LIVE
+// transaction. An empty secret would make the HMAC computable by anyone, so it
+// is rejected explicitly rather than signed against ''. hash_equals() keeps the
+// comparison constant-time.
 $paystack_secret = getConfig('paystack_secret_key');
+$paystack_test_secret = getConfig('paystack_test_secret_key');
 $signature = $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] ?? '';
 
-$is_verified = false;
-if ($signature && $signature === hash_hmac('sha512', $input, $paystack_secret)) {
-    $is_verified = true;
-} else {
-    // Try with test secret key
-    $paystack_test_secret = getConfig('paystack_test_secret_key');
-    if ($signature && $signature === hash_hmac('sha512', $input, $paystack_test_secret)) {
-        $is_verified = true;
-    }
+$verified_with = null;
+if ($signature !== '' && $paystack_secret !== ''
+        && hash_equals(hash_hmac('sha512', $input, $paystack_secret), $signature)) {
+    $verified_with = 'live';
+} elseif ($signature !== '' && $paystack_test_secret !== ''
+        && hash_equals(hash_hmac('sha512', $input, $paystack_test_secret), $signature)) {
+    $verified_with = 'test';
 }
 
-if (!$is_verified) {
+if ($verified_with === null) {
     file_put_contents('webhook_debug.log', "Signature Verification Failed" . PHP_EOL, FILE_APPEND);
     http_response_code(401);
     die('Invalid signature');
 }
+
+// If one key is configured for both live and test, the signature cannot tell us
+// which mode the event belongs to. In that case mode agreement cannot be
+// enforced and the legacy fallback to the payload's `domain` field is kept, so a
+// sandbox install sharing a single key keeps working.
+$mode_ambiguous = ($paystack_secret !== '' && $paystack_secret === $paystack_test_secret);
 
 $db = Database::connect();
 
@@ -91,8 +101,12 @@ if ($event['event'] === 'charge.success') {
             $va = $stmt->fetch();
 
             if ($va) {
-                // Determine if it's a test transaction
-                $is_test_va = ($data['domain'] === 'test');
+                // Which Paystack key signed this payload is authoritative. The
+                // payload's own `domain` field is data chosen by whoever signed,
+                // so it must not decide whether this row credits real money -
+                // except when a single key serves both modes, where it is the
+                // only signal available.
+                $is_test_va = $mode_ambiguous ? ($data['domain'] === 'test') : ($verified_with === 'test');
 
                 // Recover metadata if missing or lacks custom fields
                 $va_meta = json_decode($va['metadata'] ?? '[]', true);
@@ -124,14 +138,71 @@ if ($event['event'] === 'charge.success') {
     }
 
     if ($tx && $tx['status'] !== 'success') {
+        /*
+         * SECURITY: the amount the customer actually settled must equal the
+         * amount recorded against this reference. checkout.php renders that
+         * amount into the page that drives Paystack Inline, so a customer can
+         * rewrite it in the browser - or bypass the page entirely by calling
+         * Paystack's API with the same reference - and pay a token sum while the
+         * stored record still holds the larger figure.
+         *
+         * Without this guard the transaction was marked successful and the
+         * merchant's webhook announced the unverified amount, so the merchant
+         * credited a wallet that was never funded.
+         */
+        if (!amounts_match($tx['amount'], $amount)) {
+            $mismatch = flag_amount_mismatch($tx, $tx['amount'], $amount, 'paystack webhook');
+            file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] " . $mismatch . PHP_EOL, FILE_APPEND);
+            // Acknowledge so Paystack stops retrying a payload we will never accept.
+            http_response_code(200);
+            echo "Amount mismatch - transaction not fulfilled";
+            exit;
+        }
+
+        /*
+         * SECURITY: the signature proves which Paystack key signed this payload;
+         * the transaction's own flag was set at initialize time from the secret
+         * key the merchant used. When they disagree the event cannot be trusted
+         * for this transaction - a test-key signature must never be able to speak
+         * for a live one, which would let a leaked test secret credit a real
+         * wallet.
+         */
+        $tx_is_test = ((int)$tx['is_test'] === 1);
+        if (!$mode_ambiguous && (($verified_with === 'test') !== $tx_is_test)) {
+            $msg = "BLOCKED signature/transaction mode mismatch for Ref: $ref"
+                 . " (payload signed with the {$verified_with} key but the transaction has is_test=" . (int)$tx['is_test'] . ")";
+            log_transaction_event($tx['id'], 'mode_mismatch', $msg);
+            error_log('[PayHub] ' . $msg);
+            file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] " . $msg . PHP_EOL, FILE_APPEND);
+            http_response_code(200);
+            echo "Signature/transaction mode mismatch - transaction not fulfilled";
+            exit;
+        }
+
         $db->beginTransaction();
         try {
+            // Atomically claim this transaction before moving any money. A
+            // concurrent worker - a Paystack retry, or the merchant polling
+            // api/transaction/verify.php - that already fulfilled it makes this
+            // affect 0 rows, so the merchant wallet is never credited twice.
+            if (!claim_transaction_for_fulfilment($tx['id'])) {
+                $db->rollBack();
+                file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] Tx ID " . $tx['id'] . " already fulfilled by another worker - not crediting again." . PHP_EOL, FILE_APPEND);
+                http_response_code(200);
+                echo "Already processed";
+                exit;
+            }
+
             // Detailed Logging of fulfillment start
             file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] Fulfilling Tx ID: " . $tx['id'] . " for Amount: " . $amount . PHP_EOL, FILE_APPEND);
 
             // Update transaction
-            $stmt = $db->prepare("UPDATE transactions SET status = 'success', currency = ?, gateway_reference = ? WHERE id = ?");
+            $stmt = $db->prepare("UPDATE transactions SET currency = ?, gateway_reference = ? WHERE id = ?");
             $stmt->execute([$currency, $data['id'], $tx['id']]);
+
+            // Persist the gateway-confirmed figure so every later integrity check
+            // (and the merchant webhook) works from evidence, not from the request.
+            record_gateway_amount($tx['id'], $amount);
 
             // Calculate fees
             $is_intl = ($currency !== 'NGN');
@@ -142,7 +213,10 @@ if ($event['event'] === 'charge.success') {
             $stmt->execute([$fee, $settled, $data['channel'] ?? $tx['payment_method'], $tx['id']]);
 
             // Log ledger and update user balance (prevent real crediting for test mode)
-            $is_test_tx = (bool)$tx['is_test'] || ($data['domain'] === 'test');
+            // The signing key is the authority on test vs live - never the payload's own domain field.
+            $is_test_tx = $mode_ambiguous
+                ? ((bool)$tx['is_test'] || ($data['domain'] === 'test'))
+                : $tx_is_test;
             log_ledger_entry($tx['user_id'], $settled, 'credit', 'payment', "Payment received for Ref: $ref", $is_test_tx);
 
             log_transaction_event($tx['id'], 'payment_completed', 'Payment successfully processed and confirmed via Webhook');

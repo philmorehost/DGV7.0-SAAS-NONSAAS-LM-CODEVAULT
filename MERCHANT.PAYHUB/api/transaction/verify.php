@@ -54,21 +54,55 @@ if ($tx['status'] !== 'success') {
     if ($response && $response['status'] && $response['data']['status'] === 'success') {
         $data = $response['data'];
         $amount = $data['amount'] / 100;
+
+        // CRITICAL: compare the amount the gateway actually settled against the
+        // amount recorded for this reference. `transactions.amount` is
+        // merchant-supplied and, for hosted checkout, is rendered into the page
+        // that drives Paystack Inline - so it can be rewritten in the browser (or
+        // bypassed by calling Paystack directly) to pay a token sum while the
+        // record still holds the larger figure.
+        if (!amounts_match($tx['amount'], $amount)) {
+            flag_amount_mismatch($tx, $tx['amount'], $amount, 'api/transaction/verify.php');
+            http_response_code(400);
+            echo json_encode([
+                'status' => false,
+                'message' => 'Payment amount mismatch. Transaction rejected.',
+                'details' => [
+                    'expected' => $tx['amount'],
+                    'received' => $amount
+                ]
+            ]);
+            exit;
+        }
+
         $fee = calculate_fees($amount, ($data['currency'] !== 'NGN'), $user['id']);
         $settled = $amount - $fee;
 
         $db->beginTransaction();
         try {
-            $stmt = $db->prepare("UPDATE transactions SET status = 'success', fee_amount = ?, settled_amount = ?, gateway_reference = ? WHERE id = ?");
-            $stmt->execute([$fee, $settled, $data['id'], $tx['id']]);
+            // Atomically claim this transaction before moving any money. A
+            // concurrent worker - the Paystack webhook, or a second poll of this
+            // endpoint - that already fulfilled it makes this affect 0 rows, so
+            // the merchant wallet is never credited twice.
+            if (!claim_transaction_for_fulfilment($tx['id'])) {
+                $db->rollBack();
+            } else {
+                $stmt = $db->prepare("UPDATE transactions SET fee_amount = ?, settled_amount = ?, gateway_reference = ? WHERE id = ?");
+                $stmt->execute([$fee, $settled, $data['id'], $tx['id']]);
 
-            log_ledger_entry($user['id'], $settled, 'credit', 'payment', "Real-time Verified Payment: $ref", $is_test);
-            log_transaction_event($tx['id'], 'verified', 'Payment verified and fulfilled via real-time API check');
+                // Persist the gateway-confirmed figure so downstream consumers (the
+                // merchant webhook, admin reporting) work from evidence.
+                record_gateway_amount($tx['id'], $amount);
 
-            $db->commit();
-            trigger_merchant_webhook($tx['id']);
+                log_ledger_entry($user['id'], $settled, 'credit', 'payment', "Real-time Verified Payment: $ref", $is_test);
+                log_transaction_event($tx['id'], 'verified', 'Payment verified and fulfilled via real-time API check');
 
-            // Refresh local tx data
+                $db->commit();
+                trigger_merchant_webhook($tx['id']);
+            }
+
+            // Refresh local tx data - this also picks up a fulfilment that another
+            // worker completed just before us, so `paid` stays accurate.
             $stmt = $db->prepare("SELECT * FROM transactions WHERE id = ?");
             $stmt->execute([$tx['id']]);
             $tx = $stmt->fetch();
@@ -90,6 +124,8 @@ echo json_encode([
         'reference' => $tx['reference'],
         'amount' => $tx['amount'] * 100,                    // amount in KOBO
         'currency' => 'NGN',
+        // Lets an integrating script refuse to credit sandbox payments.
+        'domain' => ((int)$tx['is_test'] === 1) ? 'test' : 'live',
         'customer' => [
             'email' => $tx['customer_email']
         ],

@@ -60,6 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $stmt->execute([$user['id'], $ref, $amount, $email, $channel_type, $is_test ? 1 : 0, $fee, $settled, $rtx['id']]);
                         $t_id = $db->lastInsertId();
 
+                        // The amount came straight from the gateway list response, so
+                        // record it as the verified figure this row was created from.
+                        record_gateway_amount($t_id, $amount);
+
                         log_transaction_event($t_id, 'reconciled', "Payment manually reconciled via self-service.");
                         log_ledger_entry($user['id'], $settled, 'credit', 'payment', "Reconciled Payment: $ref", $is_test);
 

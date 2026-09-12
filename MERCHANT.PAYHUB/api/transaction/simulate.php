@@ -47,6 +47,10 @@ try {
     $stmt = $db->prepare("UPDATE transactions SET status = 'success', fee_amount = ?, settled_amount = ?, gateway_reference = ? WHERE id = ?");
     $stmt->execute([$fee, $settled, 'SIMULATED_' . strtoupper(bin2hex(random_bytes(4))), $tx['id']]);
 
+    // Sandbox simulation settles exactly what was recorded, so mirror that into
+    // gateway_amount and keep the merchant-webhook integrity check consistent.
+    record_gateway_amount($tx['id'], $amount);
+
     log_ledger_entry($user_id, $settled, 'credit', 'payment', "Sandbox simulated payment: $ref", true);
     log_transaction_event($tx['id'], 'simulated', 'Payment marked successful via sandbox simulate endpoint');
 

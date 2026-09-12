@@ -42,11 +42,49 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
     $res = paystack_call("transaction/verify/" . $ref, 'GET', [], $is_test_mode);
 
     if ($res && $res['status'] && $res['data']['status'] === 'success') {
-        $status = 'success';
-        $amount = $res['data']['amount'] / 100;
+        $gateway_amount = $res['data']['amount'] / 100;
+        $amount = $gateway_amount;
+
+        /*
+         * SECURITY: the gateway figure must equal what this reference was
+         * supposed to collect. The amount is rendered into the page that drives
+         * Paystack Inline (see checkout.php and invoice.php), so a customer can
+         * rewrite it in the browser - or call Paystack's API directly with the
+         * same reference - and settle a token sum while the stored record still
+         * holds the larger figure. transactions.amount is merchant-supplied and
+         * is never evidence of payment.
+         */
+        $expected_amount = null;
+        if ($tx) {
+            $expected_amount = (float)$tx['amount'];
+        } elseif ($is_invoice) {
+            // Direct invoice payment: the invoice is the only record of what the
+            // customer owes, so that is the amount which must be confirmed.
+            $inv_parts = explode('_', $ref);
+            if (!empty($inv_parts[1])) {
+                $stmt = $db->prepare("SELECT amount FROM invoices WHERE reference = ?");
+                $stmt->execute([$inv_parts[1]]);
+                $inv_amount = $stmt->fetchColumn();
+                if ($inv_amount !== false && $inv_amount !== null) {
+                    $expected_amount = (float)$inv_amount;
+                }
+            }
+        }
+
+        $amount_verified = ($expected_amount === null) || amounts_match($expected_amount, $gateway_amount);
+
+        if (!$amount_verified) {
+            flag_amount_mismatch(
+                $tx ?: ['id' => null, 'reference' => $ref],
+                $expected_amount,
+                $gateway_amount,
+                'verify.php'
+            );
+            $status = 'failed';
+        }
 
         // If transaction doesn't exist (e.g. direct invoice payment), create it
-        if (!$tx) {
+        if ($amount_verified && !$tx) {
             $db->beginTransaction();
             try {
                 $merchant_id = null;
@@ -84,15 +122,24 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
             }
         }
 
-        if ($tx && $tx['status'] === 'pending') {
+        if ($amount_verified && $tx && $tx['status'] === 'pending') {
             $status = 'success';
             $amount = $res['data']['amount'] / 100;
 
             if ($tx['status'] === 'pending') {
                 $db->beginTransaction();
                 try {
+                    // Atomically claim this transaction before moving any money. A
+                    // concurrent worker - a Paystack webhook retry, or a second load
+                    // of this page - that already fulfilled it makes this affect 0
+                    // rows, and the throw below rolls back instead of crediting the
+                    // merchant wallet a second time.
+                    if (!claim_transaction_for_fulfilment($tx['id'])) {
+                        throw new AlreadyFulfilledException('fulfilled by a concurrent worker');
+                    }
+
                     // Update transaction
-                    $stmt = $db->prepare("UPDATE transactions SET status = 'success', gateway_reference = ? WHERE id = ?");
+                    $stmt = $db->prepare("UPDATE transactions SET gateway_reference = ? WHERE id = ?");
                     $stmt->execute([$res['data']['id'], $tx['id']]);
 
                     // Calculate fees
@@ -102,6 +149,10 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
 
                     $stmt = $db->prepare("UPDATE transactions SET fee_amount = ?, settled_amount = ? WHERE id = ?");
                     $stmt->execute([$fee, $settled, $tx['id']]);
+
+                    // Persist the gateway-confirmed figure so the merchant webhook
+                    // can validate the amount it is about to announce.
+                    record_gateway_amount($tx['id'], $gateway_amount);
 
                     // Update or Create Customer record
                     $stmt = $db->prepare("SELECT id FROM customers WHERE user_id = ? AND email = ?");
@@ -139,6 +190,8 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
                                 'reference' => $tx['reference'],
                                 'amount' => $tx['amount'],
                                 'status' => 'success',
+                                // Lets the merchant's script refuse to credit a sandbox payment.
+                                'domain' => ((int)$tx['is_test'] === 1) ? 'test' : 'live',
                                 'customer' => [
                                     'email' => $tx['customer_email'],
                                     'name' => $tx['customer_name']
@@ -157,6 +210,11 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
                     }
 
                     $db->commit();
+                } catch (AlreadyFulfilledException $e) {
+                    // Another worker beat us to it. The payment really is
+                    // successful - we simply must not credit it a second time.
+                    $db->rollBack();
+                    $status = 'success';
                 } catch (Exception $e) {
                     $db->rollBack();
                 }

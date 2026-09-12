@@ -68,6 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                             $stmt->execute([$merchant['id'], $ref, $amount, $cust_email, $is_test ? 1 : 0, $fee, $settled, $rtx['id']]);
                             $t_id = $db->lastInsertId();
 
+                            // The amount came straight from the gateway list response, so
+                            // record it as the verified figure this row was created from.
+                            record_gateway_amount($t_id, $amount);
+
                             log_transaction_event($t_id, 'reconciled', "Payment reconciled via Virtual Account Query API.");
                             log_ledger_entry($merchant['id'], $settled, 'credit', 'payment', "Reconciled VA Payment: $ref", $is_test);
 
