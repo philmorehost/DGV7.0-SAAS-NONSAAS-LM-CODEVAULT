@@ -464,6 +464,40 @@ function getConfig($key, $default = '') {
     }
 }
 
+/* =============================================================================
+ * ADMIN REPORTING LENS (live vs test)
+ * =============================================================================
+ * Transactions carry `is_test`, derived from the Paystack key the merchant used. Platform
+ * reporting must never blend the two: a sandbox charge is not revenue, and counting it in
+ * GTV (or in a success count) inflates the platform's own numbers with money that does not
+ * exist.
+ *
+ * The admin works through a "lens" - live unless explicitly switched - held in the session
+ * and flipped by the switcher in the topbar. Every admin aggregate and listing is scoped to
+ * it, so switching to test shows that world on its own terms and switching back restores
+ * live. This is reporting only: it never changes what a transaction IS. Enforcement of the
+ * test/live boundary lives in the fulfilment paths.
+ */
+
+/** 'live' or 'test'. Live unless the admin has deliberately switched. */
+function admin_reporting_mode() {
+    return (($_SESSION['admin_reporting_mode'] ?? 'live') === 'test') ? 'test' : 'live';
+}
+
+/** 1 when the admin is looking at test data, 0 for live. */
+function admin_reporting_is_test() {
+    return admin_reporting_mode() === 'test' ? 1 : 0;
+}
+
+/**
+ * SQL fragment restricting a transaction query to the admin's current lens.
+ * Pass a table alias for joined queries: admin_tx_lens_sql('t') -> " AND t.is_test = 0".
+ */
+function admin_tx_lens_sql($alias = '') {
+    $col = ($alias !== '') ? preg_replace('/[^A-Za-z0-9_]/', '', (string)$alias) . '.is_test' : 'is_test';
+    return ' AND ' . $col . ' = ' . admin_reporting_is_test();
+}
+
 function get_stats($userId, $is_test = 0) {
     $db = Database::connect();
     $stmt = $db->prepare("

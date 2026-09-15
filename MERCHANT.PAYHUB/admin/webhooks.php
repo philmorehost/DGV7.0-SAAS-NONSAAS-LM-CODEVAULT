@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $success_msg = "Webhook retry triggered for Log #$logId.";
 }
 
-$stmt = $db->query("SELECT w.*, t.reference as transaction_ref FROM webhook_logs w JOIN transactions t ON w.transaction_id = t.id ORDER BY w.created_at DESC");
+$stmt = $db->query("SELECT w.*, t.reference as transaction_ref FROM webhook_logs w JOIN transactions t ON w.transaction_id = t.id WHERE 1=1" . admin_tx_lens_sql('t') . " ORDER BY w.created_at DESC");
 $logs = $stmt->fetchAll();
 
 include '../includes/dashboard-head.php';

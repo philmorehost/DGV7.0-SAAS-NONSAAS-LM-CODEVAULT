@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-$stmt = $db->query("SELECT d.*, t.reference as transaction_ref, t.amount, u.business_name FROM disputes d JOIN transactions t ON d.transaction_id = t.id JOIN users u ON d.user_id = u.id ORDER BY d.created_at DESC");
+$stmt = $db->query("SELECT d.*, t.reference as transaction_ref, t.amount, u.business_name FROM disputes d JOIN transactions t ON d.transaction_id = t.id JOIN users u ON d.user_id = u.id WHERE 1=1" . admin_tx_lens_sql('t') . " ORDER BY d.created_at DESC");
 $disputes = $stmt->fetchAll();
 
 include '../includes/dashboard-head.php';

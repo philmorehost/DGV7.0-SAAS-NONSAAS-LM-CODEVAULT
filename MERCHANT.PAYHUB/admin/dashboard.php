@@ -9,11 +9,17 @@ $pageTitle = 'Platform Overview - Admin Hub';
 
 $db = Database::connect();
 
+// Admin reporting lens (live by default). Every figure on this page is scoped to it, so a
+// sandbox charge can never be counted as platform revenue. api-stats.php applies the same
+// lens, otherwise the 10-second poll would overwrite these numbers with blended ones.
+$lens = admin_tx_lens_sql();
+$lens_t = admin_tx_lens_sql('t');
+
 // Fetch Admin Stats
 $total_gtv = 0; $active_merchants = 0; $pending_kyc = 0; $total_va = 0; $total_tx = 0; $success_tx = 0;
 
 try {
-    $stmt = $db->query("SELECT SUM(amount) as total FROM transactions WHERE status = 'success'");
+    $stmt = $db->query("SELECT SUM(amount) as total FROM transactions WHERE status = 'success'{$lens}");
     $total_gtv = $stmt->fetch()['total'] ?? 0;
 
     $stmt = $db->query("SELECT COUNT(*) as count FROM users WHERE role = 'merchant' AND is_suspended = 0");
@@ -25,9 +31,9 @@ try {
     $stmt = $db->query("SELECT COUNT(*) as count FROM virtual_accounts");
     $total_va = $stmt->fetch()['count'] ?? 0;
 
-    $stmt = $db->query("SELECT COUNT(*) as count FROM transactions");
+    $stmt = $db->query("SELECT COUNT(*) as count FROM transactions WHERE 1=1{$lens}");
     $total_tx = $stmt->fetch()['count'] ?? 0;
-    $stmt = $db->query("SELECT COUNT(*) as count FROM transactions WHERE status = 'success'");
+    $stmt = $db->query("SELECT COUNT(*) as count FROM transactions WHERE status = 'success'{$lens}");
     $success_tx = $stmt->fetch()['count'] ?? 0;
 } catch (\Throwable $e) {
     error_log("Dashboard Stats Error: " . $e->getMessage());
@@ -55,7 +61,7 @@ try {
             DATE(created_at) as date,
             SUM(amount) as revenue
         FROM transactions
-        WHERE status = 'success'
+        WHERE status = 'success'{$lens}
         GROUP BY DATE(created_at)
         ORDER BY date DESC
         LIMIT 7
@@ -73,7 +79,7 @@ foreach ($revenueRaw as $r) {
 // Fetch Detailed Transactions for Report
 $allTransactions = [];
 try {
-    $stmt = $db->query("SELECT t.*, u.business_name FROM transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 50");
+    $stmt = $db->query("SELECT t.*, u.business_name FROM transactions t JOIN users u ON t.user_id = u.id WHERE 1=1{$lens_t} ORDER BY t.created_at DESC LIMIT 50");
     $allTransactions = $stmt->fetchAll();
 } catch (\Throwable $e) {}
 

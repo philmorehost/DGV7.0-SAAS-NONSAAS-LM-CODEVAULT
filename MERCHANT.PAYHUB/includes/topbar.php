@@ -45,6 +45,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     Switch to <?php echo $user['is_test_mode'] ? 'Live' : 'Test'; ?>
                 </button>
             </form>
+        <?php else: ?>
+            <?php /*
+                * Admin reporting lens. Deliberately separate from the merchant switch above:
+                * that one writes users.is_test_mode (which account a merchant operates in),
+                * whereas this only decides which world the ADMIN is looking at. It is pure
+                * reporting state, so it lives in the session and never touches the database.
+                */ ?>
+            <form method="POST" action="<?php echo BASE_URL; ?>admin/reporting-mode.php"
+                  class="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-2xl border <?php echo admin_reporting_is_test() ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'; ?>">
+                <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>">
+                <input type="hidden" name="mode" value="<?php echo admin_reporting_is_test() ? 'live' : 'test'; ?>">
+                <input type="hidden" name="return" value="<?php echo htmlspecialchars($_SERVER['REQUEST_URI'] ?? '/', ENT_QUOTES, 'UTF-8'); ?>">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full <?php echo admin_reporting_is_test() ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'; ?>"></div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider <?php echo admin_reporting_is_test() ? 'text-amber-700' : 'text-slate-600'; ?>">
+                        <?php echo admin_reporting_is_test() ? 'Test Reports' : 'Live Reports'; ?>
+                    </span>
+                </div>
+                <button type="submit" class="text-[9px] font-bold uppercase tracking-widest border-l pl-3 <?php echo admin_reporting_is_test() ? 'text-emerald-600 hover:text-emerald-700 border-amber-200' : 'text-indigo-600 hover:text-indigo-700 border-slate-200'; ?>">
+                    View <?php echo admin_reporting_is_test() ? 'Live' : 'Test'; ?>
+                </button>
+            </form>
         <?php endif; ?>
     </div>
 
@@ -99,3 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         </div>
     </div>
 </header>
+<?php if ($user['role'] === 'admin' && admin_reporting_is_test()): ?>
+    <div class="bg-amber-500 text-white text-[10px] font-bold uppercase tracking-[0.2em] py-2 px-4 text-center shrink-0">
+        Test mode reporting &mdash; the figures below are sandbox transactions only and are not part of live GTV
+    </div>
+<?php endif; ?>

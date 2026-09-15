@@ -26,6 +26,10 @@ $query = "SELECT t.*, u.business_name
           WHERE 1=1";
 $params = [];
 
+// Admin reporting lens: this endpoint backs both the dashboard report and the full
+// Transaction History page, so scoping it here keeps every listing consistent.
+$query .= admin_tx_lens_sql('t');
+
 if (!empty($search)) {
     $query .= " AND (t.reference LIKE ? OR t.customer_email LIKE ? OR u.business_name LIKE ?)";
     $searchTerm = "%$search%";
@@ -61,6 +65,7 @@ try {
     
     $countQuery = "SELECT COUNT(*) as total FROM transactions t LEFT JOIN users u ON t.user_id = u.id WHERE 1=1";
     $countParams = [];
+    $countQuery .= admin_tx_lens_sql('t');
     if (!empty($search)) {
         $countQuery .= " AND (t.reference LIKE ? OR t.customer_email LIKE ? OR u.business_name LIKE ?)";
         $searchTerm = "%$search%";

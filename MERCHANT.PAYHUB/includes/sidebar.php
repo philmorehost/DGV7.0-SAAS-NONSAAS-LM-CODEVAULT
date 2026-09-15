@@ -44,6 +44,16 @@ $role = $_SESSION['role'] ?? 'merchant';
                 <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
                 Overview
             </a>
+            <?php /* Was not linked from anywhere, so the full transaction history - the place to
+                     check whether merchants are running tests - was only reachable by typing the
+                     URL. Scoped to the reporting lens, so in test mode it lists test data only. */ ?>
+            <a href="<?php echo BASE_URL; ?>admin/transactions.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'transactions.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
+                <i data-lucide="receipt" class="w-5 h-5"></i>
+                Transactions
+                <?php if (admin_reporting_is_test()): ?>
+                    <span class="ml-auto text-[8px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md">TEST</span>
+                <?php endif; ?>
+            </a>
             <a href="<?php echo BASE_URL; ?>admin/merchants.php" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all <?php echo $current_page === 'merchants.php' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'; ?>">
                 <i data-lucide="users" class="w-5 h-5"></i>
                 Merchants
