@@ -889,8 +889,13 @@ function calculate_payout_fee($amount) {
  * a wallet that was never funded.
  *
  * Every path that marks a transaction paid MUST:
- *   1. call amounts_match() with the gateway figure, and
+ *   1. call amount_covers() with the gateway figure, and
  *   2. persist that figure via record_gateway_amount().
+ *
+ * (1) was amounts_match(), which demanded equality and rejected the gateway's own fee when a
+ * payer was charged it on top - see amount_covers() for the full reasoning. The property that
+ * matters is that the payment must not fall SHORT: the token-sum attack above is unchanged,
+ * because 102.54 still does not cover 10,175.00.
  * ========================================================================== */
 
 /**
@@ -909,6 +914,39 @@ function to_minor_units($amount) {
  */
 function amounts_match($expected, $paid, $tolerance_minor = 1) {
     return abs(to_minor_units($expected) - to_minor_units($paid)) <= $tolerance_minor;
+}
+
+/**
+ * True when the payment COVERS what we expected to collect: equal, or more.
+ *
+ * This is the rule every collection path uses to decide whether a payment is real. It is one-sided on
+ * purpose, and it replaces `amounts_match()` there, which demanded the settled figure be within a kobo
+ * of the merchant's amount and therefore rejected legitimate payments.
+ *
+ * ⚠️ **A payer is normally charged MORE than the merchant asked for**, because the gateway adds its
+ * transaction fee on top at the moment of payment: a merchant amount of ₦100 settles as ₦101.53 on the
+ * payer's page. The strict check read that as an amount-manipulation attempt - it marked the
+ * transaction `failed` with `failure_reason = 'amount_mismatch'`, answered the merchant's verification
+ * with *"Payment amount mismatch. Transaction rejected."*, and left a payment that had already been
+ * taken sitting unfulfilled. The payer was charged; the merchant was told it failed.
+ *
+ * The property worth keeping is the one the check was written for, and it is **underpayment**: the
+ * amount is rendered into the page that drives the payment window, so a payer can rewrite it - or call
+ * the gateway directly with the same reference - and settle a token sum while the record still holds
+ * the larger figure. Paying *more* than the merchant asked cannot be turned against them and cannot
+ * conjure a credit that was never funded, so it is accepted. The figure that actually settled is still
+ * persisted by `record_gateway_amount()`, so the ledger and the merchant's webhook work from evidence
+ * rather than from what the merchant hoped to collect.
+ *
+ * A caller that accepts a fee-inclusive payment should record it - see the `fee_included` timeline
+ * event at the call sites - so the difference is visible instead of silently absorbed.
+ */
+function amount_covers($expected, $paid, $tolerance_minor = 1) {
+    if (amounts_match($expected, $paid, $tolerance_minor)) {
+        return true;
+    }
+
+    return to_minor_units($paid) > to_minor_units($expected);
 }
 
 /**
@@ -1302,11 +1340,12 @@ function trigger_merchant_webhook($transactionId) {
 
         if ($tx && !empty($tx['webhook_url']) && $tx['status'] === 'success') {
             // SECURITY: only announce a payment we can independently account for.
-            // When the gateway figure is known and disagrees with the recorded
-            // amount, this "success" is the artefact of an amount-manipulation
-            // attempt - never tell the merchant to credit it.
+            // Underpayment - the settled figure falling short of what was expected - is the
+            // artefact of an amount-manipulation attempt; never tell the merchant to credit
+            // it. Paying MORE is not: it is the gateway fee the payer was charged on top
+            // (see amount_covers()), and announcing it is correct.
             $paid = trusted_paid_amount($tx);
-            if ($paid !== null && !amounts_match($tx['amount'], $paid)) {
+            if ($paid !== null && !amount_covers($tx['amount'], $paid)) {
                 flag_amount_mismatch($tx, $tx['amount'], $paid, 'merchant webhook');
                 return;
             }

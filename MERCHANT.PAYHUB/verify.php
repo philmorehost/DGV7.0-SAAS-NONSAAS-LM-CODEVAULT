@@ -87,7 +87,10 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
             }
         }
 
-        $amount_verified = ($expected_amount === null) || amounts_match($expected_amount, $gateway_amount);
+        // The settled amount must COVER what was expected; more than expected is the gateway fee the
+        // payer was charged on top, which is normal and must not fail the payment - see
+        // amount_covers() in includes/functions.php for why the rule is one-sided.
+        $amount_verified = ($expected_amount === null) || amount_covers($expected_amount, $gateway_amount);
 
         if (!$amount_verified) {
             flag_amount_mismatch(
@@ -97,6 +100,12 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
                 'verify.php'
             );
             $status = 'failed';
+        } elseif ($tx && $expected_amount !== null && !amounts_match($expected_amount, $gateway_amount)) {
+            log_transaction_event($tx['id'], 'fee_included', sprintf(
+                'Payer settled %s against a %s collection - the gateway fee is added on top. Accepted as paid.',
+                number_format((float)$gateway_amount, 2),
+                number_format((float)$expected_amount, 2)
+            ));
         }
 
         // If transaction doesn't exist (e.g. direct invoice payment), create it

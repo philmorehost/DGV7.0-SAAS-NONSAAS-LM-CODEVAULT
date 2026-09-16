@@ -165,24 +165,32 @@ if ($event_type === 'charge_success') {
 
     if ($tx && $tx['status'] !== 'success') {
         /*
-         * SECURITY: the amount the customer actually settled must equal the
-         * amount recorded against this reference. checkout.php renders that
-         * amount into the page that drives Paystack Inline, so a customer can
-         * rewrite it in the browser - or bypass the page entirely by calling
-         * Paystack's API with the same reference - and pay a token sum while the
-         * stored record still holds the larger figure.
+         * SECURITY: the amount the customer actually settled must COVER the amount recorded against
+         * this reference. checkout.php renders that amount into the page that drives Paystack Inline,
+         * so a customer can rewrite it in the browser - or bypass the page entirely by calling
+         * Paystack's API with the same reference - and pay a token sum while the stored record still
+         * holds the larger figure.
          *
-         * Without this guard the transaction was marked successful and the
-         * merchant's webhook announced the unverified amount, so the merchant
-         * credited a wallet that was never funded.
+         * One-sided deliberately: a payer charged MORE than the merchant asked for has simply been
+         * charged the gateway's fee on top (₦100 settles as ₦101.53), which is normal. Demanding
+         * equality marked those payments as manipulations and left them unfulfilled. Rejecting
+         * *underpayment* is the property this guard exists for - see amount_covers().
          */
-        if (!amounts_match($tx['amount'], $amount)) {
+        if (!amount_covers($tx['amount'], $amount)) {
             $mismatch = flag_amount_mismatch($tx, $tx['amount'], $amount, 'paystack webhook');
             file_put_contents('webhook_debug.log', "[" . date('Y-m-d H:i:s') . "] " . $mismatch . PHP_EOL, FILE_APPEND);
             // Acknowledge so Paystack stops retrying a payload we will never accept.
             http_response_code(200);
             echo "Amount mismatch - transaction not fulfilled";
             exit;
+        }
+
+        if (!amounts_match($tx['amount'], $amount)) {
+            log_transaction_event($tx['id'], 'fee_included', sprintf(
+                'Payer settled %s against a %s collection - the gateway fee is added on top. Accepted as paid.',
+                number_format((float)$amount, 2),
+                number_format((float)$tx['amount'], 2)
+            ));
         }
 
         /*

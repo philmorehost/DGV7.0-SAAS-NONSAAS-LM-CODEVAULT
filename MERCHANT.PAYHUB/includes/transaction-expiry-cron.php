@@ -76,11 +76,20 @@ foreach ($rows as $tx) {
 
     if ($status === 'success') {
         // The customer did pay - the webhook was simply lost. Apply the same guards as every
-        // other fulfilment path: the settled amount must match what we asked for, and the
+        // other fulfilment path: the settled amount must COVER what we asked for (more than
+        // expected is the gateway fee the payer was charged on top - see amount_covers()), and the
         // claim is exactly-once so a webhook arriving mid-run cannot double-credit.
-        if (!amounts_match($tx['amount'], $settled)) {
+        if (!amount_covers($tx['amount'], $settled)) {
             flag_amount_mismatch($tx, $tx['amount'], $settled, 'expiry cron');
             continue;
+        }
+
+        if (!amounts_match($tx['amount'], $settled)) {
+            log_transaction_event($tx['id'], 'fee_included', sprintf(
+                'Payer settled %s against a %s collection - the gateway fee is added on top. Recovered by the expiry cron.',
+                number_format($settled, 2),
+                number_format((float)$tx['amount'], 2)
+            ));
         }
 
         $did_fulfil = false;

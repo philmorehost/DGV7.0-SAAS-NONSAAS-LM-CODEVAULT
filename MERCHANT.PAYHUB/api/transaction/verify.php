@@ -60,13 +60,17 @@ if ($tx['status'] !== 'success') {
         $data = $response['data'];
         $amount = $data['amount'] / 100;
 
-        // CRITICAL: compare the amount the gateway actually settled against the
-        // amount recorded for this reference. `transactions.amount` is
-        // merchant-supplied and, for hosted checkout, is rendered into the page
-        // that drives Paystack Inline - so it can be rewritten in the browser (or
-        // bypassed by calling Paystack directly) to pay a token sum while the
-        // record still holds the larger figure.
-        if (!amounts_match($tx['amount'], $amount)) {
+        // CRITICAL: the amount the gateway settled must COVER the amount recorded for
+        // this reference. `transactions.amount` is merchant-supplied and, for hosted
+        // checkout, is rendered into the page that drives Paystack Inline - so it can be
+        // rewritten in the browser (or bypassed by calling Paystack directly) to pay a
+        // token sum while the record still holds the larger figure.
+        //
+        // One-sided deliberately: MORE than expected is a fee the payer was charged on
+        // top (₦100 to the merchant settles as ₦101.53), not a manipulation. Requiring
+        // equality here rejected those payments after the money had been taken - see
+        // amount_covers() in includes/functions.php.
+        if (!amount_covers($tx['amount'], $amount)) {
             flag_amount_mismatch($tx, $tx['amount'], $amount, 'api/transaction/verify.php');
             http_response_code(400);
             echo json_encode([
@@ -78,6 +82,16 @@ if ($tx['status'] !== 'success') {
                 ]
             ]);
             exit;
+        }
+
+        // Accepted, but recorded: the payer was charged the gateway's fee on top, and that
+        // belongs on the transaction rather than being silently absorbed.
+        if (!amounts_match($tx['amount'], $amount)) {
+            log_transaction_event($tx['id'], 'fee_included', sprintf(
+                'Payer settled %s against a %s collection - the gateway fee is added on top. Accepted as paid.',
+                number_format((float)$amount, 2),
+                number_format((float)$tx['amount'], 2)
+            ));
         }
 
         $fee = calculate_fees($amount, ($data['currency'] !== 'NGN'), $user['id']);
