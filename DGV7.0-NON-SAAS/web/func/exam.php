@@ -56,10 +56,22 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                                 if (productIDPurchaseChecker($epp, "exam", $purchase_method) == "success") {
                                                     $debit_user = chargeUser("debit", $epp, $type_alternative, $reference, "", $amount, $discounted_amount, $description, $purchase_method, $_SERVER["HTTP_HOST"], $status);
                                                     if ($debit_user === "success") {
-                                                    $api_gateway_name_file_exists = "exam-" . str_replace(".", "-", $api_detail["api_base_url"]) . ".php";
-                                                    if (file_exists($_SERVER['DOCUMENT_ROOT'] . "/func/api-gateway/" . $api_gateway_name_file_exists)) {
-                                                        $api_gateway_name = "exam-" . str_replace(".", "-", $api_detail["api_base_url"]) . ".php";
-                                                    } else {
+                                                    // Resolve the provider's gateway file from a NORMALISED host. The stored
+                                                    // api_base_url is admin-typed and may carry a scheme, a "www." prefix or
+                                                    // mixed case. The raw value used to be pasted straight into the filename, so
+                                                    // "www.naijaresultpins.com" looked for "exam-www-naijaresultpins-com.php",
+                                                    // silently missed, and fell through to exam-localserver.php - a completely
+                                                    // different API. Mixed case missed too, since Linux filenames are
+                                                    // case-sensitive.
+                                                    $api_gateway_base_host = strtolower(trim($api_detail["api_base_url"]));
+                                                    $api_gateway_base_host = preg_replace('#^https?://#i', '', $api_gateway_base_host);
+                                                    $api_gateway_base_host = preg_replace('#^www\.#i', '', $api_gateway_base_host);
+                                                    $api_gateway_base_host = rtrim($api_gateway_base_host, "/");
+                                                    $api_gateway_name = "exam-" . str_replace(".", "-", $api_gateway_base_host) . ".php";
+                                                    if (!file_exists($_SERVER['DOCUMENT_ROOT'] . "/func/api-gateway/" . $api_gateway_name)) {
+                                                        // No gateway file for this provider. Log which one we wanted so a
+                                                        // mis-typed domain is diagnosable instead of failing invisibly.
+                                                        error_log("[DGV-EXAM-GATEWAY] No gateway file for api_base_url='" . $api_detail["api_base_url"] . "' (looked for " . $api_gateway_name . "); falling back to exam-localserver.php");
                                                         $api_gateway_name = "exam-localserver.php";
                                                     }
 
@@ -96,7 +108,13 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                                         $json_response_encode = json_encode($json_response_array, true);
                                                     }
 
-                                                    if ($api_response == "failed") {
+                                                    // Catches "failed" AND any unexpected value. A gateway could previously return
+                                                    // neither "successful", "pending" nor "failed" (e.g. an unreadable response
+                                                    // left $api_response null), in which case NONE of the branches ran: the
+                                                    // customer was debited, got no PIN, received no message and was never
+                                                    // refunded. Anything that is not a success or a pending must refund.
+                                                    if (!in_array($api_response, array("successful", "pending"))) {
+                                                        if (empty($api_response_description)) { $api_response_description = "Transaction Failed"; }
                                                         $reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
                                                         alterTransaction($reference, "api_id", $api_detail["id"]);
                                                         alterTransaction($reference, "product_id", $product_table["id"]);

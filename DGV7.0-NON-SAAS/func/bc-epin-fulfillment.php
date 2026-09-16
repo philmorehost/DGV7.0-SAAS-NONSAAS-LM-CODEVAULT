@@ -77,10 +77,18 @@ function fulfillEPIN($epin, $recipient, $extra_data = "") {
             }
 
             $api_type_for_file = ($service_type == 'data') ? $data_type : $service_type;
-            $api_gateway_name_file_exists = $api_type_for_file . "-" . str_replace(".", "-", $api_detail["api_base_url"]) . ".php";
+            // Normalise the admin-typed domain (scheme, "www.", case, trailing slash) before
+            // building the filename, so all those spellings reach the same gateway instead of
+            // silently missing and fulfilling through the local-server file.
+            $api_gateway_base_host = strtolower(trim($api_detail["api_base_url"]));
+            $api_gateway_base_host = preg_replace('#^https?://#i', '', $api_gateway_base_host);
+            $api_gateway_base_host = preg_replace('#^www\.#i', '', $api_gateway_base_host);
+            $api_gateway_base_host = rtrim($api_gateway_base_host, "/");
+            $api_gateway_name_file_exists = $api_type_for_file . "-" . str_replace(".", "-", $api_gateway_base_host) . ".php";
             if (file_exists(__DIR__ . "/api-gateway/" . $api_gateway_name_file_exists)) {
                 $api_gateway_name = $api_gateway_name_file_exists;
             } else {
+                error_log("[DGV-GATEWAY] No gateway file for api_base_url='" . $api_detail["api_base_url"] . "' (looked for " . $api_gateway_name_file_exists . "); falling back to " . $api_type_for_file . "-localserver.php");
                 $api_gateway_name = $api_type_for_file . "-localserver.php";
             }
 

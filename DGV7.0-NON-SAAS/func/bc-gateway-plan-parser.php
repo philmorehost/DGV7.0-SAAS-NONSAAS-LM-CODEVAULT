@@ -9,14 +9,38 @@
  * content is untrusted-shape from this function's point of view even though it ships with the app.
  */
 
-// Resolve the same gateway file real purchases use. Mirrors the formula in
-// func/bc-epin-fulfillment.php and web/func/data.php verbatim — do not diverge from it.
+// Resolve the same gateway file real purchases use. The host is normalised first: the stored
+// api_base_url is admin-typed and may carry a scheme, a "www." prefix, mixed case or a trailing
+// slash, and the raw value used to be pasted straight into the filename - so "www.x.com" and
+// "X.com" both silently missed and resolved to the wrong (local-server) gateway. The same
+// normalisation is mirrored in web/func/exam.php and func/bc-epin-fulfillment.php; keep the three
+// in step if this ever changes.
+function bc_gateway_normalize_host($api_base_url) {
+    $host = strtolower(trim($api_base_url));
+    $host = preg_replace('#^https?://#i', '', $host);
+    $host = preg_replace('#^www\.#i', '', $host);
+    return rtrim($host, "/");
+}
+
+// Resolve the same gateway file real purchases use.
 function bc_gateway_resolve_file($api_type_for_file, $api_base_url) {
     $gateway_dir = __DIR__ . "/api-gateway/";
-    $named_file = $api_type_for_file . "-" . str_replace(".", "-", $api_base_url) . ".php";
-    if (file_exists($gateway_dir . $named_file)) {
-        return $gateway_dir . $named_file;
+
+    $candidates = array();
+    $candidates[] = $api_type_for_file . "-" . str_replace(".", "-", bc_gateway_normalize_host($api_base_url)) . ".php";
+    // Keep the verbatim spelling as a second chance, so an unusual-but-working stored value that
+    // happens to have its own file is not broken by the normalisation above.
+    $raw_candidate = $api_type_for_file . "-" . str_replace(".", "-", $api_base_url) . ".php";
+    if (!in_array($raw_candidate, $candidates, true)) {
+        $candidates[] = $raw_candidate;
     }
+
+    foreach ($candidates as $candidate) {
+        if (file_exists($gateway_dir . $candidate)) {
+            return $gateway_dir . $candidate;
+        }
+    }
+
     $fallback_file = $api_type_for_file . "-localserver.php";
     if (file_exists($gateway_dir . $fallback_file)) {
         return $gateway_dir . $fallback_file;
