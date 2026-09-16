@@ -75,7 +75,12 @@ if ($result && mysqli_num_rows($result) > 0) {
         // which is not available in a cron job. We might need a more generic mailer.
         // Let's use the basic customBCMailSender from bc-mailer.php
         
-        global $mail_sender_name, $mail_sender_email, $mail_headers;
+        // Build mailer context for cron — $mail_sender_name and $mail_headers are not set
+        // as globals in CLI context. Construct them explicitly with a valid From address.
+        $smtp_from_addr = getSMTPUserForHeaders($connection_server);
+        $mail_sender_name = $get_all_super_admin_site_details['site_title'] ?? 'System Notification';
+        $mail_headers  = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\n";
+        $mail_headers .= "From: " . $mail_sender_name . " <" . $smtp_from_addr . ">\r\n";
         $details_array = array();
         $mail_html_body = mailDesignTemplate($email_subject, $email_body, $details_array, false);
         

@@ -70,8 +70,11 @@ if ($event == 'charge.success' || ($catch['status'] ?? '') == 'success' || ($cat
     if (($v_data['status'] ?? "") == "success") {
         $tx_raw = json_decode($v_data['json_result'], true);
         $tx_data = $tx_raw['data'] ?? $tx_raw;
+        // SECURITY: PayHub's verify endpoint returns TOP-LEVEL `status:true` merely to mean
+        // "transaction retrieved"; the REAL payment status is in `data.status`. Only treat
+        // 'success'/'successful' (data.status) as paid — never the top-level boolean.
         $tx_status = strtolower($tx_data['status'] ?? "");
-        if ($tx_status == "success" || $tx_status == "successful" || ($tx_raw['status'] ?? false) === true) {
+        if ($tx_status == "success" || $tx_status == "successful") {
             $verified_tx = $tx_data;
         }
     }

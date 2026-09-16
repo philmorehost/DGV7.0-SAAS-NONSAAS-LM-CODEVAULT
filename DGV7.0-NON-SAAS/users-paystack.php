@@ -31,13 +31,22 @@
         $vendor_id = $select_vendor_table["id"];
 		$paystack_keys = mysqli_fetch_assoc(mysqli_query($connection_server,"SELECT * FROM sas_payment_gateways WHERE vendor_id='$vendor_id' && gateway_name='paystack'"));
 		
-        // Verify Signature
+        // Verify Signature (HMAC-SHA512) — reject forged webhooks. Enforcement only kicks in
+        // when a real secret key (sk_) is stored; a misconfigured public key is left to the
+        // API verification below so legitimate webhooks are never silently dropped.
         $client_sig = $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] ?? '';
-        $secret = $paystack_keys['secret_key'] ?? '';
-        if (!empty($secret) && !empty($client_sig)) {
+        $secret = trim((string)($paystack_keys['secret_key'] ?? ''));
+        if (!empty($secret) && strpos($secret, 'pk_') !== 0) {
+            if (empty($client_sig)) {
+                 error_log("Paystack MISSING signature for vendor $vendor_id. Ref: $transaction_ref");
+                 http_response_code(401);
+                 exit("Invalid signature");
+            }
             $computed_sig = hash_hmac('sha512', $body, $secret);
-            if ($client_sig !== $computed_sig) {
-                 error_log("Paystack Signature Mismatch for vendor $vendor_id. Ref: $transaction_ref");
+            if (!hash_equals($computed_sig, $client_sig)) {
+                 error_log("Paystack INVALID signature for vendor $vendor_id. Ref: $transaction_ref");
+                 http_response_code(401);
+                 exit("Invalid signature");
             }
         }
 
@@ -62,7 +71,11 @@
             }
 
             if (!empty($username)) {
-                $check_tx = mysqli_query($connection_server, "SELECT id FROM sas_transactions WHERE vendor_id='$vendor_id' AND (api_reference='$transaction_ref' OR reference='$transaction_ref') LIMIT 1");
+                // Idempotency guard: only skip crediting if a COMPLETED (status=1) transaction
+                // already exists. The pending row (status=2) created at checkout must NOT block
+                // the credit — otherwise the webhook echoes ALREADY_PROCESSED forever and the
+                // wallet stays pending.
+                $check_tx = mysqli_query($connection_server, "SELECT id FROM sas_transactions WHERE vendor_id='$vendor_id' AND (api_reference='$transaction_ref' OR reference='$transaction_ref') AND status=1 LIMIT 1");
                 if (mysqli_num_rows($check_tx) == 0) {
                     $new_ref = substr(str_shuffle("12345678901234567890"), 0, 15);
                     $desc = "Paystack Wallet Credit - ".str_replace("_"," ",$payment_method);

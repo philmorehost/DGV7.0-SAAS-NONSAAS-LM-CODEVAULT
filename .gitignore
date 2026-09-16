@@ -3,3 +3,25 @@
 
 # Local image backup created during asset smushing (not part of the app)
 DGV7.0-SAAS/asset-backup/
+
+# ---------------------------------------------------------------------------
+# Live database dumps. These are full production exports: merchant API keys
+# (pk_live_/sk_live_), customer names, emails, phone numbers, bank accounts and
+# KYC documents. This repository pushes to GitHub, and a committed secret stays
+# in the history for ever even after it is deleted - so they are ignored by
+# explicit path rather than by `*.sql`, because real schema files are tracked
+# (CODEVAULT/database.sql, EXAM-HUB/install/schema.sql, lm/migrations/*.sql)
+# and a wildcard would quietly hide the next one.
+/ueozmmmx_vtu.sql
+/v8data_vendor.sql
+/MERCHANT.PAYHUB/payhubfund_ing.sql
+/MERCHANT.PAYHUB/ueozmmmx_vtu.sql
+
+# ---------------------------------------------------------------------------
+# Google/Firebase service-account key. A private key, not a config file: anyone
+# holding it can act as that project. Verified NOT to be in this repository's
+# history (checked with `git log --all`), so ignoring it from here is enough -
+# had it been, the key would have needed rotating instead.
+/apps-505118-381f9a756220.json
+/service-account*.json
+

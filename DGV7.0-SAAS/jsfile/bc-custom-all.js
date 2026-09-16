@@ -121,8 +121,10 @@
                 carrierAirtimeInfo("","","");
             }
         }else{
-            isprovider.value = networkName;
-            carrierAirtimeInfo(networkName,amount.value,phoneNo.value);
+            if (networkName) {
+                isprovider.value = networkName;
+            }
+            carrierAirtimeInfo(isprovider.value,amount.value,phoneNo.value);
         }
     }
 
@@ -217,17 +219,18 @@
         var phoneByPass = document.getElementById("phone-bypass");
         var isprovider = document.getElementById("isprovider");
         
-        isprovider.value = "";
         var ispNames = ["airtel","mtn","glo","9mobile"];
-        for(let x = 0; x < ispNames.length; x++){
-            var ispImage = document.getElementById(ispNames[x]+"-lg");
-            ispImage.src = "/asset/"+ispNames[x]+".png";
-            ispImage.classList.remove("br-radius-5px");
-            ispImage.classList.add("br-radius-100px");
-            ispImage.style = "filter: grayscale(0%);";
-        }
 
         if(phoneByPass.checked === false){
+            // Reset ISP selection only when NOT in bypass mode
+            isprovider.value = "";
+            for(let x = 0; x < ispNames.length; x++){
+                var ispImage = document.getElementById(ispNames[x]+"-lg");
+                ispImage.src = "/asset/"+ispNames[x]+".png";
+                ispImage.classList.remove("br-radius-5px");
+                ispImage.classList.add("br-radius-100px");
+                ispImage.style = "filter: grayscale(0%);";
+            }
             var phoneNetworkArr = [];
             var filterFirstFourNumbers = filteredNumbers.map(phone => phone.trim().substring(1,4));
             
@@ -261,8 +264,11 @@
             }
             console.log(phoneNetworkArr);
         }else{
-            isprovider.value = networkName;
-            carrierBulkAirtimeInfo([networkName], networkName,amount.value);
+            // Bypass mode: keep existing isprovider or update if networkName provided
+            if (networkName) {
+                isprovider.value = networkName;
+            }
+            carrierBulkAirtimeInfo([isprovider.value], isprovider.value,amount.value);
         }
     }
 
@@ -337,8 +343,10 @@
                 carrierDataInfo("","","");
             }
         }else{
-            isprovider.value = networkName;
-            carrierDataInfo(networkName,amount.value,phoneNo.value);
+            if (networkName) {
+                isprovider.value = networkName;
+            }
+            carrierDataInfo(isprovider.value,amount.value,phoneNo.value);
         }
     }
 
@@ -448,17 +456,18 @@
         var phoneByPass = document.getElementById("phone-bypass");
         var isprovider = document.getElementById("isprovider");
         
-        isprovider.value = "";
         var ispNames = ["airtel","mtn","glo","9mobile"];
-        for(let x = 0; x < ispNames.length; x++){
-            var ispImage = document.getElementById(ispNames[x]+"-lg");
-            ispImage.src = "/asset/"+ispNames[x]+".png";
-            ispImage.classList.remove("br-radius-5px");
-            ispImage.classList.add("br-radius-100px");
-            ispImage.style = "filter: grayscale(0%);";
-        }
     
         if(phoneByPass.checked === false){
+            // Reset ISP selection only when NOT in bypass mode
+            isprovider.value = "";
+            for(let x = 0; x < ispNames.length; x++){
+                var ispImage = document.getElementById(ispNames[x]+"-lg");
+                ispImage.src = "/asset/"+ispNames[x]+".png";
+                ispImage.classList.remove("br-radius-5px");
+                ispImage.classList.add("br-radius-100px");
+                ispImage.style = "filter: grayscale(0%);";
+            }
             var phoneNetworkArr = [];
             var filterFirstFourNumbers = filteredNumbers.map(phone => phone.trim().substring(1,4));
             
@@ -481,8 +490,11 @@
             }
             console.log(phoneNetworkArr);
         }else{
-            isprovider.value = networkName;
-            carrierBulkDataInfo([networkName], networkName,amount.value);
+            // Bypass mode: keep existing isprovider or update if networkName provided
+            if (networkName) {
+                isprovider.value = networkName;
+            }
+            carrierBulkDataInfo([isprovider.value], isprovider.value,amount.value);
         }
     }
     

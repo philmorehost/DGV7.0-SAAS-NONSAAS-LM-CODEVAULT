@@ -7,6 +7,81 @@ require_once __DIR__ . '/vendor/phpmailer/src/Exception.php';
 require_once __DIR__ . '/vendor/phpmailer/src/PHPMailer.php';
 require_once __DIR__ . '/vendor/phpmailer/src/SMTP.php';
 
+/**
+ * bc_mail_log_error()
+ * Appends a line to logs/mail-errors.log. The old code swallowed the PHPMailer exception
+ * and fell back to mail() with no trace, which made "works on server A, fails on server B"
+ * issues nearly impossible to diagnose. Log the real failure so it is visible.
+ */
+function bc_mail_log_error($message)
+{
+    $dir = __DIR__ . '/../logs';
+    if (!is_dir($dir)) { @mkdir($dir, 0755, true); }
+    @file_put_contents($dir . '/mail-errors.log', '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * bc_sanitize_from_name()
+ * Strips control characters and RFC 5322 "specials" ( " ( ) , : ; < > @ [ \ ] ) from a
+ * display name so it can be embedded in a raw From: header without breaking header parsing.
+ * Returns a non-empty, safe string (defaults to "System Notification").
+ */
+function bc_sanitize_from_name($name)
+{
+    $name = (string)$name;
+    $name = preg_replace('/[\x00-\x1F\x7F"(),:;<>@\[\]\\\\]/', '', $name);
+    $name = trim($name);
+    return ($name !== '') ? $name : 'System Notification';
+}
+
+/**
+ * bc_resolve_safe_from_address()
+ * Returns a guaranteed RFC-5322-valid sender address for the current context (vendor first,
+ * then super admin, then a known-good default). An invalid/empty smtp_user stored in the DB
+ * is the #1 cause of Gmail 550 5.7.1 "missing a valid address in From" — if the raw DB value
+ * is reused verbatim, PHPMailer rejects it, the code falls back to mail(), and the same broken
+ * address is echoed into the raw From: header. Validate here so every path sends a compliant
+ * address.
+ */
+function bc_resolve_safe_from_address($connection_server, $preferred = null)
+{
+    $candidates = [];
+    if (is_string($preferred) && $preferred !== '') $candidates[] = $preferred;
+
+    $vid = resolveVendorID();
+    if ($vid > 0) {
+        $q = mysqli_query($connection_server, "SELECT smtp_user FROM sas_vendors WHERE id='$vid' LIMIT 1");
+        if ($q && ($r = mysqli_fetch_assoc($q)) && !empty($r['smtp_user'])) $candidates[] = $r['smtp_user'];
+    }
+    $q = mysqli_query($connection_server, "SELECT smtp_user FROM sas_super_admin LIMIT 1");
+    if ($q && ($r = mysqli_fetch_assoc($q)) && !empty($r['smtp_user'])) $candidates[] = $r['smtp_user'];
+
+    $candidates[] = 'notification@cheaperdata.com.ng';
+    foreach ($candidates as $addr) {
+        if (is_string($addr) && filter_var(trim($addr), FILTER_VALIDATE_EMAIL)) {
+            return trim($addr);
+        }
+    }
+    return 'notification@cheaperdata.com.ng';
+}
+
+/**
+ * bc_resolve_from_name()
+ * Picks the display name for the From: header: the explicit $from argument if given,
+ * otherwise the name embedded in the caller's own "From: Name <addr>" header, otherwise
+ * the default. Sanitized so it is safe to use in a raw header.
+ */
+function bc_resolve_from_name($from, $headers)
+{
+    $name = '';
+    if (is_string($from) && $from !== '') {
+        $name = $from;
+    } elseif (preg_match('/From:\s*([^<\r\n]+)</i', (string)$headers, $m)) {
+        $name = trim($m[1]);
+    }
+    return bc_sanitize_from_name($name);
+}
+
 function customBCMailSender($from,$to,$subject,$message,$headers, $background = true){
     global $connection_server;
 
@@ -42,6 +117,10 @@ function customBCMailSender($from,$to,$subject,$message,$headers, $background = 
         $smtp_port = (int)($smtp_config['smtp_port'] ?? 25);
         $smtp_sec = $smtp_config['smtp_sec'] ?? 'tls';
 
+        // GUARANTEE a valid From address (see bc_resolve_safe_from_address). Using the raw
+        // DB value here let a bad smtp_user poison both the SMTP path AND the mail() fallback.
+        $smtp_user = bc_resolve_safe_from_address($connection_server, $smtp_user);
+
 		$smtpMAIL->isSMTP();
 		$smtpMAIL->Host = $smtp_host;
 		$smtpMAIL->SMTPAuth = true;
@@ -61,16 +140,28 @@ function customBCMailSender($from,$to,$subject,$message,$headers, $background = 
 		// proper display name (e.g. a marketing campaign, which should show the vendor's
 		// own site name) now get it; existing callers that still pass '' keep the old
 		// default unchanged.
-		$smtpMAIL->setFrom($smtp_user, !empty($from) ? $from : "System Notification");
-		$smtpMAIL->addAddress($to);
+		$smtpMAIL->setFrom($smtp_user, bc_resolve_from_name($from, $headers));
+
+        // addAddress() throws on a malformed recipient. One bad address must not force the
+        // whole message onto the mail() fallback (or kill the loop in process_mail_queue.php).
+        try {
+            $smtpMAIL->addAddress($to);
+        } catch (Exception $e) {
+            bc_mail_log_error("customBCMailSender: invalid recipient skipped: " . var_export($to, true));
+            return false;
+        }
 		$smtpMAIL->addReplyTo($smtp_user);
 
-        // Extract Cc from headers if present
+        // Extract Cc from headers if present — validate each one. An invalid address here
+        // (e.g. the literal string "Error: Vendor not exists" produced by get_admin_info())
+        // used to make PHPMailer throw and silently divert the mail to the broken fallback.
         if (preg_match('/Cc:\s*([^\r\n]+)/i', $headers, $cc_matches)) {
             $cc_emails = explode(',', $cc_matches[1]);
             foreach($cc_emails as $cc_email) {
                 $cc_email = trim($cc_email);
-                if (!empty($cc_email)) $smtpMAIL->addCC($cc_email);
+                if (!empty($cc_email) && filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
+                    try { $smtpMAIL->addCC($cc_email); } catch (Exception $e) { /* skip bad cc */ }
+                }
             }
         }
 		
@@ -82,13 +173,30 @@ function customBCMailSender($from,$to,$subject,$message,$headers, $background = 
 		$smtpMAIL->AltBody = strip_tags($message);
 		$sent = $smtpMAIL->send();
 	} catch (Exception $e) {
-        // Fallback to Inbuilt Mail Functions. Raw mail() applies no Content-Transfer-Encoding
-        // at all, so a message with any long line (the full HTML template rendered onto one
-        // line, or a long marketing paragraph with no manual line breaks) reproduces the exact
-        // "message has lines too long for transport" rejection the Encoding='base64' setting
-        // above exists to prevent on the primary SMTP path — base64-encode it here too, so this
-        // fallback can't hit the same failure.
-	    $sent = mail($to, $subject, chunk_split(base64_encode($message)), $headers . "Content-Transfer-Encoding: base64\r\n");
+        // Log the real failure so server-side SMTP problems are visible (previously the
+        // exception was swallowed silently and mail() was used with no way to see why).
+        bc_mail_log_error("customBCMailSender SMTP failed (host={$smtpMAIL->Host}, info=" . ($smtpMAIL->ErrorInfo ?: $e->getMessage()) . "); falling back to mail() for {$to}");
+
+        // Fallback to inbuilt mail(). Build a complete, RFC-5322-compliant header block from
+        // scratch (never trust the caller's raw $headers) so the From: header is ALWAYS present
+        // and valid — this is exactly what Google's 550 5.7.1 "missing a valid address in
+        // From" rejection complains about. Raw mail() applies no Content-Transfer-Encoding,
+        // so base64-encode the body here too (same reasoning as the primary path's
+        // Encoding='base64').
+        $safe_from = bc_resolve_safe_from_address($connection_server, $smtp_user ?? null);
+        $fallback_headers = "MIME-Version: 1.0\r\n";
+        $fallback_headers .= "Content-type: text/html; charset=UTF-8\r\n";
+        $fallback_headers .= "From: " . bc_resolve_from_name($from, $headers) . " <" . $safe_from . ">\r\n";
+        $fallback_headers .= "Reply-To: " . $safe_from . "\r\n";
+        $fallback_headers .= "Content-Transfer-Encoding: base64\r\n";
+
+        // Best-effort envelope sender so the receiving MTA sees a matching Return-Path.
+        // Suppress warnings; some hosts restrict the -f parameter.
+        $sent = @mail($to, $subject, chunk_split(base64_encode($message)), $fallback_headers, '-f' . $safe_from);
+        if (!$sent) {
+            // Last resort without -f (some hosts refuse the 5th argument).
+            $sent = @mail($to, $subject, chunk_split(base64_encode($message)), $fallback_headers);
+        }
 	}
     return $sent;
 }
@@ -156,13 +264,19 @@ function sendEmailWithAttachments($to, $subject, $message, $from_name, $from_ema
         // Fallback. Same "lines too long for transport" risk as customBCMailSender()'s
         // fallback above — base64-encode the body here too. Note: attachments are not included
         // in this fallback (pre-existing limitation, unrelated to this fix) — if SMTP fails,
-        // the email still goes out via mail() but without its attachments.
+        // the email still goes out via mail() but without its attachments. The From address is
+        // validated so a bad $from_email can't trigger Gmail 550 5.7.1 "missing From".
+        bc_mail_log_error("sendEmailWithAttachments SMTP failed (" . ($smtpMAIL->ErrorInfo ?: $e->getMessage()) . "); falling back to mail() for {$to}");
+        $safe_from = bc_resolve_safe_from_address($connection_server, $from_email);
         $fallback_headers = "MIME-Version: 1.0\r\n";
-        $fallback_headers .= "From: $from_name <$from_email>\r\n";
+        $fallback_headers .= "From: " . bc_sanitize_from_name($from_name) . " <" . $safe_from . ">\r\n";
+        $fallback_headers .= "Reply-To: " . $safe_from . "\r\n";
         $fallback_headers .= "Content-Type: text/html; charset=UTF-8\r\n";
         $fallback_headers .= "Content-Transfer-Encoding: base64\r\n";
-        $sent = mail($to, $subject, chunk_split(base64_encode($message)), $fallback_headers);
-
+        $sent = @mail($to, $subject, chunk_split(base64_encode($message)), $fallback_headers, '-f' . $safe_from);
+        if (!$sent) {
+            $sent = @mail($to, $subject, chunk_split(base64_encode($message)), $fallback_headers);
+        }
     }
     return $sent;
 }

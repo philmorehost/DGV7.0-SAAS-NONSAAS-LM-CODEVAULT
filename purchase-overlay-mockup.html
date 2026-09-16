@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Purchase Processing Overlay — Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f1f5f9; padding: 24px; color: #0f172a; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+  .grid { display: flex; gap: 24px; flex-wrap: wrap; }
+  .phone {
+    width: 360px; height: 700px; background: #fff; border-radius: 28px;
+    box-shadow: 0 20px 40px rgba(0,0,0,.18); overflow: hidden; position: relative;
+    border: 8px solid #111;
+  }
+  .phone .statusbar { background:#fff; padding: 10px 16px 6px; font-size: 12px; font-weight: 600; color:#334155; display:flex; justify-content:space-between; }
+  .phone .screen { height: calc(100% - 30px); overflow-y: auto; position: relative; }
+  .phone h2 { font-size: 16px; padding: 12px 16px 6px; }
+  .field { margin: 10px 16px; }
+  .field label { display:block; font-size: 12px; color:#64748b; margin-bottom:5px; font-weight:600; }
+  .field .input { border:1px solid #cbd5e1; border-radius:10px; padding:12px; font-size:14px; color:#0f172a; background:#f8fafc; }
+  .plan { border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin:8px 16px; display:flex; justify-content:space-between; background:#fff; }
+  .plan.selected { border-color:#4f46e5; background:#eef2ff; }
+  .plan .price { color:#4f46e5; font-weight:700; }
+  .buy { margin:14px 16px; background:#4f46e5; color:#fff; text-align:center; padding:14px; border-radius:12px; font-weight:700; font-size:15px; }
+  .caption { text-align:center; font-size:13px; margin-top:10px; color:#475569; font-weight:600; }
+  .badge { display:inline-block; font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; margin-left:8px; vertical-align:middle; }
+  .badge.bad { background:#fee2e2; color:#b91c1c; }
+  .badge.good { background:#dcfce7; color:#15803d; }
+  .note { font-size:12px; color:#64748b; margin:8px 16px; line-height:1.5; }
+
+  /* ===== The full-screen blocking overlay ===== */
+  .overlay {
+    position: absolute; inset: 0; z-index: 50;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+  .overlay .card {
+    background: #fff; border-radius: 20px; padding: 32px 40px;
+    box-shadow: 0 25px 50px rgba(0,0,0,.3);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .spinner {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 5px solid #e0e7ff; border-top-color: #4f46e5;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .overlay .card p { font-size: 15px; font-weight: 600; color: #0f172a; }
+  .overlay .card .sub2 { font-size: 12px; color: #64748b; font-weight: 400; }
+
+  /* ===== The current (bad) inline spinner at the bottom ===== */
+  .inline-spinner { display:flex; justify-content:center; padding:10px 0 0; }
+  .inline-spinner .spinner { width:26px; height:26px; border-width:3px; }
+</style>
+</head>
+<body>
+
+  <h1>App Purchase — Processing Feedback</h1>
+  <p class="sub">Left: how it looks today (spinner below the fold, out of view). &nbsp;Right: the fix (full-screen blocking overlay). Tap <b>Buy Data</b> on the right phone.</p>
+
+  <div class="grid">
+
+    <!-- ============ BEFORE (current buggy behaviour) ============ -->
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>MZEEVTU</span></div>
+      <div class="screen">
+        <h2>Data Bundles</h2>
+        <div class="field"><label>Network</label><div class="input">MTN ▾</div></div>
+        <div class="field"><label>Phone Number</label><div class="input">0803 123 4567</div></div>
+        <h2 style="padding-top:4px;">Select Plan</h2>
+        <div class="plan"><span>1GB SME</span><span class="price">₦330</span></div>
+        <div class="plan selected"><span>2GB SME</span><span class="price">₦650</span></div>
+        <div class="plan"><span>5GB SME</span><span class="price">₦1600</span></div>
+
+        <!-- THIS is the current inline spinner: at the very bottom, inside the scrollable form -->
+        <div class="inline-spinner" id="beforeSpinner" style="display:none;">
+          <div class="spinner"></div>
+        </div>
+        <div class="buy" id="beforeBuy">Buy Data</div>
+
+        <p class="note">⚠️ When the user taps <b>Buy</b>, the small spinner appears <b>here</b> — between the plan list and the button. On a real phone with a long plan list, this spot is <b>off-screen</b>, so the user sees nothing happening and may tap Buy again (double purchase).</p>
+        <p class="note" style="margin-bottom:16px;">Scroll down after tapping Buy to see the spinner — this is what the user is forced to do today.</p>
+      </div>
+      <div class="caption"><span class="badge bad">TODAY</span> Spinner below the fold</div>
+    </div>
+
+    <!-- ============ AFTER (fixed: full-screen overlay) ============ -->
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>MZEEVTU</span></div>
+      <div class="screen" id="afterScreen">
+        <h2>Data Bundles</h2>
+        <div class="field"><label>Network</label><div class="input">MTN ▾</div></div>
+        <div class="field"><label>Phone Number</label><div class="input">0803 123 4567</div></div>
+        <h2 style="padding-top:4px;">Select Plan</h2>
+        <div class="plan"><span>1GB SME</span><span class="price">₦330</span></div>
+        <div class="plan selected"><span>2GB SME</span><span class="price">₦650</span></div>
+        <div class="plan"><span>5GB SME</span><span class="price">₦1600</span></div>
+        <div class="buy" id="afterBuy">Buy Data</div>
+        <p class="note" style="margin-bottom:16px;">✅ After tapping <b>Buy</b>, a full-screen overlay covers everything — the user instantly sees "Processing…", cannot scroll or tap anywhere else, and it dismisses automatically when the result (success / pending / failed) appears.</p>
+      </div>
+      <div class="caption"><span class="badge good">FIXED</span> Full-screen blocking overlay</div>
+
+      <!-- The overlay (hidden until Buy is clicked) -->
+      <div class="overlay" id="afterOverlay" style="display:none;">
+        <div class="card">
+          <div class="spinner"></div>
+          <p>Processing…</p>
+          <p class="sub2">Please wait, do not close the app</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  // BEFORE: show the tiny inline spinner (simulating the current bad UX)
+  document.getElementById('beforeBuy').addEventListener('click', function(){
+    var s = document.getElementById('beforeSpinner');
+    s.style.display = s.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  // AFTER: show the full-screen overlay for 3 seconds (simulating the fix)
+  document.getElementById('afterBuy').addEventListener('click', function(){
+    var o = document.getElementById('afterOverlay');
+    o.style.display = 'flex';
+    setTimeout(function(){ o.style.display = 'none'; }, 3000);
+  });
+</script>
+</body>
+</html>

@@ -148,8 +148,10 @@ function guest_attempt_paid_fulfillment($reference) {
     if (($v_data['status'] ?? "") == "success") {
         $tx_raw = json_decode($v_data['json_result'], true);
         $tx_data = $tx_raw['data'] ?? $tx_raw;
+        // SECURITY: PayHub verify returns top-level `status:true` = "retrieved"; the real
+        // payment status is `data.status`. Only fulfill on success/successful.
         $tx_status = strtolower($tx_data['status'] ?? "");
-        if ($tx_status == "success" || $tx_status == "successful" || ($tx_raw['status'] ?? false) === true) {
+        if ($tx_status == "success" || $tx_status == "successful") {
             $verified_tx = $tx_data;
         }
     }
