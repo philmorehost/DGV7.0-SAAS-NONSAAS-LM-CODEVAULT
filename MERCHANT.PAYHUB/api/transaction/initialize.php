@@ -34,6 +34,16 @@ $phone = sanitize($input['phone'] ?? '');
 $metadata = $input['metadata'] ?? '';
 if (is_array($metadata)) $metadata = json_encode($metadata);
 
+/*
+ * Optional: where to return the payer once the payment is settled.
+ *
+ * Validated and then stored on the transaction, because the return happens much later - after a full
+ * Paystack round trip, on a different request, from checkout.php or verify.php - by which time the
+ * query string that carried it is gone. An empty string means "no callback was requested", which has
+ * to keep behaving exactly as it did before this parameter existed.
+ */
+$callback_url = safe_callback_url($input['callback_url'] ?? '');
+
 // Special case for VA generation only (amount 0)
 if (!$email || ($amount <= 0 && empty($phone))) {
     http_response_code(400);
@@ -76,9 +86,14 @@ if ($amount > 0 && !$is_test) {
 
 // Only create a transaction if amount is greater than 0
 if ($amount > 0) {
+    // The callback_url column is added here rather than relying on the card-testing guard below,
+    // because that guard is skipped in test mode (`!$is_test`) and a test-mode initialize still
+    // writes a transaction. ensure_column() is idempotent and cached, so this costs one SHOW COLUMNS.
+    ensure_payment_schema();
+
     // Create transaction in pending state
-    $stmt = $db->prepare("INSERT INTO transactions (user_id, reference, amount, customer_email, customer_name, status, is_test, metadata) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)");
-    $stmt->execute([$user['id'], $ref, $amount, $email, $name, $is_test ? 1 : 0, $metadata]);
+    $stmt = $db->prepare("INSERT INTO transactions (user_id, reference, amount, customer_email, customer_name, status, is_test, metadata, callback_url) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)");
+    $stmt->execute([$user['id'], $ref, $amount, $email, $name, $is_test ? 1 : 0, $metadata, $callback_url !== '' ? $callback_url : null]);
     $txId = $db->lastInsertId();
 
     log_transaction_event($txId, 'initiated', "Transaction initiated via API");
@@ -108,7 +123,10 @@ if ($amount > 0) {
         'data' => [
             'authorization_url' => $checkoutUrl,
             'access_code' => $ref,
-            'reference' => $ref
+            'reference' => $ref,
+            // Echoed back so a merchant can see whether its return URL was accepted - and, when it was
+            // rejected by safe_callback_url(), that it was rejected rather than silently dropped.
+            'callback_url' => $callback_url
         ]
     ];
 } else {

@@ -16,6 +16,17 @@ $stmt = $db->prepare("SELECT * FROM transactions WHERE reference = ?");
 $stmt->execute([$ref]);
 $tx = $stmt->fetch();
 
+/*
+ * Where the merchant asked the payer to be returned to, if anywhere.
+ *
+ * Read from the transaction rather than the query string because this visit is reached from
+ * checkout.php after the Paystack round trip, carrying only `?reference=`. The value was validated
+ * when the transaction was initialized; it is validated again here because a stored value is not a
+ * trusted value - the row may predate this column, or have been written by an older code path.
+ * '' means no callback was requested, and then nothing below changes what happens.
+ */
+$callback_url = safe_callback_url($tx['callback_url'] ?? '');
+
 $status = 'pending';
 $amount = 0;
 
@@ -186,9 +197,25 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
                     log_transaction_event($tx['id'], 'verified', "Payment verified via direct lookup.");
 
                     // Trigger Webhook if configured
-                    $stmt = $db->prepare("SELECT webhook_url FROM users WHERE id = ?");
+                    //
+                    // NOTE: this is a second, older sender that duplicates
+                    // includes/functions.php's trigger_merchant_webhook(). They differ, and the
+                    // difference is worth knowing:
+                    //
+                    //   * this one sent NO signature at all, so a merchant that follows the
+                    //     documented contract ("verify X-Payhub-Signature") saw a webhook it could
+                    //     not verify and had to either reject it - losing real payments - or fall
+                    //     back to re-verifying through the API. The header is now sent, which is
+                    //     additive: a merchant that ignores it is unaffected.
+                    //   * this one reports `amount` in NAIRA (the stored figure), while
+                    //     trigger_merchant_webhook() reports it in KOBO (`to_minor_units()`).
+                    //     That has deliberately NOT been changed here, because a live merchant
+                    //     parsing this webhook would suddenly read the amount as 100x its value.
+                    //     Unifying the two should be an announced change, not a silent one.
+                    $stmt = $db->prepare("SELECT webhook_url, secret_key, test_secret_key FROM users WHERE id = ?");
                     $stmt->execute([$tx['user_id']]);
-                    $webhook_url = $stmt->fetchColumn();
+                    $webhook_owner = $stmt->fetch();
+                    $webhook_url = $webhook_owner['webhook_url'] ?? '';
 
                     if ($webhook_url) {
                         $payload = [
@@ -207,11 +234,24 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
                                 'metadata' => $res['data']['metadata'] ?? []
                             ]
                         ];
+
+                        // Signed the same way as trigger_merchant_webhook(): the merchant verifies it
+                        // with the same secret key it authenticates its API calls with.
+                        $webhook_body = json_encode($payload);
+                        $webhook_secret = (string)($webhook_owner['secret_key'] ?? '');
+                        if ($webhook_secret === '' && !empty($webhook_owner['test_secret_key'])) {
+                            $webhook_secret = (string)$webhook_owner['test_secret_key'];
+                        }
+                        $webhook_headers = ['Content-Type: application/json'];
+                        if ($webhook_secret !== '') {
+                            $webhook_headers[] = 'X-Payhub-Signature: ' . hash_hmac('sha256', $webhook_body, $webhook_secret);
+                        }
+
                         $ch = curl_init($webhook_url);
                         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                         curl_setopt($ch, CURLOPT_POST, true);
-                        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-                        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                        curl_setopt($ch, CURLOPT_POSTFIELDS, $webhook_body);
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, $webhook_headers);
                         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
                         curl_exec($ch);
                         curl_close($ch);
@@ -233,6 +273,32 @@ if ($tx && $tx['status'] === 'success' && (bool)$tx['is_test']) {
             $status = 'failed';
         }
     }
+}
+
+/*
+ * Hand the payer back to the merchant — the whole point of a `callback_url`.
+ *
+ * Until this existed there was no such parameter anywhere in this gateway, so every payer who paid on
+ * the hosted checkout finished on this page with nothing but a "Return Home" link and the merchant's
+ * site never saw its own customer again. A merchant had to rely on the outbound www webhook alone to
+ * learn the payment had happened, which is no use to the person standing in front of a checkout
+ * waiting to be told their advert or order went through.
+ *
+ * Success only, and deliberately after the fulfilment block above has committed: redirecting earlier
+ * would let a merchant render its "payment received" page for money this gateway has not yet credited.
+ * A failed or pending payment stays here, because bouncing a payer to the merchant's success page with
+ * a failed payment behind it is worse than showing them the failure.
+ *
+ * The reference is echoed in both spellings the ecosystem uses - `reference` and the Paystack-style
+ * `trxref` - plus an explicit `status`, so the merchant can confirm what happened without trusting
+ * the redirect alone (and should still verify server-side: a return URL can be replayed).
+ */
+if ($status === 'success' && $callback_url !== '') {
+    redirect(append_query_params($callback_url, [
+        'reference' => $ref,
+        'trxref' => $ref,
+        'status' => 'success',
+    ]));
 }
 
 include 'includes/header.php';
@@ -261,6 +327,10 @@ include 'includes/header.php';
         <?php endif; ?>
 
         <a href="index.php" class="inline-block bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all">Return Home</a>
+        <?php if ($callback_url !== ''): ?>
+            <?php /* Offered on every outcome, including the failed one: a payer who was sent here by a merchant wants to get back to where they came from, and a page that only offers this gateway's home page strands them. */ ?>
+            <a href="<?php echo htmlspecialchars(append_query_params($callback_url, ['reference' => $ref, 'trxref' => $ref, 'status' => $status]), ENT_QUOTES, 'UTF-8'); ?>" class="mt-3 inline-block bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">Return to merchant</a>
+        <?php endif; ?>
     </div>
 </div>
 <?php include 'includes/footer.php'; ?>

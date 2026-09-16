@@ -242,6 +242,70 @@ function redirect($path) {
 }
 
 /**
+ * Validates a merchant-supplied `callback_url` (the API's `callback_url`, and the column the
+ * checkout return reads).
+ *
+ * This value ends up as a **browser redirect target**, so it is an open-redirect risk by nature:
+ * anything accepted here sends a payer to somebody else's site from ours, and it is the one place a
+ * merchant can influence where a *third party's* browser goes. So only an absolute http/https URL
+ * with a host is accepted. Everything else - a relative path, `javascript:`, `data:`, a
+ * protocol-relative `//evil.example`, a URL with embedded credentials (`https://payhub.com.ng@evil.example`
+ * reads as payhub but goes to evil.example), or anything holding control characters - is rejected by
+ * returning ''.
+ *
+ * Returning '' is the contract: callers treat it as "no callback requested" and behave **exactly**
+ * as they did before the parameter existed. A merchant that sends nothing must see no change.
+ */
+function safe_callback_url($url) {
+    $url = trim((string) $url);
+    if ($url === '' || strlen($url) > 255) {
+        return '';
+    }
+    // Control characters can smuggle a response/header split into a Location header.
+    if (preg_match('/[\x00-\x20\x7f]/', $url)) {
+        return '';
+    }
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+        return '';
+    }
+    if (!in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
+        return '';
+    }
+    if (isset($parts['user']) || isset($parts['pass'])) {
+        return '';
+    }
+    return $url;
+}
+
+/**
+ * Appends query parameters to a URL, respecting an existing query string and any fragment.
+ *
+ * The result parameters have to reach the merchant, and a merchant's callback may already carry its
+ * own query string (`.../return?order=17`) or a fragment. Appending with a blind `?` would corrupt
+ * either.
+ */
+function append_query_params($url, array $params) {
+    if (!$params) {
+        return $url;
+    }
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['host'])) {
+        return $url;
+    }
+    $query = $parts['query'] ?? '';
+    $query = $query === '' ? http_build_query($params) : $query . '&' . http_build_query($params);
+
+    $rebuilt = $parts['scheme'] . '://' . $parts['host']
+        . (isset($parts['port']) ? ':' . $parts['port'] : '')
+        . ($parts['path'] ?? '');
+    if ($query !== '') {
+        $rebuilt .= '?' . $query;
+    }
+    return $rebuilt . (isset($parts['fragment']) ? '#' . $parts['fragment'] : '');
+}
+
+/**
  * Enforces mandatory compliance for merchant portal pages.
  * Redirects unverified/pending merchants to the compliance page.
  */
@@ -1028,6 +1092,10 @@ function ensure_payment_schema() {
     ensure_column('transactions', 'card_type', 'VARCHAR(40) DEFAULT NULL');
     ensure_column('transactions', 'card_country', 'VARCHAR(8) DEFAULT NULL');
     ensure_column('transactions', 'checkout_token', 'VARCHAR(64) DEFAULT NULL');
+    // Where the merchant asked the payer to be returned to. Held on the transaction because the
+    // return happens after a full Paystack round trip, on a different request, from
+    // checkout.php/verify.php - the query string that carried the parameter is long gone by then.
+    ensure_column('transactions', 'callback_url', 'VARCHAR(255) DEFAULT NULL');
 
     ensure_table('transaction_reversals', "CREATE TABLE IF NOT EXISTS transaction_reversals (
         id INT AUTO_INCREMENT PRIMARY KEY,
