@@ -405,10 +405,13 @@ if ($connection_server) {
 		$select_vendor_table = $_SESSION['vendor_details_cache'];
 	}
 
-	if ($select_vendor_table) {
-		unset($_SESSION["admin_to_user_redirect"]);
+    // Vendor's "Enforce Transaction PIN for all Users" toggle, exposed once so the purchase pages can
+    // render the PIN field without re-querying sas_vendors. Enforcement itself lives in
+    // requireTransactionPin() and never depends on this variable being read.
+    $force_security_pin_for_users = is_array($select_vendor_table) ? (int)($select_vendor_table['force_security_pin'] ?? 0) : 0;
 
-		// STANDALONE: Expiry check removed for single-tenant setup
+    if ($select_vendor_table) {
+            unset($_SESSION["admin_to_user_redirect"]);
 
 		if (isset($_SESSION["user_session"])) {
 			$username = mysqli_real_escape_string($connection_server, $_SESSION["user_session"]);

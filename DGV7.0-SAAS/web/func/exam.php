@@ -20,7 +20,15 @@ if (in_array($purchase_method, $purchase_method_array)) {
 
     $exam_type_array = array("waec", "neco", "nabteb", "jamb");
     if (in_array($epp, $exam_type_array)) {
-        if (in_array($purchase_method, array("API", "APP")) && !requireTransactionPin($get_vendor_details ?? array(), $get_logged_user_details, ($get_api_post_info ?? array()), $__pin_error)) {
+        // Transaction PIN enforcement - only for a PERSON buying: our own website ("WEB") or the
+        // mobile app ("APP"). External API integrations ("API") are deliberately EXEMPT: one merchant
+        // api_key serves that merchant's own customers, so there is no single PIN to ask for, and
+        // requiring one made every API purchase fail with "Invalid transaction PIN.".
+        // The AI assistant buys for the logged-in person on our own site, so it opts back in via
+        // $GLOBALS['pin_required_for_api_purchase'] (and may pass a `pin` with the intent).
+        $__pin_enforced = in_array($purchase_method, array("WEB", "APP")) || !empty($GLOBALS['pin_required_for_api_purchase']);
+        $__pin_input = ($purchase_method === "WEB") ? $_POST : ($get_api_post_info ?? array());
+        if ($__pin_enforced && !requireTransactionPin($get_vendor_details ?? array(), $get_logged_user_details, $__pin_input, $__pin_error)) {
             $json_response_array = array("status" => "failed", "desc" => $__pin_error);
             $json_response_encode = json_encode($json_response_array, true);
         } elseif ($get_logged_user_details["status"] != 1) {

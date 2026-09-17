@@ -415,12 +415,36 @@ function verifyUserPIN($input_pin, $user_details) {
 }
 
 /**
- * Gate for the vendor's "force transaction PIN" toggle (sas_vendors.force_security_pin),
- * used by every stateless web/api/*.php purchase endpoint. Previously this toggle was only
- * enforced in the session-based web/Dashboard.php gate — API/app purchases ignored it
- * entirely, so enabling it in bc-admin had no effect on anything but the web dashboard.
+ * Gate for the vendor's "force transaction PIN" toggle (sas_vendors.force_security_pin).
+ *
+ * WHO IS ASKED: a PERSON buying - on our own website (WEB) or in the mobile app (APP). A merchant
+ * api_key (API) is deliberately EXEMPT: one key serves that merchant's own customers, so there is no
+ * single PIN to ask for, and demanding one made every external API purchase fail with
+ * "Invalid transaction PIN.". Callers express that by only invoking this gate for those methods
+ * (see web/func/*.php).
  */
 function requireTransactionPin($vendor_details, $user_details, $input, &$error_msg) {
+    $vendor_details = is_array($vendor_details) ? $vendor_details : array();
+
+    // Web pages render their forms from sas_site_details, so a caller may hold only a partial vendor
+    // row - or none at all. Resolve the toggle straight from sas_vendors in that case: the setting must
+    // never be silently skipped just because a caller passed a row without the column.
+    if (!array_key_exists('force_security_pin', $vendor_details)) {
+        global $connection_server;
+        $pin_vendor_id = 0;
+        if (!empty($vendor_details['id'])) {
+            $pin_vendor_id = (int)$vendor_details['id'];
+        } elseif (is_array($user_details) && !empty($user_details['vendor_id'])) {
+            $pin_vendor_id = (int)$user_details['vendor_id'];
+        }
+        if ($pin_vendor_id > 0 && $connection_server) {
+            $q_pin_vendor = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$pin_vendor_id' LIMIT 1");
+            if ($q_pin_vendor && ($row_pin_vendor = mysqli_fetch_assoc($q_pin_vendor))) {
+                $vendor_details = $row_pin_vendor;
+            }
+        }
+    }
+
     if (($vendor_details['force_security_pin'] ?? 0) != 1) {
         return true;
     }

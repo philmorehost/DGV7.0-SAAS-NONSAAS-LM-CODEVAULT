@@ -42,7 +42,11 @@ if (empty($_POST)) {
     }
 }
 
-if (!requireTransactionPin($select_vendor_table, $get_logged_user_details, $_POST, $__pin_error)) {
+// The transaction PIN belongs to a PERSON, not to a merchant api_key. External API callers
+// ($purchase_method === 'api') serve that merchant's own customers, so they are exempt - requiring a
+// PIN here made every API purchase fail with "Invalid transaction PIN.". The mobile app ("app") is
+// a person, so it still has to prove the PIN.
+if ($purchase_method !== 'api' && !requireTransactionPin($select_vendor_table, $get_logged_user_details, $_POST, $__pin_error)) {
     exit(json_encode(["status" => "failed", "desc" => $__pin_error]));
 }
 

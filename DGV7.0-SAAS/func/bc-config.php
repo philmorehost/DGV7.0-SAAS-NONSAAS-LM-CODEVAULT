@@ -371,8 +371,13 @@ if ($connection_server) {
 		$select_vendor_table = $_SESSION['vendor_details_cache'];
 	}
 
-	if ($select_vendor_table) {
-		unset($_SESSION["admin_to_user_redirect"]);
+        // Vendor's "Enforce Transaction PIN for all Users" toggle, exposed once so the purchase pages
+        // can render the PIN field without re-querying sas_vendors. Enforcement itself lives in
+        // requireTransactionPin() and never depends on this variable being read.
+        $force_security_pin_for_users = is_array($select_vendor_table) ? (int)($select_vendor_table['force_security_pin'] ?? 0) : 0;
+
+        if ($select_vendor_table) {
+                unset($_SESSION["admin_to_user_redirect"]);
 
 		// Check for vendor expiry
 		if ($select_vendor_table["expiry_date"] && strtotime($select_vendor_table["expiry_date"]) < time()) {

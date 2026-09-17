@@ -22,6 +22,11 @@ session_start();
 ob_start();
 include_once(__DIR__ . "/../func/bc-config.php");
 
+// The AI assistant buys on behalf of the LOGGED-IN person on our own site, so an AI purchase is a
+// person-to-person flow and must still prove the transaction PIN when the vendor forces one
+// (web/func/*.php reads this flag). Nothing here is an external api_key integration.
+$GLOBALS['pin_required_for_api_purchase'] = true;
+
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 
@@ -431,7 +436,10 @@ switch ($action_type) {
             'meter_number' => $intent['phone'],
             'iuc_number'   => $intent['phone'],
             'customer_id'  => $intent['phone'],
-            'id'           => $intent['id'] ?? $intent['amount'] ?? ''
+            'id'           => $intent['id'] ?? $intent['amount'] ?? '',
+            // Transaction PIN for an AI purchase. The intent parser only fills this when the client
+            // collected it; requireTransactionPin() stays the authority either way.
+            'pin'          => $intent['pin'] ?? ($_POST['pin'] ?? '')
         ];
 
         $handler_rel = $service_map[strtolower($intent['service'])] ?? '';

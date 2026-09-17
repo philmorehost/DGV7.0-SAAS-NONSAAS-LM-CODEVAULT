@@ -161,6 +161,13 @@
                     VERIFY DECODER
                 </button>
                 <?php }else{ ?>
+                <?php if ($force_security_pin_for_users === 1): ?>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-uppercase" for="transaction-pin">Transaction PIN</label>
+                    <input id="transaction-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" class="form-control form-control-lg text-center" placeholder="Enter your 4-digit PIN" required />
+                    <div class="form-text">Your account requires a transaction PIN for every purchase.</div>
+                </div>
+                <?php endif; ?>
                 <button name="buy-cable" type="submit" class="btn btn-primary btn-lg w-100 shadow-sm mb-3" >
                     COMPLETE PURCHASE
                 </button>
