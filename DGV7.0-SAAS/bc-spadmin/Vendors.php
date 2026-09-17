@@ -209,10 +209,28 @@
         $getRedirectUrl = isset($_GET["redirect"]) ? mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["redirect"]))) : "";
     	
     	if(isset($_GET["vendorUrl"]) && !empty($getVendorUrl) && isset($_GET["vendorLogAuth"]) && !empty($getVendorLogAuth)){
-            if(isset($_GET["redirect"]) && !empty($getRedirectUrl)){
-                echo '<script>	window.onload = function(){	window.open("http://'.$getVendorUrl.'/bc-admin/Dashboard.php?logVendorAdmin='.$getVendorLogAuth.'&&redirectAdminTo='.$getRedirectUrl.'","_blank"); window.open("/bc-spadmin/Vendors.php","_self");	}	</script>';
-            }else{
-                echo '<script>	window.onload = function(){	window.open("http://'.$getVendorUrl.'/bc-admin/Dashboard.php?logVendorAdmin='.$getVendorLogAuth.'","_blank"); window.open("/bc-spadmin/Vendors.php","_self");	}	</script>';
+            // Always open the vendor's admin over HTTPS.
+            //  * This used to be a hard-coded "http://", so impersonating a vendor from the super admin
+            //    dropped the whole vendor session onto plain http - mixed content on a site served over
+            //    https, and the one-time logVendorAdmin token sent in the clear.
+            //  * $getVendorUrl arrives in the query string, so only a bare host is accepted here: a scheme,
+            //    a path or "user@host" left in it would let the link pick the destination of an
+            //    authenticated window (open redirect).
+            $vendor_host = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', (string)$getVendorUrl);
+            $vendor_host = trim((string)preg_replace('#[^A-Za-z0-9.\-:].*$#', '', $vendor_host), '.');
+            $vendor_admin_url = '';
+            // Nothing usable left (empty or garbage host): open nothing rather than "https:///bc-admin/...",
+            // which the browser would resolve against the current host.
+            if ($vendor_host !== '') {
+                $vendor_admin_url = 'https://' . $vendor_host . '/bc-admin/Dashboard.php?logVendorAdmin=' . rawurlencode($getVendorLogAuth);
+                if(isset($_GET["redirect"]) && !empty($getRedirectUrl)){
+                    $vendor_admin_url .= '&redirectAdminTo=' . rawurlencode($getRedirectUrl);
+                }
+            }
+            if ($vendor_admin_url !== '') {
+                // json_encode() keeps the URL safe inside the JS string literal (a raw quote in it previously
+                // broke out of the string).
+                echo '<script>	window.onload = function(){	window.open(' . json_encode($vendor_admin_url) . ',"_blank"); window.open("/bc-spadmin/Vendors.php","_self");	}	</script>';
             }
     	}
     ?>

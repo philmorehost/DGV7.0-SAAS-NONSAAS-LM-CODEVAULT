@@ -52,21 +52,28 @@
         bc_verify_integrity();
     }
 
-    // Define the web host
-    if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-        $protocol = "https://";
-    } else {
-        $protocol = "http://";
-    }
+    // Define the web host.
+    // $_SERVER['HTTPS'] on its own is NOT a reliable signal: it is absent when TLS terminates upstream
+    // (Cloudflare / nginx proxy) and some stacks report "1" or "Off" instead of "on". Trusting it blindly
+    // produced http:// links - and http:// redirects - on a site actually served over https, which is how
+    // an admin or vendor session could silently land on plain http. Every signal the request carries is
+    // checked instead; the worst case of a spoofed forwarding header is a link that says https.
+    $bc_request_is_https = (
+        (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+        || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && stripos((string)$_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') !== false)
+        || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_SSL']) === 'on')
+        || (!empty($_SERVER['HTTP_CF_VISITOR']) && stripos((string)$_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+        || (!empty($_SERVER['HTTP_FRONT_END_HTTPS']) && strtolower((string)$_SERVER['HTTP_FRONT_END_HTTPS']) !== 'off')
+        || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443)
+    );
+    $protocol = $bc_request_is_https ? "https://" : "http://";
     $web_http_host = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 	
 	$get_requested_website_domain_url = $_SERVER["HTTP_HOST"] ?? 'localhost';
     if (substr($get_requested_website_domain_url, 0, 4) === "www.") {
         $non_www = substr($get_requested_website_domain_url, 4);
-		if(isset($_SERVER["HTTPS"]) && ($_SERVER["HTTPS"] == "on")){
-			header("Location: https://" . $non_www . $_SERVER["REQUEST_URI"]);
-		}else{
-			header("Location: http://" . $non_www . $_SERVER["REQUEST_URI"]);
-		}
+		// Keep the scheme the visitor already arrived with ($protocol above) instead of re-testing HTTPS,
+		// which could bounce an https visitor to http.
+		header("Location: " . $protocol . $non_www . $_SERVER["REQUEST_URI"]);
         exit();
 	}

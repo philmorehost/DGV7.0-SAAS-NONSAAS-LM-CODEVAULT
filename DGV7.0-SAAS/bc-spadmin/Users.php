@@ -78,15 +78,25 @@
         $uid = (int)$_GET["login-as"];
         $q = mysqli_query($connection_server, "SELECT u.username, v.website_url FROM sas_users u JOIN sas_vendors v ON u.vendor_id = v.id WHERE u.id='$uid' LIMIT 1");
         if($r = mysqli_fetch_assoc($q)){
-            $target_url = $r['website_url'];
-            if(!str_contains($target_url, '://')) $target_url = "https://" . $target_url;
+            // Always hand the one-time login token over HTTPS, and keep only the host. Older rows store
+            // website_url with an "http://" prefix, which used to put the impersonated session - and the
+            // auth token - on plain http even though the site is served over https.
+            $target_url = preg_replace('#^[a-z][a-z0-9+.-]*://#i', '', trim((string)$r['website_url']));
+            $target_url = trim((string)preg_replace('#[^A-Za-z0-9.\-:].*$#', '', $target_url), '.');
+            // A vendor without a usable website URL cannot be logged into: say so instead of redirecting
+            // to "https:///web/Login.php", which the browser would resolve against the current host.
+            if ($target_url === '') {
+                $_SESSION["product_purchase_response"] = "This vendor has no website URL configured, so the user login could not be opened.";
+                header("Location: Users.php");
+                exit();
+            }
             
             // Generate a secure one-time login token
             $token = bin2hex(random_bytes(16));
             mysqli_query($connection_server, "UPDATE sas_users SET failed_pin_count=failed_pin_count+1, last_failed_pin=NOW() WHERE id='$uid'"); // Reuse column temporarily as token or use a real token table
             // For now, use the same mechanism as bc-admin -> bc-spadmin but in reverse
             // We'll redirect to the vendor's dashboard with a special param
-            header("Location: ".$target_url."/web/Login.php?logAsUser=".$r['username']."&auth=".md5($r['username'].date('Ymd')."SUPER_ADMIN_SECRET"));
+            header("Location: https://".$target_url."/web/Login.php?logAsUser=".rawurlencode($r['username'])."&auth=".md5($r['username'].date('Ymd')."SUPER_ADMIN_SECRET"));
             exit();
         }
     }
