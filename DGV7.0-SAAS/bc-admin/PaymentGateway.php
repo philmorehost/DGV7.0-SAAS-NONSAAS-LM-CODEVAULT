@@ -130,6 +130,7 @@
         $encrypt_key = $_POST["encrypt-key"];
         $payment_percent = $_POST["payment-percent"];
         $gateway_array_list = $payment_gateway_array;
+        $gateway_key_warnings = array();
 
         if((count($gateway_name) > 0) && (count($public_key) > 0) && (count($secret_key) > 0) && (count($public_key) == count($secret_key))){
             foreach($gateway_name as $index => $name){
@@ -154,12 +155,36 @@
                 if(in_array($each_gateway_name, $gateway_array_list)){
                     $get_payment_gateway_details = mysqli_query($connection_server, "SELECT * FROM sas_payment_gateways WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
                     if(mysqli_num_rows($get_payment_gateway_details) == 1){
+                        $existing_gateway_row = mysqli_fetch_assoc($get_payment_gateway_details);
+
+                        // Never let a blank field erase a working key. The form re-renders the stored
+                        // values, but a password manager clearing the masked SECRET KEY box (or any POST
+                        // that simply omits it) used to overwrite it with ''. PayHub then answers
+                        // 401 "Invalid Secret Key" on every funding attempt: the gateway looks broken and
+                        // nothing says why. Blank now means "keep what is already stored".
+                        if ($each_public_key === '')  $each_public_key  = $existing_gateway_row['public_key'] ?? '';
+                        if ($each_secret_key === '')  $each_secret_key  = $existing_gateway_row['secret_key'] ?? '';
+                        if ($each_encrypt_key === '') $each_encrypt_key = $existing_gateway_row['encrypt_key'] ?? '';
+
+                        // A gateway with no secret key cannot take a single payment, so never let a save
+                        // switch it ON. Keep the previous status and tell the admin what is missing.
+                        if ($each_gateway_status == "1" && $each_secret_key === '') {
+                            $each_gateway_status = $existing_gateway_row['status'];
+                            $gateway_key_warnings[] = strtoupper($each_gateway_name) . " was NOT enabled because it has no Secret Key - paste the gateway Secret Key and save again.";
+                        }
+
                         mysqli_query($connection_server, "UPDATE sas_payment_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', percentage='$each_payment_percent', status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
                         //Payment Gateway Information Updated Successfully
                         $json_response_array = array("desc" => "Payment Gateway Information Updated Successfully");
                         $json_response_encode = json_encode($json_response_array,true);
                     }else{
                         if(mysqli_num_rows($get_payment_gateway_details) == 0){
+                            // Same rule on create: a brand-new row must not be created enabled-but-keyless.
+                            // That is exactly how a gateway ends up silently "on" while failing every payment.
+                            if ($each_gateway_status == "1" && $each_secret_key === '') {
+                                $each_gateway_status = "2";
+                                $gateway_key_warnings[] = strtoupper($each_gateway_name) . " was created but left DISABLED: no Secret Key was provided.";
+                            }
                             mysqli_query($connection_server, "INSERT INTO sas_payment_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, percentage, status) VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_payment_percent', '$each_gateway_status')");
                             //Payment Gateway Information Created Successfully
                             $json_response_array = array("desc" => "Payment Gateway Information Created Successfully");
@@ -216,6 +241,11 @@
 
         $json_response_decode = json_decode($json_response_encode,true);
         $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+        // Surface any key-safety warning from the loop above; otherwise the admin sees a plain
+        // "Updated Successfully" and never learns that a gateway was left disabled for want of a key.
+        if (!empty($gateway_key_warnings)) {
+            $_SESSION["product_purchase_response"] = trim($json_response_decode["desc"] . " " . implode(" ", $gateway_key_warnings));
+        }
         header("Location: ".$_SERVER["REQUEST_URI"]);
         exit;
     }

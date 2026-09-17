@@ -3438,7 +3438,12 @@ function getGatewayDetails($gateway, $vid = null) {
         if ($vid <= 0) {
             $vid = 1;
         }
-        $q = mysqli_query($connection_server, "SELECT * FROM sas_payment_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+        // Row preference (why the ORDER BY matters): a vendor can end up with MORE THAN ONE row for
+        // the same gateway (a duplicate left behind by re-seeding, or a blank row written by a settings
+        // save). A bare LIMIT 1 let MySQL hand back the blank row, and the provider then answered
+        // 401 "Invalid Secret Key" even though a correctly configured row existed. Prefer, in order:
+        // an exact gateway_name match, then a row that actually carries a secret key, then the oldest.
+        $q = mysqli_query($connection_server, "SELECT * FROM sas_payment_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') ORDER BY (LOWER(TRIM(gateway_name)) = '$gateway_search') DESC, (secret_key IS NULL OR secret_key = '') ASC, date ASC LIMIT 1");
         if ($q && $r = mysqli_fetch_assoc($q)) {
             $details = $r;
             $details['source_table'] = 'sas_payment_gateways';
@@ -3570,7 +3575,12 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
     $log_entry .= "[" . date('Y-m-d H:i:s') . "] PAYHUB REQUEST\n";
     $log_entry .= "Method: $req_method_up | URL: $url\n";
     $log_entry .= "VID: $vid | Source: $config_source\n";
-    $masked_key = !empty($get_gateway_details['secret_key']) ? substr($get_gateway_details['secret_key'], 0, 8) . "..." : "MISSING";
+    // Identify the key (prefix + last 4). Masking it to the first 8 characters alone is useless as a
+    // diagnostic: every PayHub key starts with "sk_live_", so a rotated/blank/wrong key looked
+    // identical to the correct one in this log.
+    $masked_key = !empty($get_gateway_details['secret_key'])
+        ? substr($get_gateway_details['secret_key'], 0, 8) . "..." . substr($get_gateway_details['secret_key'], -4)
+        : "MISSING";
     $log_entry .= "Using Key: $masked_key | Isolated Payout Key: ".($is_withdrawal ? 'YES' : 'NO')."\n";
     $log_entry .= "Body: " . (is_array($req_body) ? json_encode($req_body) : $req_body) . "\n";
 
@@ -3578,6 +3588,29 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
         $log_entry .= "CRITICAL: No PayHub configuration found in database.\n";
         @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
         return json_encode(["status" => "failed", "message" => "PayHub not configured"]);
+    }
+
+    // Fail fast on a missing secret key. Without this the call goes out as "Authorization: Bearer "
+    // (empty value), PayHub answers 401 "Invalid Secret Key" and the person funding a wallet sees a
+    // message that names no cause. A blank key means the gateway was never configured (or was saved
+    // blank) for this vendor - say exactly that and point at the fix.
+    if ($payhub_secret_key === '') {
+        $log_entry .= "CRITICAL: PayHub secret key is EMPTY. vid={$lookup_vid} | source={$source_tag}. "
+                    . "Enter the LIVE Secret Key (sk_live_...) from merchant.payhub.com.ng -> API Keys in Payment Gateway settings.\n";
+        @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
+        return json_encode([
+            "status" => "failed",
+            "message" => "PayHub is not configured: the PayHub Secret Key is empty for this account. "
+                       . "Copy the LIVE Secret Key from your PayHub dashboard (API Keys) into Payment Gateway settings."
+        ]);
+    }
+
+    // A PayHub secret key always starts with sk_. If it does not, the most common cause is the PUBLIC
+    // key (pk_live_...) having been pasted into the secret field - PayHub answers 401 for that too, so
+    // leave a breadcrumb in the log instead of letting it look like the gateway is down.
+    if (strpos($payhub_secret_key, 'sk_') !== 0) {
+        $log_entry .= "WARNING: stored key does not look like a PayHub SECRET key (expected sk_live_.../sk_test_...). "
+                    . "Prefix found: " . substr($payhub_secret_key, 0, 8) . "...\n";
     }
 
     $ch = curl_init($url);
@@ -3620,6 +3653,12 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
     $err = curl_error($ch);
     curl_close($ch);
 
+    // Record the outcome. Previously $log_entry was only written on the early-return paths, so a real
+    // request that PayHub rejected (the 401 case) left NO trace and the outgoing key was invisible.
+    $log_entry .= "HTTP: $http_code" . (!empty($err) ? " | cURL: $err" : "") . "\n";
+    $log_entry .= "Response: " . substr(str_replace(["\r", "\n"], ' ', (string)$result), 0, 500) . "\n";
+    @file_put_contents($debug_file, $log_entry . "================================================\n", FILE_APPEND);
+
     if ($http_code >= 200 && $http_code < 300) {
         $json = json_decode($result, true);
         $status = strtolower($json['status'] ?? "");
@@ -3638,6 +3677,14 @@ function makePayhubRequest($req_method, $parameter_url, $req_body, $vid = null, 
         $json_err = json_decode($result, true);
         if($json_err && isset($json_err['message'])) $msg .= ": " . $json_err['message'];
         else $msg .= ": " . substr(strip_tags($result), 0, 100);
+    }
+
+    // PayHub rejects an unknown/inactive key with 401 "Invalid Secret Key". The stored key was sent
+    // intact (it is logged above), so the only remaining cause is that the key itself is no longer
+    // valid: it was regenerated in the PayHub dashboard, or the wrong key was pasted in.
+    if ($http_code == 401) {
+        $msg .= " - the PayHub Secret Key saved in Payment Gateway settings was rejected; "
+              . "copy the current LIVE Secret Key from your PayHub dashboard (API Keys) and save it there.";
     }
 
     return json_encode(["status" => "failed", "message" => $msg]);
