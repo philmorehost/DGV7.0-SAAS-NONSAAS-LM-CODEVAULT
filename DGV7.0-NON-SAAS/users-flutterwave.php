@@ -9,13 +9,42 @@
 		$flutterwave_keys = mysqli_fetch_assoc(mysqli_query($connection_server,"SELECT * FROM sas_payment_gateways WHERE vendor_id='".$select_vendor_table["id"]."' && gateway_name='flutterwave'"));
 		
 		$flutterwave_verify_transaction = json_decode(confirmPaymentDeposited("GET","https://api.flutterwave.com/v3/transactions/".$catch_incoming_request["data"]["id"]."/verify",["Authorization: Bearer ".$flutterwave_keys["secret_key"]],""),true);
+
+		// ── Authenticate the callback, and take the amounts from Flutterwave - never from the body ──
+		// Anyone can POST a "successful" payload here. The old code credited
+		// $catch_incoming_request["data"]["charged_amount"], which the caller controls, while the verify
+		// call only proved that *some* transaction id had succeeded - so a real 20-naira charge could be
+		// replayed with a 200,000 amount, or one id paired with somebody else's tx_ref.
+		// 1) verif-hash, when the merchant has configured one (stored as the gateway "encrypt key").
+		$flw_secret_hash = trim((string)($flutterwave_keys['encrypt_key'] ?? ''));
+		if ($flw_secret_hash !== '') {
+			$flw_signature = $_SERVER['HTTP_VERIF_HASH'] ?? '';
+			if (empty($flw_signature) || !hash_equals($flw_secret_hash, (string)$flw_signature)) {
+				http_response_code(401);
+				exit("Invalid signature");
+			}
+		}
+		// 2) The verified transaction itself.
+		$flw_verified = (isset($flutterwave_verify_transaction['data']) && is_array($flutterwave_verify_transaction['data'])) ? $flutterwave_verify_transaction['data'] : array();
+		$flw_verified_ok = (!empty($flutterwave_verify_transaction['status'])
+			&& in_array(strtolower((string)($flw_verified['status'] ?? '')), array('successful', 'success'), true)
+			&& (float)($flw_verified['amount'] ?? 0) > 0);
+		$flw_verified_ref = trim((string)($flw_verified['tx_ref'] ?? ''));
 		
 		$customer_name = $catch_incoming_request["data"]["customer"]["name"];
 		$customer_phone_number = $catch_incoming_request["data"]["customer"]["phone_number"];
 		$customer_email = $catch_incoming_request["data"]["customer"]["email"];
-		$amount_paid = $catch_incoming_request["data"]["charged_amount"];
-		$amount_deposited = ($catch_incoming_request["data"]["charged_amount"]-$catch_incoming_request["data"]["app_fee"]);
+		$amount_paid = (float)($flw_verified["amount"] ?? 0);
+		$amount_deposited = $amount_paid - (float)($flw_verified["app_fee"] ?? 0);
+		if ($amount_deposited < 0) $amount_deposited = $amount_paid;
 		$transaction_id = $catch_incoming_request["data"]["tx_ref"];
+		// The verified transaction must be the one we are about to credit: a valid transaction id paired
+		// with another reference used to be accepted, letting an attacker choose whose wallet is funded.
+		if ($flw_verified_ref === '' || $flw_verified_ref !== (string)$transaction_id) {
+			error_log("SECURITY: Flutterwave webhook ref mismatch (verified='$flw_verified_ref' posted='$transaction_id') vendor=$vendor_id");
+			http_response_code(400);
+			exit("Reference mismatch");
+		}
 		$payment_method = $catch_incoming_request["data"]["payment_type"];
 		$vendor_id = trim($select_vendor_table["id"]);
 		$check_if_pre_payment_exists = mysqli_query($connection_server, "SELECT * FROM sas_user_payment_checkouts WHERE vendor_id='$vendor_id' && reference='$transaction_id'");
@@ -31,7 +60,7 @@
 			
 				$select_transaction_history = mysqli_query($connection_server,"SELECT * FROM sas_transactions WHERE (api_reference='$transaction_id')");
 			
-				if(($flutterwave_verify_transaction["status"] == "success") && ($catch_incoming_request["data"]["status"] == "successful")){
+				if($flw_verified_ok){
 					if(mysqli_num_rows($select_transaction_history) == 0){
 						chargeUser("credit", $_SESSION["user_session"], "Wallet Credit", $reference, $transaction_id, $amount_paid, $amount_deposited, "Flutterwave Wallet Credit - ".str_replace("_"," ",$payment_method), strtoupper("WEB"), $_SERVER["HTTP_HOST"], "1");
 						unset($_SESSION["user_session"]);

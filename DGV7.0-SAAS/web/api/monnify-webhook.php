@@ -47,12 +47,14 @@
 
         // Verify Signature
         $client_sig = $_SERVER['HTTP_MONNIFY_SIGNATURE'] ?? '';
-        $secret = $monnify_keys['secret_key'] ?? '';
-        if (!empty($secret) && !empty($client_sig)) {
+        $secret = !empty($monnify_keys['webhook_secret']) ? $monnify_keys['webhook_secret'] : ($monnify_keys['secret_key'] ?? '');
+        if (!empty($secret)) {
             $computed_sig = hash_hmac('sha512', $body, $secret);
-            if ($client_sig !== $computed_sig) {
-                error_log("Monnify Signature Mismatch for vendor $vendor_id. Ref: $transaction_ref");
-                // In production, you might want to exit here if validation is mandatory
+            if (empty($client_sig) || !hash_equals($computed_sig, $client_sig)) {
+                error_log("SECURITY: Monnify webhook signature mismatch/missing for vendor $vendor_id. Ref: $transaction_ref");
+                http_response_code(401);
+                die("Invalid signature");
+                // Mandatory: a callback that cannot be authenticated must never reach the credit path.
             }
         }
 
@@ -74,10 +76,18 @@
             $verify_url = "https://api.monnify.com/api/v2/transactions/" . urlencode($transaction_ref);
             $monnify_verify_transaction = json_decode(confirmPaymentDeposited("GET", $verify_url, ["Authorization: Bearer ".$access_token], ""), true);
 
-            $pay_status = $monnify_verify_transaction["responseBody"]["paymentStatus"] ?? $event_data["paymentStatus"] ?? "";
+            // The payment status must come from Monnify's own API response: falling back to the POSTED
+            // paymentStatus let a caller declare an unpaid reference PAID.
+            $pay_status = $monnify_verify_transaction["responseBody"]["paymentStatus"] ?? "";
 
             if($pay_status == "PAID") {
-                $amount_paid = (float)($event_data["amountPaid"] ?? $event_data["totalPayable"] ?? 0);
+                $monnify_verified_body = (isset($monnify_verify_transaction['responseBody']) && is_array($monnify_verify_transaction['responseBody'])) ? $monnify_verify_transaction['responseBody'] : array();
+                $amount_paid = (float)($monnify_verified_body["amountPaid"] ?? $monnify_verified_body["totalPayable"] ?? $monnify_verified_body["settlementAmount"] ?? 0);
+                if ($amount_paid <= 0) {
+                    error_log("SECURITY: Monnify webhook verified without a usable amount. vendor=$vendor_id ref=$transaction_ref");
+                    http_response_code(200);
+                    exit("Ignored: no verified amount");
+                }
 
                 // Implement Charges correctly
                 $charge_percent = (float)($monnify_keys['percentage'] ?? 0);

@@ -47,7 +47,7 @@ if (isset($_POST['action']) && $_POST['action'] == 'create_checkout') {
              $type_alt = ($target == 'plisio_activation' || $target == 'payout_activation') ? 'Service Activation' : 'Wallet Funding';
              $desc = ($target == 'plisio_activation') ? 'Plisio Crypto Gateway Activation Fee' : (($target == 'payout_activation') ? 'Withdrawal Module Activation Fee' : 'Wallet funding via ATM/Transfer');
 
-             $ins_vtx = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$vid', '$p_uid', '$type_alt', '$reference', '$amount', '$amount', '$bal', '$bal', '$desc', '".$_SERVER['HTTP_HOST']."', '2')");
+             $ins_vtx = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$vid', '$p_uid', '$type_alt', '$reference', '$amount', '$amount', '$bal', '$bal', '$desc', '".bc_safe_host_sql($connection_server)."', '2')");
              if (!$ins_vtx) {
                  @file_put_contents(__DIR__ . '/../logs/funding_errors.log', '[' . date('Y-m-d H:i:s') . '] create_checkout vendor insert failed (ref=' . $reference . '): ' . mysqli_error($connection_server) . PHP_EOL, FILE_APPEND | LOCK_EX);
              }
@@ -61,7 +61,7 @@ if (isset($_POST['action']) && $_POST['action'] == 'create_checkout') {
                  // api_website is NOT NULL — omitting it makes the INSERT fail silently under
                  // strict MySQL sql_mode, so the transaction is never logged and PayHub's
                  // gateway_redirect then reports "Transaction not found". Always supply it.
-                 $ins_utx = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('$vid', 'wallet_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$bal', '$bal', 'Wallet funding via ATM/Transfer', 'WEB', '" . $_SERVER['HTTP_HOST'] . "', '2')");
+                 $ins_utx = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('$vid', 'wallet_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$bal', '$bal', 'Wallet funding via ATM/Transfer', 'WEB', '" . bc_safe_host_sql($connection_server) . "', '2')");
                  if (!$ins_utx) {
                      @file_put_contents(__DIR__ . '/../logs/funding_errors.log', '[' . date('Y-m-d H:i:s') . '] create_checkout user insert failed (ref=' . $reference . '): ' . mysqli_error($connection_server) . PHP_EOL, FILE_APPEND | LOCK_EX);
                  }
@@ -131,13 +131,13 @@ if (isset($_GET['action'])) {
                 if ($q_u && mysqli_num_rows($q_u) > 0) {
                     $u_r2 = mysqli_fetch_assoc($q_u);
                     $bal = $u_r2['balance'] ?? 0;
-                    $ins = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('$rc_vid', 'wallet_funding', 'Wallet Funding', '$ref_esc2', '" . mysqli_real_escape_string($connection_server, $rc_user) . "', '$rc_amount', '$rc_amount', '$bal', '$bal', 'Wallet funding via ATM/Transfer', 'WEB', '" . $_SERVER['HTTP_HOST'] . "', '2')");
+                    $ins = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('$rc_vid', 'wallet_funding', 'Wallet Funding', '$ref_esc2', '" . mysqli_real_escape_string($connection_server, $rc_user) . "', '$rc_amount', '$rc_amount', '$bal', '$bal', 'Wallet funding via ATM/Transfer', 'WEB', '" . bc_safe_host_sql($connection_server) . "', '2')");
                     $tx = ['vendor_id' => $rc_vid, 'username' => $rc_user, 'amount' => $rc_amount, 'product_unique_id' => 'wallet_funding'];
                 } else {
                     $v_q2 = mysqli_query($connection_server, "SELECT balance FROM sas_vendors WHERE id='$rc_vid' LIMIT 1");
                     $v_r2 = mysqli_fetch_assoc($v_q2);
                     $bal = $v_r2['balance'] ?? 0;
-                    $ins = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$rc_vid', 'wallet_funding', 'Wallet Funding', '$ref_esc2', '$rc_amount', '$rc_amount', '$bal', '$bal', 'Wallet funding via ATM/Transfer', '" . $_SERVER['HTTP_HOST'] . "', '2')");
+                    $ins = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$rc_vid', 'wallet_funding', 'Wallet Funding', '$ref_esc2', '$rc_amount', '$rc_amount', '$bal', '$bal', 'Wallet funding via ATM/Transfer', '" . bc_safe_host_sql($connection_server) . "', '2')");
                     $tx = ['vendor_id' => $rc_vid, 'username' => $rc_user, 'amount' => $rc_amount, 'product_unique_id' => 'wallet_funding'];
                     $is_vendor_funding = true;
                 }

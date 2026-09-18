@@ -78,14 +78,21 @@
             $verify_url = "https://api.monnify.com/api/v2/transactions/" . urlencode($transaction_ref);
             $monnify_verify_transaction = json_decode(confirmPaymentDeposited("GET", $verify_url, ["Authorization: Bearer ".$access_token], ""), true);
 
-            $pay_status = $monnify_verify_transaction["responseBody"]["paymentStatus"] ?? $event_data["paymentStatus"] ?? "";
+            // The payment status must come from Monnify's own API response: falling back to the POSTED
+            // paymentStatus let a caller declare an unpaid reference PAID.
+            $pay_status = $monnify_verify_transaction["responseBody"]["paymentStatus"] ?? "";
 
             if($pay_status == "PAID") {
                 // Security Fix: prefer the amount from Monnify's own verify response over the raw
                 // webhook body — a forged callback citing a real PAID reference could otherwise
                 // carry a manipulated amount even though the reference itself checks out.
                 $verified_body = $monnify_verify_transaction["responseBody"] ?? [];
-                $amount_paid = (float)($verified_body["amountPaid"] ?? $verified_body["totalPayable"] ?? $event_data["amountPaid"] ?? $event_data["totalPayable"] ?? 0);
+                $amount_paid = (float)($verified_body["amountPaid"] ?? $verified_body["totalPayable"] ?? $verified_body["settlementAmount"] ?? 0);
+                if ($amount_paid <= 0) {
+                    error_log("SECURITY: Monnify webhook verified without a usable amount. vendor=$vendor_id ref=$transaction_ref");
+                    http_response_code(200);
+                    exit("Ignored: no verified amount");
+                }
 
                 // Implement Charges correctly
                 $charge_percent = (float)($monnify_keys['percentage'] ?? 0);

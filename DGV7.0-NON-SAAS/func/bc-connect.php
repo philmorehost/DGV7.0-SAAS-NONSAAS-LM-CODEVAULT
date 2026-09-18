@@ -68,6 +68,23 @@
     );
     $protocol = $bc_request_is_https ? "https://" : "http://";
     $web_http_host = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+
+    // The Host header is attacker-controlled (a plain "curl -H 'Host: ...'" is enough) and it reaches
+    // SQL, URLs and the tenant lookup. These two helpers give every caller the same sanitised value:
+    // bc_safe_host() keeps only a host[:port] shape, bc_safe_host_sql() escapes it for a query.
+    if (!function_exists('bc_safe_host')) {
+        function bc_safe_host() {
+            $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+            $host = preg_replace('/[^A-Za-z0-9\.\-:]/', '', $host);
+            return substr($host, 0, 255);
+        }
+    }
+    if (!function_exists('bc_safe_host_sql')) {
+        function bc_safe_host_sql($db) {
+            $host = bc_safe_host();
+            return $db ? mysqli_real_escape_string($db, $host) : $host;
+        }
+    }
 	
 	$get_requested_website_domain_url = $_SERVER["HTTP_HOST"] ?? 'localhost';
     if (substr($get_requested_website_domain_url, 0, 4) === "www.") {

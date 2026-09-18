@@ -27,7 +27,7 @@
                             $api_response_text = strtolower($api_response_text);
                             $api_response_description = "Shared Fund To User: ".ucwords($user);
                             
-                            $create_submitted_share_fund_table = mysqli_query($connection_server, "INSERT INTO sas_fund_transfer_requests (vendor_id, username, recipient_username, reference, amount, discounted_amount, description, mode, api_website, status) VALUES ('".$get_logged_user_details["vendor_id"]."', '".$get_logged_user_details["username"]."', '$user', '$reference', '$amount', '$discounted_amount', '$description', '$purchase_method', '".$_SERVER["HTTP_HOST"]."', '2')");
+                            $create_submitted_share_fund_table = mysqli_query($connection_server, "INSERT INTO sas_fund_transfer_requests (vendor_id, username, recipient_username, reference, amount, discounted_amount, description, mode, api_website, status) VALUES ('".$get_logged_user_details["vendor_id"]."', '".$get_logged_user_details["username"]."', '$user', '$reference', '$amount', '$discounted_amount', '$description', '$purchase_method', '".bc_safe_host_sql($connection_server)."', '2')");
                             if($create_submitted_share_fund_table == true){
                                 alterTransaction($reference, "status", "2");
                                 alterTransaction($reference, "description", $api_response_description);

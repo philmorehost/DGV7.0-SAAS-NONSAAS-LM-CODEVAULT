@@ -62,7 +62,23 @@ if ($data['status'] === 'successful' || $data['event'] === 'charge.completed') {
     $tx_data = $data['data'] ?? $data;
     $tx_ref = mysqli_real_escape_string($connection_server, $tx_data['tx_ref']);
     $flw_id = mysqli_real_escape_string($connection_server, $tx_data['id']);
+    // The verif-hash above is the primary control, but it is only checked when a merchant has
+    // configured one. This cap is unconditional: the credit can never exceed the amount WE recorded
+    // for the reference, so an unauthenticated (or replayed) callback cannot inflate it.
+    $expected_amount = 0.0;
+    $q_expected = mysqli_query($connection_server, "SELECT amount FROM sas_transactions WHERE vendor_id='$vendor_id' AND (reference='$tx_ref' OR api_reference='$flw_id') ORDER BY id DESC LIMIT 1");
+    if ($q_expected && ($r_expected = mysqli_fetch_assoc($q_expected))) {
+        $expected_amount = (float)$r_expected['amount'];
+    }
     $amount = (float)$tx_data['amount'];
+    if ($expected_amount > 0) {
+        $amount = min($amount, $expected_amount);
+    } else {
+        error_log("SECURITY: Flutterwave webhook for unknown/already-settled reference - not credited. vendor=$vendor_id ref=$tx_ref");
+        http_response_code(200);
+        echo json_encode(["status" => "ignored", "message" => "Unknown reference"]);
+        exit;
+    }
     $customer_email = mysqli_real_escape_string($connection_server, $tx_data['customer']['email']);
 
     // Check if already successfully processed (status=1); pending (status=2) records from create-checkout are OK to overwrite

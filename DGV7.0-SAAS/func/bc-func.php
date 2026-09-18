@@ -4258,7 +4258,7 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
 
                 $new_v_ref = "V".time().rand(10,99);
                 mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$bal_after' WHERE id='$vendor_id'");
-                mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$new_v_ref', '$amount_paid', '$amount_deposited', '$bal_before', '$bal_after', '$desc', '".$_SERVER["HTTP_HOST"]."', '1')");
+                mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$new_v_ref', '$amount_paid', '$amount_deposited', '$bal_before', '$bal_after', '$desc', '".bc_safe_host_sql($connection_server)."', '1')");
 
                 // If transaction exists in pending status, update it
                 if (!empty($meta['reference'])) {
