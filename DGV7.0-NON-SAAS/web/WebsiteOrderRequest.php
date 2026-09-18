@@ -52,7 +52,7 @@
                 if(mysqli_num_rows($check_vendor_details_with_email) == 0){
                     $check_vendor_details_with_url = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE website_url='$website_url'");
                     if(mysqli_num_rows($check_vendor_details_with_url) == 0){
-                        $md5_pass = md5($pass);
+                        $md5_pass = bc_hash_password($pass); // stored as password_hash(); bc-admin/Login.php also accepts legacy md5
                         if(!empty($bank_code) && is_numeric($bank_code) && (strlen($bank_code) >= 1)){
                     		$refined_bank_code = $bank_code;
                     	}else{

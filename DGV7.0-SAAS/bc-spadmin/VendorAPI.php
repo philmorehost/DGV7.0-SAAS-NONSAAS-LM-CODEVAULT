@@ -142,12 +142,14 @@
         if(!empty($new_pass) && !empty($con_new_pass)){
             $check_vendor_details = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='".$vendor_id_number."'");
             if(mysqli_num_rows($check_vendor_details) == 1){
-                $md5_new_pass = md5($new_pass);
-                $md5_con_new_pass = md5($con_new_pass);
+                $new_vendor_pass_hash = mysqli_real_escape_string($connection_server, bc_hash_password($new_pass));
+                // bc_verify_password() accepts both bcrypt and legacy raw-MD5 hashes; only bcrypt is written.
+                $new_pass_matches_confirm = ($new_pass === $con_new_pass);
+                $new_pass_matches_spadmin_pass = bc_verify_password($new_pass, $get_logged_spadmin_details["password"]);
                 
-                if($md5_new_pass !== $get_logged_spadmin_details["password"]){
-                    if($md5_new_pass == $md5_con_new_pass){
-                        mysqli_query($connection_server, "UPDATE sas_vendors SET password='$md5_new_pass' WHERE id='".$vendor_id_number."'");
+                if(!$new_pass_matches_spadmin_pass){
+                    if($new_pass_matches_confirm){
+                        mysqli_query($connection_server, "UPDATE sas_vendors SET password='$new_vendor_pass_hash' WHERE id='".$vendor_id_number."'");
                         //Account Password Updated Successfully
                         $json_response_array = array("desc" => "Account Password Updated Successfully");
                         $json_response_encode = json_encode($json_response_array,true);

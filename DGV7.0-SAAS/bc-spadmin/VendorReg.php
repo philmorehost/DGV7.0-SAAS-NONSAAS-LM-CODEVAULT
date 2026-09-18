@@ -83,7 +83,7 @@
                     $check_vendor_details_with_url = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE website_url='$website_url'");
                     $check_pending_vendor_details_with_url = mysqli_query($connection_server, "SELECT * FROM sas_pending_vendors WHERE website_url='$website_url'");
                     if(mysqli_num_rows($check_vendor_details_with_url) == 0 && mysqli_num_rows($check_pending_vendor_details_with_url) == 0){
-                        $md5_pass = md5($pass);
+                        $md5_pass = bc_hash_password($pass); // stored as password_hash(); the login path also accepts legacy md5
                         
                         $def_min = getSuperAdminOption('default_min_withdrawal', '1000');
                         $def_max = getSuperAdminOption('default_max_withdrawal', '50000');

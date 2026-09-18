@@ -423,14 +423,16 @@ if (isset($_POST["change-password"])) {
     if (!empty($old_pass) && !empty($new_pass) && !empty($con_new_pass)) {
         $check_admin_details = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='" . $get_logged_admin_details["id"] . "'");
         if (mysqli_num_rows($check_admin_details) == 1) {
-            $md5_old_pass = md5($old_pass);
-            $md5_new_pass = md5($new_pass);
-            $md5_con_new_pass = md5($con_new_pass);
+            // bc_verify_password() accepts both bcrypt and legacy raw-MD5 hashes; only bcrypt is written.
+            $pass_matches_old = bc_verify_password($old_pass, $get_logged_admin_details["password"]);
+            $pass_matches_new = bc_verify_password($new_pass, $get_logged_admin_details["password"]);
+            $new_pass_matches_confirm = ($new_pass === $con_new_pass);
 
-            if ($md5_old_pass == $get_logged_admin_details["password"]) {
-                if ($md5_new_pass !== $get_logged_admin_details["password"]) {
-                    if ($md5_new_pass == $md5_con_new_pass) {
-                        mysqli_query($connection_server, "UPDATE sas_vendors SET password='$md5_new_pass' WHERE id='" . $get_logged_admin_details["id"] . "'");
+            if ($pass_matches_old) {
+                if (!$pass_matches_new) {
+                    if ($new_pass_matches_confirm) {
+                        $new_vendor_pass_hash = mysqli_real_escape_string($connection_server, bc_hash_password($new_pass));
+                        mysqli_query($connection_server, "UPDATE sas_vendors SET password='$new_vendor_pass_hash' WHERE id='" . (int)$get_logged_admin_details["id"] . "'");
                         // Email Beginning
                         $log_template_encoded_text_array = array("{firstname}" => $get_logged_admin_details["firstname"], "{lastname}" => $get_logged_admin_details["lastname"]);
                         $raw_log_template_subject = getSuperAdminEmailTemplate('vendor-pass-update', 'subject');

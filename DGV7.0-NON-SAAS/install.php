@@ -174,9 +174,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'install') {
     }
 
     // ── Step 3: Seed vendor record (id=1) with all features unlocked ──────────
-    $md5_pass     = md5($admin_pass);
+    $md5_pass     = password_hash($admin_pass, PASSWORD_DEFAULT); // bcrypt; bc-admin/Login.php also accepts legacy md5
     $reg_date     = date('Y-m-d H:i:s');
-    $access_hash  = md5('1' . $admin_email . time());
+    $access_hash  = bin2hex(random_bytes(32)); // opaque bearer token, not md5('1'.email.time())
     $website_url  = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
     $site_esc    = mysqli_real_escape_string($conn, $site_name);

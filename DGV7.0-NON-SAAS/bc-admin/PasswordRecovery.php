@@ -86,9 +86,10 @@
     		if(mysqli_num_rows($get_user_details) == 1){
 				if($_SESSION["admin-recovery-code"] == $recovery_code){
 					if($pass == $confirm_pass){
-						$md5_pass = md5($pass);
+						// Stored as password_hash() (bcrypt); the login path still accepts legacy raw-MD5 rows.
+						$new_vendor_pass_hash = mysqli_real_escape_string($connection_server, bc_hash_password($pass));
 						$get_user_personal_details = mysqli_fetch_array($get_user_details);
-						$get_user_details = mysqli_query($connection_server, "UPDATE sas_vendors SET password='$md5_pass' WHERE id='".$get_user_personal_details["id"]."' && email='".$get_user_personal_details["email"]."'");
+						$get_user_details = mysqli_query($connection_server, "UPDATE sas_vendors SET password='$new_vendor_pass_hash' WHERE id='".$get_user_personal_details["id"]."' && email='".$get_user_personal_details["email"]."'");
 						// Email Beginning
 						$log_template_encoded_text_array = array("{firstname}" => $get_user_personal_details["firstname"], "{lastname}" => $get_user_personal_details["lastname"]);
 						$raw_log_template_subject = getSuperAdminEmailTemplate('vendor-pass-update','subject');
