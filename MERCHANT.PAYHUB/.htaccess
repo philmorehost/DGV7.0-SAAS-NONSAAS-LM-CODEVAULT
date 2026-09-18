@@ -1,0 +1,32 @@
+# ── Security hardening (PayHub merchant app) ─────────────────────────────────────────────────────
+# Nothing here is served content, and all of it is sensitive:
+#   api.zip                  -> the archived API source
+#   payhubfund_ing.sql / *.sql -> the full database schema (and possibly data)
+#   install/                 -> the installer reads files; a re-run can create/reset merchant accounts
+#   includes/                -> config.php holds the live DB host/name/user/password
+# These rules only affect HTTP. PHP `include`/`require` on the filesystem is unaffected.
+# NOTE: if you need to reinstall, temporarily comment out the install rules.
+<FilesMatch "\.(zip|tar|gz|tgz|sql|log|bak|old|orig|swp|swo|py|sh|env|ini|yml|yaml)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<FilesMatch "^(install.*|installer|setup|phpinfo|debug|diag|test|test_.*)\.php$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(install|includes)/ - [F,L]
+</IfModule>

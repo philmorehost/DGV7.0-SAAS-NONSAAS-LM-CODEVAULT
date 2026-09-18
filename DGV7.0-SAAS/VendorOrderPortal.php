@@ -8,6 +8,13 @@ if (empty($hash)) {
     die("Access denied. Invalid or missing secure key.");
 }
 
+// This link is a bearer credential that can start a vendor session, so only a full-length random
+// token is accepted. The older MD5(id.email.time()) values were guessable and a short token could
+// be brute-forced; bc-admin-config.php / bc-tables.php now mint 64-hex (random_bytes) tokens.
+if (!preg_match('/^[a-f0-9]{48,100}$/i', $hash)) {
+    die("Access denied. Invalid or missing secure key.");
+}
+
 $v_q = mysqli_query($connection_server, "SELECT v.*, bp.name as package_name, bp.price as package_price, bp.duration_days, bp.download_url as package_dl FROM sas_vendors v LEFT JOIN sas_billing_packages bp ON v.current_billing_id = bp.id WHERE v.access_hash='$hash'");
 if (!$v_q) {
     die("System error accessing vendor data. Please contact support.");

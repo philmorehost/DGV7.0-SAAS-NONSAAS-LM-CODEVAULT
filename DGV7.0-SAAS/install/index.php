@@ -128,7 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$conn) {
                 $error = "Database connection lost. Please restart installation.";
             } else {
-                $hashed_pw = md5($password);
+                // password_hash() (bcrypt), not md5(): the super-admin row is verified in PHP by
+                // bc_verify_password(), which also still accepts legacy raw-MD5 rows.
+                $hashed_pw = password_hash($password, PASSWORD_DEFAULT);
                 $status = 1;
 
                 $stmt = mysqli_prepare($conn, "INSERT INTO sas_super_admin (email, password, firstname, lastname, phone_number, gender, home_address, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");

@@ -533,3 +533,37 @@ function bc_check_spending_anomaly(string $username, float $amount): bool {
 }
 
 
+// ── Password hashing ─────────────────────────────────────────────────────────────────────────────
+// Passwords are stored with password_hash() (bcrypt). Rows written by older releases hold a bare MD5
+// digest; bc_verify_password() still accepts those so nobody is locked out, and the caller re-saves
+// with bc_hash_password() whenever bc_password_is_legacy() is true (transparent rehash on next login).
+//
+// IMPORTANT: this is safe for the vendor/super-admin consoles (bc-admin, bc-spadmin). It is NOT yet
+// safe for sas_users: api/app-backend/* receives an ALREADY-HASHED "encoded-passkey" from the mobile
+// app and compares it in SQL, so md5 is effectively the wire format for app logins. Migrate the apps
+// first, then sas_users.
+if (!function_exists('bc_hash_password')) {
+    function bc_hash_password($plain_password) {
+        return password_hash((string)$plain_password, PASSWORD_DEFAULT);
+    }
+}
+
+if (!function_exists('bc_password_is_legacy')) {
+    function bc_password_is_legacy($stored_hash) {
+        return is_string($stored_hash) && preg_match('/^[a-f0-9]{32}$/i', $stored_hash) === 1;
+    }
+}
+
+if (!function_exists('bc_verify_password')) {
+    function bc_verify_password($plain_password, $stored_hash) {
+        $plain_password = (string)$plain_password;
+        $stored_hash = (string)$stored_hash;
+        if ($plain_password === '' || $stored_hash === '') return false;
+        if (bc_password_is_legacy($stored_hash)) {
+            return hash_equals(strtolower($stored_hash), md5($plain_password));
+        }
+        return password_verify($plain_password, $stored_hash);
+    }
+}
+
+

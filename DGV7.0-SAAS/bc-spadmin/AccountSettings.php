@@ -208,12 +208,17 @@
         if(!empty($first) && !empty($last) && !empty($address) && !empty($email) && !empty($phone) && !empty($pass)){
             $check_admin_details = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE id='".$get_logged_spadmin_details["id"]."'");
             if(mysqli_num_rows($check_admin_details) == 1){
-                $md5_pass = md5($pass);
+                // Verify the current password in PHP so both password_hash() (bcrypt) and legacy raw-MD5
+                // rows are accepted; a legacy hash is upgraded in place on success.
+                $check_admin_with_pass_matches = ($get_logged_spadmin_details && bc_verify_password($pass, $get_logged_spadmin_details["password"])) ? 1 : 0;
+                if ($check_admin_with_pass_matches === 1 && bc_password_is_legacy($get_logged_spadmin_details["password"])) {
+                    $rehashed_spadmin_pass = mysqli_real_escape_string($connection_server, bc_hash_password($pass));
+                    mysqli_query($connection_server, "UPDATE sas_super_admin SET password='$rehashed_spadmin_pass' WHERE id='".(int)$get_logged_spadmin_details["id"]."'");
+                }
                 $check_admin_with_email = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE email='$email'");
                 $check_admin_with_phone = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE phone_number='$phone'");
-                $check_admin_with_pass = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE id='".$get_logged_spadmin_details["id"]."' && password='$md5_pass'");
                 
-                if(mysqli_num_rows($check_admin_with_pass) == 1){
+                if($check_admin_with_pass_matches == 1){
                     $proceed_account_phone_verification = false;
                     if(mysqli_num_rows($check_admin_with_email) == 1){
                         $admin_email_fetch = mysqli_fetch_array($check_admin_with_email);
@@ -386,14 +391,17 @@
         if(!empty($old_pass) && !empty($new_pass) && !empty($con_new_pass)){
             $check_admin_details = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE id='".$get_logged_spadmin_details["id"]."'");
             if(mysqli_num_rows($check_admin_details) == 1){
-                $md5_old_pass = md5($old_pass);
-                $md5_new_pass = md5($new_pass);
-                $md5_con_new_pass = md5($con_new_pass);
+                // bc_verify_password() accepts both bcrypt and legacy raw-MD5 hashes, and isolates the
+                // scheme from the surrounding logic (a bcrypt row can never be compared with a plain ==).
+                $pass_matches_old = bc_verify_password($old_pass, $get_logged_spadmin_details["password"]);
+                $pass_matches_new = bc_verify_password($new_pass, $get_logged_spadmin_details["password"]);
+                $new_pass_matches_confirm = ($new_pass === $con_new_pass);
                 
-                if($md5_old_pass == $get_logged_spadmin_details["password"]){
-                    if($md5_new_pass !== $get_logged_spadmin_details["password"]){
-                        if($md5_new_pass == $md5_con_new_pass){
-                            mysqli_query($connection_server, "UPDATE sas_super_admin SET password='$md5_new_pass' WHERE id='".$get_logged_spadmin_details["id"]."'");
+                if($pass_matches_old){
+                    if(!$pass_matches_new){
+                        if($new_pass_matches_confirm){
+                            $new_spadmin_pass_hash = mysqli_real_escape_string($connection_server, bc_hash_password($new_pass));
+                            mysqli_query($connection_server, "UPDATE sas_super_admin SET password='$new_spadmin_pass_hash' WHERE id='".(int)$get_logged_spadmin_details["id"]."'");
                             //Account Password Updated Successfully
                             $json_response_array = array("desc" => "Account Password Updated Successfully");
                             $json_response_encode = json_encode($json_response_array,true);

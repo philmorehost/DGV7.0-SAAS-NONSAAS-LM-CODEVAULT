@@ -10,6 +10,15 @@ $reason = mysqli_real_escape_string($connection_server, trim($data['reason'] ?? 
 
 $current_vendor_id = resolveVendorID();
 
+// Throttle. This endpoint is deliberately unauthenticated (the caller is blocked, so often cannot log
+// in), which made it a free notification-spam / log-flooding primitive: any script could POST endless
+// requests, and each one emails a vendor or the super admin. Cap it at 3 per IP per hour.
+$ip = mysqli_real_escape_string($connection_server, $ip);
+$rl_q = mysqli_query($connection_server, "SELECT id FROM sas_unblock_requests WHERE ip_address='$ip' AND date > (NOW() - INTERVAL 1 HOUR)");
+if ($rl_q && mysqli_num_rows($rl_q) >= 3) {
+    exit(json_encode(["status" => "error", "message" => "Too many unblock requests from this connection. Please try again later."]));
+}
+
 // Route vendor/admin requests to Super Admin (vendor_id = 0)
 $target_vendor_id = $current_vendor_id;
 $is_vendor_request = (strpos($username, '@') !== false) || ($username == 'admin');

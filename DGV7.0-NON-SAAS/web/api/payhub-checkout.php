@@ -19,6 +19,19 @@ if (empty($reference) || $amount <= 0) {
 
 $vendor_id = resolveVendorID();
 
+// This endpoint is opened straight from the mobile app's WebView without an api_key, so the
+// reference is the only handle available. Require it to be a pending funding row for THIS vendor and
+// take the amount from that row: previously any caller could initialize a PayHub checkout for an
+// arbitrary amount by simply crafting "?reference=..&amount=.." (and the app-visible amount was
+// trusted over the recorded one).
+$q_payhub_pending = mysqli_query($connection_server, "SELECT amount FROM sas_transactions WHERE vendor_id='$vendor_id' AND reference='$reference' AND status='2' ORDER BY id DESC LIMIT 1");
+$payhub_pending = $q_payhub_pending ? mysqli_fetch_assoc($q_payhub_pending) : null;
+if (!$payhub_pending || (float)$payhub_pending['amount'] <= 0) {
+    echo '<p style="color:red;font-family:sans-serif;padding:20px;">Invalid or already-completed funding reference.</p>';
+    exit;
+}
+$amount = (float)$payhub_pending['amount'];
+
 $callback_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
               . '://' . $_SERVER['HTTP_HOST'] . '/web/payhub-success.php';
 

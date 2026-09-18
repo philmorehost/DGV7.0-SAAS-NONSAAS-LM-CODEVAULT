@@ -31,8 +31,16 @@
 
     		$get_admin_details = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE email='$email'");
 			if(mysqli_num_rows($get_admin_details) == 1){
-				$md5_pass = md5($pass);
-				$check_admin_password_details = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE email='$email' && password='$md5_pass'");
+				// Verify in PHP so both password_hash() (bcrypt) and legacy raw-MD5 rows are accepted; a legacy
+				// row is upgraded to bcrypt on the next successful login.
+				$admin_stored_row = mysqli_fetch_assoc($get_admin_details);
+				$spadmin_pass_ok = ($admin_stored_row && bc_verify_password($pass, $admin_stored_row["password"]));
+				if ($spadmin_pass_ok && bc_password_is_legacy($admin_stored_row["password"])) {
+					mysqli_query($connection_server, "UPDATE sas_super_admin SET password='" . mysqli_real_escape_string($connection_server, bc_hash_password($pass)) . "' WHERE id='" . (int)$admin_stored_row["id"] . "'");
+				}
+				// Always a real result set, so the num_rows() gates below keep behaving exactly as before:
+				// one row when the password matched, none when it did not.
+				$check_admin_password_details = mysqli_query($connection_server, "SELECT * FROM sas_super_admin WHERE email='$email' && " . ($spadmin_pass_ok ? "id='" . (int)$admin_stored_row["id"] . "'" : "1=0"));
 				if(mysqli_num_rows($check_admin_password_details) == 1){
 					while($admin_detail = mysqli_fetch_assoc($check_admin_password_details)){
 						if($admin_detail["status"] == 1){

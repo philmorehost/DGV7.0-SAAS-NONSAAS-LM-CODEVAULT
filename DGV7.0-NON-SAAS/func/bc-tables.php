@@ -221,8 +221,17 @@ if (!in_array('total_order_amount', $vendor_existing)) {
 if (!in_array('access_hash', $vendor_existing)) {
     mysqli_query($connection_server, "ALTER TABLE sas_vendors ADD COLUMN access_hash VARCHAR(100) UNIQUE DEFAULT NULL AFTER email");
 }
-// DGV6.90 Migration: Populate missing access_hash for existing vendors
-mysqli_query($connection_server, "UPDATE sas_vendors SET access_hash = MD5(CONCAT(id, email, NOW())) WHERE access_hash IS NULL OR access_hash = ''");
+// DGV6.90 Migration: Populate missing access_hash for existing vendors.
+        // Mint a random 64-hex token per vendor rather than MD5(CONCAT(id, email, NOW())): the
+        // access_hash is a bearer credential for the vendor order portal (it can start a vendor
+        // session), and the MD5 form is guessable from a known id/email plus an approximate timestamp.
+        $q_access_hash_missing = mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE access_hash IS NULL OR access_hash = ''");
+        if ($q_access_hash_missing) {
+            while ($r_access_hash_missing = mysqli_fetch_assoc($q_access_hash_missing)) {
+                $new_access_hash = bin2hex(random_bytes(32));
+                mysqli_query($connection_server, "UPDATE sas_vendors SET access_hash='$new_access_hash' WHERE id='".(int)$r_access_hash_missing['id']."'");
+            }
+        }
 
 if (!in_array('sms_bridge_ordered', $vendor_existing) && in_array('app_base_url', $vendor_existing)) {
     mysqli_query($connection_server, "ALTER TABLE sas_vendors ADD COLUMN sms_bridge_ordered TINYINT(1) DEFAULT 0 AFTER playstore_ordered");

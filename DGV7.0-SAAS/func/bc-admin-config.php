@@ -91,7 +91,10 @@ if ($connection_server) {
                     $get_logged_admin_details = mysqli_fetch_array($get_logged_admin_query);
                     // DGV6.90: Ensure access_hash is never empty for the portal link
                     if (empty($get_logged_admin_details['access_hash'])) {
-                        $new_hash = md5($get_logged_admin_details['id'] . $get_logged_admin_details['email'] . time());
+                        // A random 64-hex token, NOT md5(id.email.time()): the portal link is a bearer
+                        // credential that can start a vendor session, and the MD5 form is guessable
+                        // from a known id/email plus an approximate timestamp.
+                        $new_hash = bin2hex(random_bytes(32));
                         mysqli_query($connection_server, "UPDATE sas_vendors SET access_hash='$new_hash' WHERE id='".$get_logged_admin_details['id']."'");
                         $get_logged_admin_details['access_hash'] = $new_hash;
                     }
