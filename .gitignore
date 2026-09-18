@@ -24,4 +24,10 @@ DGV7.0-SAAS/asset-backup/
 # had it been, the key would have needed rotating instead.
 /apps-505118-381f9a756220.json
 /service-account*.json
+# Firebase console names "Generate new private key" downloads
+# <project-id>-firebase-adminsdk-<hash>.json, which the two patterns above miss. Same class of secret
+# as the key above: it can send push notifications as that Firebase project (and it is the exact file
+# pasted into bc-admin/AppUpdateBroadcast.php's Service Account JSON box).
+/*-firebase-adminsdk-*.json
+/*adminsdk*.json
 

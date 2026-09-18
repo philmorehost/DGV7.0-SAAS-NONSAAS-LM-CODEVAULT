@@ -1751,6 +1751,22 @@ mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_fcm_settings (
     UNIQUE KEY uniq_vendor (vendor_id)
 )");
 
+// ── App Update Broadcast: per-vendor update source (local /apk directory vs Google Play) ──
+// "local" is the default, matching the behaviour before this setting existed.
+mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_app_update_settings (
+    id INT NOT NULL AUTO_INCREMENT,
+    vendor_id INT UNSIGNED NOT NULL,
+    update_source VARCHAR(20) NOT NULL DEFAULT 'local',
+    play_store_url VARCHAR(500) DEFAULT NULL,
+    apk_version_code INT NOT NULL DEFAULT 0,
+    apk_version_name VARCHAR(50) DEFAULT NULL,
+    apk_filename VARCHAR(255) DEFAULT NULL,
+    changelog TEXT DEFAULT NULL,
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_vendor (vendor_id)
+)");
+
 // Cleanup Archaic Tables
 mysqli_query($connection_server, "DROP TABLE IF EXISTS `sas_virtualcard_holders` ");
 mysqli_query($connection_server, "DROP TABLE IF EXISTS `sas_virtualcard_purchaseds` ");
