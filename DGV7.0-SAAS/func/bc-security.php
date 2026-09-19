@@ -10,7 +10,13 @@
  * before any page logic runs.
  */
 
-if (function_exists('bc_generate_csrf_token')) return; // Guard against double-include
+// NOTE: every function in this file is declared at top level, so PHP hoists (early-binds) them while
+// the file is being compiled - meaning `function_exists('bc_generate_csrf_token')` was ALREADY true on
+// the very first include. The old self-guard therefore returned here every single time, which made
+// every statement after this line dead code and left any declaration nested in an `if` further down
+// (the password helpers) undefined. Guard on a runtime marker instead so the body executes once.
+if (defined('BC_SECURITY_LOADED')) return; // Guard against double-include
+define('BC_SECURITY_LOADED', true);
 
 // ─────────────────────────────────────────────────────────────
 // 1. CSRF TOKEN SYSTEM

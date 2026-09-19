@@ -5,7 +5,9 @@
  * Run with:  C:\xampp\php\php.exe -n tests/password_hash_test.php
  *
  * The helpers are extracted from the SHIPPED file (not re-implemented here) so this test fails if the
- * shipped implementation regresses. `-n` keeps ext-mysqli out of the process; nothing here needs a DB.
+ * shipped implementation regresses, AND the shipped file is loaded as the app loads it (section 0),
+ * because a declaration that never gets reached is invisible to an isolated copy of the same code.
+ * `-n` keeps ext-mysqli out of the process; nothing here needs a DB.
  */
 
 $src_file = __DIR__ . '/../func/bc-security.php';
@@ -16,11 +18,6 @@ if ($src === false) { fwrite(STDERR, "cannot read $src_file\n"); exit(1); }
 $marker = strpos($src, '// ── Password hashing');
 if ($marker === false) { fwrite(STDERR, "password hashing block not found in bc-security.php\n"); exit(1); }
 $block = substr($src, $marker);
-
-$tmp = tempnam(sys_get_temp_dir(), 'bchash') . '.php';
-file_put_contents($tmp, "<?php\n" . $block);
-require $tmp;
-@unlink($tmp);
 
 $fails = 0;
 $checks = 0;
@@ -34,6 +31,26 @@ function bc_assert($label, $actual, $expected) {
         echo "ok    $label\n";
     }
 }
+
+// ── 0. Loading regression ──────────────────────────────────────────────────────────────────────
+// Load the SHIPPED file exactly as the app does. A block that is correct in isolation proves nothing
+// about whether it is reachable at runtime: bc-security.php used to guard itself with
+// `if (function_exists('bc_generate_csrf_token')) return;`, which is TRUE on the first include because
+// PHP hoists the file's top-level declarations, so the body returned early and a declaration nested
+// in an `if` further down was never defined. That is how bc-admin/Login.php started hard-fataling in
+// production with "Call to undefined function bc_verify_password()".
+$include_result = include $src_file;
+bc_assert('shipped bc-security.php runs to the end (include returns 1, not NULL from an early return)', $include_result, 1);
+bc_assert('shipped bc-security.php defines bc_hash_password', function_exists('bc_hash_password'), true);
+bc_assert('shipped bc-security.php defines bc_password_is_legacy', function_exists('bc_password_is_legacy'), true);
+bc_assert('shipped bc-security.php defines bc_verify_password', function_exists('bc_verify_password'), true);
+
+// The extracted copy is still exercised below (it is the same code, so the function_exists guards in
+// the shipped file simply skip re-declaring it).
+$tmp = tempnam(sys_get_temp_dir(), 'bchash') . '.php';
+file_put_contents($tmp, "<?php\n" . $block);
+require $tmp;
+@unlink($tmp);
 
 $plain = 'correct horse battery staple';
 $legacy = md5($plain);           // how every pre-migration row looks
