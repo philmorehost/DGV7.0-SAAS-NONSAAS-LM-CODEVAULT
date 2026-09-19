@@ -1,4 +1,39 @@
 <?php
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// SCHEMA VERSION GATE
+//
+// This file is the schema/migration file, but it is included by EVERY mobile API request
+// (api/app-backend/app-config.php), every admin page (bc-admin-config.php), every super-admin page
+// (bc-spadmin-config.php), a couple of web endpoints and every cron run. Running it unconditionally
+// means hundreds of DDL statements before any page logic starts - 528 mysqli_query call sites, 146
+// CREATE TABLE IF NOT EXISTS, 54 SHOW COLUMNS, 23 SHOW INDEX and 127 conditional ALTERs. Each one is a
+// round trip, and DDL takes metadata locks, so concurrent requests serialise on them: that is why every
+// page felt slow and why transactions seemed to hang before doing anything.
+//
+// >>> BUMP BC_TABLES_VERSION EVERY TIME YOU ADD OR CHANGE ANYTHING BELOW. <<<
+// If you do not, installations that already recorded the current value will never run your change.
+// The marker is written only after the whole file completes, so a partial run (fatal error, timeout)
+// leaves no marker and the next request runs the file again - everything here is written to be
+// repeatable, which is what makes that safe.
+// To force a full run regardless (installer, debugging): $GLOBALS['bc_tables_force_run'] = true;
+if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-1');
+
+if ($connection_server && empty($GLOBALS['bc_tables_force_run'])) {
+    // Two cheap statements instead of hundreds: an options lookup and one data-dictionary probe.
+    $bc_schema_marker = null;
+    $q_bc_marker = @mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='bc_schema_version' LIMIT 1");
+    if ($q_bc_marker && ($r_bc_marker = mysqli_fetch_assoc($q_bc_marker))) $bc_schema_marker = $r_bc_marker['option_value'];
+
+    if ($bc_schema_marker === BC_TABLES_VERSION) {
+        // The marker is only written after a complete run, but confirm one core table exists so that a
+        // restored/emptied database cannot be told "schema is current".
+        $q_bc_core = @mysqli_query($connection_server, "SHOW TABLES LIKE 'sas_users'");
+        if ($q_bc_core && mysqli_num_rows($q_bc_core) > 0) {
+            return; // schema is already at BC_TABLES_VERSION
+        }
+    }
+}
+
 if ($connection_server) {
 //Create Super Admin Table
 $create_super_admin_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_super_admin (id INT NOT NULL AUTO_INCREMENT, email VARCHAR(225) NOT NULL, password VARCHAR(225) NOT NULL, firstname VARCHAR(225) NOT NULL, lastname VARCHAR(225) NOT NULL, phone_number VARCHAR(225) NOT NULL, gender VARCHAR(225) NOT NULL, home_address VARCHAR(225) NOT NULL, status INT UNSIGNED NOT NULL, reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_login VARCHAR(225), totp_secret VARCHAR(225), two_factor_type VARCHAR(20) DEFAULT 'none', security_pin VARCHAR(255), is_blocked TINYINT(1) DEFAULT 0, failed_login_count INT DEFAULT 0, last_failed_login TIMESTAMP NULL, failed_pin_count INT DEFAULT 0, last_failed_pin TIMESTAMP NULL, smtp_host VARCHAR(255) DEFAULT NULL, smtp_user VARCHAR(255) DEFAULT NULL, smtp_pass VARCHAR(255) DEFAULT NULL, smtp_port VARCHAR(50) DEFAULT NULL, smtp_sec VARCHAR(50) DEFAULT NULL, PRIMARY KEY (id))");
@@ -2227,5 +2262,12 @@ $check_upc_idx = mysqli_query($connection_server, "SHOW INDEX FROM sas_user_paym
 if (mysqli_num_rows($check_upc_idx) == 0) {
     mysqli_query($connection_server, "ALTER TABLE sas_user_payment_checkouts ADD INDEX (reference), ADD INDEX (vendor_id)");
 }
+
+// Record the applied schema version so the next request takes the fast path at the top of this file.
+// Deliberately DELETE + INSERT rather than an upsert: not every variant of sas_super_admin_options has
+// a UNIQUE key on option_name, and an upsert there would silently append duplicate rows.
+$bc_schema_marker_esc = mysqli_real_escape_string($connection_server, BC_TABLES_VERSION);
+@mysqli_query($connection_server, "DELETE FROM sas_super_admin_options WHERE option_name='bc_schema_version'");
+@mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('bc_schema_version', '$bc_schema_marker_esc')");
 
 }
