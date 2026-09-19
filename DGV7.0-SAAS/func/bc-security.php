@@ -606,3 +606,53 @@ if (!function_exists('bc_kyc_decision')) {
 }
 
 
+// ── Manual (non-API) KYC: what counts as evidence for each check ──────────────────────────────────
+// One source of truth for the user pages, the mobile status endpoint and both review consoles. Every
+// check a vendor can switch on in PaymentGateway.php maps to a column the manual flow can actually
+// fill - otherwise the vendor could require something no user is able to submit.
+if (!function_exists('bc_kyc_check_map')) {
+    function bc_kyc_check_map() {
+        return [
+            'bvn'                => ['label' => 'BVN',              'columns' => ['bvn']],
+            'nin'                => ['label' => 'NIN',              'columns' => ['nin']],
+            'govt_id'            => ['label' => 'Government ID',    'columns' => ['govt_id_card']],
+            'liveliness_picture' => ['label' => 'Live photo',       'columns' => ['kyc_face_image', 'liveliness_picture']],
+            'liveliness_video'   => ['label' => 'Liveliness video', 'columns' => ['liveliness_video']],
+            'proof_of_address'   => ['label' => 'Proof of address', 'columns' => ['proof_of_address']],
+        ];
+    }
+}
+
+if (!function_exists('bc_kyc_check_label')) {
+    function bc_kyc_check_label($check) {
+        $map = bc_kyc_check_map();
+        return $map[$check]['label'] ?? ucwords(str_replace('_', ' ', (string)$check));
+    }
+}
+
+if (!function_exists('bc_kyc_check_satisfied')) {
+    function bc_kyc_check_satisfied($check, $user) {
+        $map = bc_kyc_check_map();
+        if (!isset($map[$check]) || !is_array($user)) return false;
+        foreach ($map[$check]['columns'] as $col) {
+            if (!empty($user[$col])) return true;
+        }
+        // A user who typed "bvn" or "nin" into the document-type field has still identified themselves.
+        $declared = strtolower(trim((string)($user['kyc_id_type'] ?? '')));
+        if ($declared !== '' && strpos($declared, (string)$check) !== false) return true;
+        return false;
+    }
+}
+
+if (!function_exists('bc_kyc_checks_pending')) {
+    /** @return string[] the enabled checks this user has NOT provided evidence for. */
+    function bc_kyc_checks_pending($user, $enabled_checks) {
+        $pending = [];
+        foreach ((array)$enabled_checks as $check) {
+            if (!bc_kyc_check_satisfied($check, $user)) $pending[] = $check;
+        }
+        return $pending;
+    }
+}
+
+

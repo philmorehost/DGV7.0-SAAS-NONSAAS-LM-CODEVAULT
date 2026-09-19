@@ -17,20 +17,9 @@ $kyc_doc_columns = [
     'video'  => ['col' => 'liveliness_video', 'label' => 'Liveliness video'],
 ];
 
-// Which column satisfies which check the vendor can enable on PaymentGateway.php.
-$kyc_check_evidence = [
-    'bvn'                => ['bvn', 'kyc_id_type_is_bvn'],
-    'nin'                => ['nin', 'kyc_id_type_is_nin'],
-    'govt_id'            => ['govt_id_card'],
-    'liveliness_picture' => ['kyc_face_image', 'liveliness_picture'],
-    'liveliness_video'   => ['liveliness_video'],
-    'proof_of_address'   => ['proof_of_address'],
-];
-$kyc_check_labels = [
-    'bvn' => 'BVN', 'nin' => 'NIN', 'govt_id' => 'Government ID',
-    'liveliness_picture' => 'Live photo', 'liveliness_video' => 'Liveliness video',
-    'proof_of_address' => 'Proof of address',
-];
+// Which column satisfies which check, and the labels shown in the UI, live in func/bc-security.php
+// (bc_kyc_check_map / bc_kyc_check_satisfied / bc_kyc_check_label) so that the user pages, the mobile
+// endpoint and both review consoles cannot drift apart.
 
 // This vendor's enabled KYC checks, so the reviewer can see whether a submission is complete.
 $vendor_kyc_checks = [];
@@ -143,18 +132,6 @@ if (isset($_GET['view'])) {
     $v_uid = (int)$_GET['view'];
     $q_view = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE id='$v_uid' AND vendor_id='$vid' LIMIT 1");
     if ($q_view && mysqli_num_rows($q_view) == 1) $review_user = mysqli_fetch_assoc($q_view);
-}
-
-/** Does this user have evidence for a given vendor KYC check? */
-function bc_kyc_check_satisfied(array $user, string $check): bool {
-    global $kyc_check_evidence;
-    if (!isset($kyc_check_evidence[$check])) return false;
-    foreach ($kyc_check_evidence[$check] as $col) {
-        if ($col === 'kyc_id_type_is_bvn') { if (stripos((string)($user['kyc_id_type'] ?? ''), 'bvn') !== false) return true; continue; }
-        if ($col === 'kyc_id_type_is_nin') { if (stripos((string)($user['kyc_id_type'] ?? ''), 'nin') !== false) return true; continue; }
-        if (!empty($user[$col])) return true;
-    }
-    return false;
 }
 
 ?>
@@ -276,10 +253,10 @@ function bc_kyc_check_satisfied(array $user, string $check): bool {
                   <?php else: ?>
                     <ul class="list-unstyled mb-4">
                       <?php foreach ($vendor_kyc_checks as $chk): ?>
-                        <?php $ok = bc_kyc_check_satisfied($review_user, $chk); ?>
+                        <?php $ok = bc_kyc_check_satisfied($chk, $review_user); ?>
                         <li class="mb-2">
                           <i class="bi <?php echo $ok ? 'bi-check-circle-fill text-success' : 'bi-dash-circle text-muted'; ?> me-2"></i>
-                          <?php echo htmlspecialchars($kyc_check_labels[$chk] ?? ucwords(str_replace('_', ' ', $chk))); ?>
+                          <?php echo htmlspecialchars(bc_kyc_check_label($chk)); ?>
                           <span class="small text-muted"><?php echo $ok ? '- submitted' : '- missing'; ?></span>
                         </li>
                       <?php endforeach; ?>
@@ -423,9 +400,9 @@ function bc_kyc_check_satisfied(array $user, string $check): bool {
                                                 <span class="small text-muted">optional</span>
                                             <?php else: ?>
                                                 <?php foreach ($vendor_kyc_checks as $chk): ?>
-                                                    <?php $ok = bc_kyc_check_satisfied($user, $chk); ?>
-                                                    <span class="badge bg-<?php echo $ok ? 'success' : 'light text-muted border'; ?>" title="<?php echo htmlspecialchars($kyc_check_labels[$chk] ?? $chk); ?>">
-                                                        <?php echo htmlspecialchars($kyc_check_labels[$chk] ?? $chk); ?>
+                                                    <?php $ok = bc_kyc_check_satisfied($chk, $user); ?>
+                                                    <span class="badge bg-<?php echo $ok ? 'success' : 'light text-muted border'; ?>" title="<?php echo htmlspecialchars(bc_kyc_check_label($chk)); ?>">
+                                                        <?php echo htmlspecialchars(bc_kyc_check_label($chk)); ?>
                                                     </span>
                                                 <?php endforeach; ?>
                                             <?php endif; ?>

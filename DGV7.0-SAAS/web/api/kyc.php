@@ -10,6 +10,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 include_once("../../func/bc-connect.php");
+// Shared KYC helpers (bc_kyc_checks_pending / bc_kyc_check_label) live in bc-security.php, which
+// bc-connect.php does not pull in by itself. Without this the status/upload replies fatal on an
+// undefined function.
+include_once(__DIR__ . "/../../func/bc-security.php");
 
 $vendor_id = resolveVendorID();
 $select_vendor_table = mysqli_fetch_array(mysqli_query($connection_server,
@@ -35,6 +39,14 @@ if (!$user) {
 
 $action = trim(strip_tags($_POST['action'] ?? ''));
 
+// The checks this vendor requires. Used to tell the app what is still outstanding after a submission
+// and to keep the app, the website and both review consoles answering the same question.
+$enabled_checks = [];
+$q_enabled = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vendor_id'");
+while ($q_enabled && $r_enabled = mysqli_fetch_assoc($q_enabled)) {
+    if ((int)$r_enabled['status'] === 1) $enabled_checks[] = $r_enabled['verification_name'];
+}
+
 // Return current KYC status
 if ($action === 'status') {
     $kyc_names = [0 => "Unverified", 1 => "Under Review", 2 => "Verified", 3 => "Rejected"];
@@ -55,6 +67,12 @@ if ($action === 'status') {
         "nin_set"     => !empty($user['nin']) ? "Yes" : "No",
         "voveid_enabled" => $voveid_enabled ? "Yes" : "No",
         "voveid_status" => $user['voveid_status'] ?? 'unverified',
+        // Manual (non-API) KYC: what the reviewer decided, why, and what is still outstanding, so the
+        // app can show the same information the website does instead of just "Unverified".
+        "kyc_reject_reason" => (string)($user['kyc_reject_reason'] ?? ''),
+        "submitted_at"      => (string)($user['kyc_submitted_at'] ?? ''),
+        "has_documents"     => (empty($user['govt_id_card']) && empty($user['kyc_face_image'])) ? "No" : "Yes",
+        "still_needed"      => array_map('bc_kyc_check_label', bc_kyc_checks_pending($user, $enabled_checks)),
     ]);
     exit;
 }
@@ -156,29 +174,72 @@ if ($action === 'submit_bvn_nin') {
 // Upload document / selfie (multipart)
 if ($action === 'upload_document') {
     $upload_dir = $_SERVER['DOCUMENT_ROOT'] . "/uploads/kyc/";
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+    if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+
+    // Private evidence: deny direct HTTP access, serve only through the authenticated viewers.
+    $htaccess_file = $upload_dir . '.htaccess';
+    if (is_dir($upload_dir) && !file_exists($htaccess_file)) {
+        @file_put_contents($htaccess_file, "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
+    }
 
     $user_id = (int)$user['id'];
     $updates = [];
-    $allowed = ['jpg', 'jpeg', 'png'];
+    $uploaded = [];
 
-    foreach (['govt_id' => 'govt_id_card', 'selfie' => 'kyc_face_image'] as $input_name => $db_col) {
-        if (!empty($_FILES[$input_name]['name']) && $_FILES[$input_name]['error'] === UPLOAD_ERR_OK) {
-            $ext = strtolower(pathinfo($_FILES[$input_name]['name'], PATHINFO_EXTENSION));
-            if (!in_array($ext, $allowed)) continue;
-            $filename = "kyc_{$user_id}_{$input_name}_" . time() . ".$ext";
-            if (move_uploaded_file($_FILES[$input_name]['tmp_name'], $upload_dir . $filename)) {
-                $fn_esc = mysqli_real_escape_string($connection_server, $filename);
-                $updates[] = "$db_col='$fn_esc'";
-            }
+    // input name => [column, allowed extensions, max MB]. Same contract as the website flow, except the
+    // app sends camera images for the ID and never a PDF for the selfie.
+    $kinds = [
+        'govt_id'          => ['govt_id_card',     ['jpg', 'jpeg', 'png', 'webp'], 8],
+        'selfie'           => ['kyc_face_image',   ['jpg', 'jpeg', 'png', 'webp'], 8],
+        'proof_of_address' => ['proof_of_address', ['jpg', 'jpeg', 'png', 'webp'], 8],
+        'liveliness_video' => ['liveliness_video', ['mp4', 'mov', 'webm', 'mkv'], 25],
+    ];
+
+    foreach ($kinds as $input_name => $spec) {
+        list($db_col, $exts, $max_mb) = $spec;
+        if (empty($_FILES[$input_name]['name'])) continue;
+        if (($_FILES[$input_name]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+        $tmp = $_FILES[$input_name]['tmp_name'];
+        if (!is_uploaded_file($tmp)) continue;
+        if (filesize($tmp) > $max_mb * 1024 * 1024) continue;
+
+        $ext = strtolower(pathinfo($_FILES[$input_name]['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $exts, true)) continue;
+        // Images must really be images - the extension comes from the client.
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true) && @getimagesize($tmp) === false) continue;
+
+        $filename = "kyc_{$user_id}_{$input_name}_" . bin2hex(random_bytes(6)) . ".$ext";
+        if (move_uploaded_file($tmp, $upload_dir . $filename)) {
+            $fn_esc = mysqli_real_escape_string($connection_server, $filename);
+            $updates[] = "$db_col='$fn_esc'";
+            $uploaded[] = $input_name;
         }
     }
 
     if (!empty($updates)) {
-        $updates[] = "kyc_status=1"; // Pending review
+        $doc_type = (string)($_POST['doc_type'] ?? '');
+        if (in_array($doc_type, ['BVN', 'NIN', 'Passport', "Driver's Licence", "Voter's Card", 'National ID'], true)) {
+            $updates[] = "kyc_id_type='" . mysqli_real_escape_string($connection_server, $doc_type) . "'";
+        }
+        if (in_array('govt_id', $uploaded, true))          $updates[] = "kyc_id_ok=1";
+        if (in_array('selfie', $uploaded, true))           $updates[] = "kyc_picture_ok=1";
+        if (in_array('liveliness_video', $uploaded, true)) $updates[] = "kyc_video_ok=1";
+        if (in_array('proof_of_address', $uploaded, true)) $updates[] = "kyc_address_ok=1";
+        $updates[] = "kyc_status=1";           // Pending review
+        $updates[] = "kyc_submitted_at=NOW()"; // submission clock, not the account's reg_date
+        $updates[] = "kyc_reject_reason=NULL"; // a new submission clears the old rejection
         mysqli_query($connection_server,
             "UPDATE sas_users SET " . implode(", ", $updates) . " WHERE id='$user_id'");
-        echo json_encode(["status" => "success", "desc" => "Documents submitted for review"]);
+
+        $q_after = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE id='$user_id' LIMIT 1");
+        $after = $q_after ? (mysqli_fetch_assoc($q_after) ?: []) : [];
+        $still = $enabled_checks ? bc_kyc_checks_pending($after, $enabled_checks) : [];
+
+        echo json_encode([
+            "status" => "success",
+            "desc"   => "Documents submitted for review",
+            "still_needed" => array_map('bc_kyc_check_label', $still),
+        ]);
     } else {
         echo json_encode(["status" => "failed", "desc" => "No valid documents received"]);
     }

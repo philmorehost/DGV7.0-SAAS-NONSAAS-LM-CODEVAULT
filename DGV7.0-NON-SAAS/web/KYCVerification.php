@@ -9,6 +9,29 @@ $kyc_settings = [];
 $q_kyc = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vid'");
 while($r = mysqli_fetch_assoc($q_kyc)) $kyc_settings[$r['verification_name']] = (int)$r['status'];
 
+// The checks this vendor actually requires - shared mapping in func/bc-security.php.
+$enabled_checks = [];
+foreach ($kyc_settings as $check_name => $check_status) {
+    if ((int)$check_status === 1) $enabled_checks[] = $check_name;
+}
+// The checks a user can satisfy by uploading something from this page.
+$manual_checks = array_values(array_intersect($enabled_checks, ['govt_id', 'liveliness_picture', 'liveliness_video', 'proof_of_address']));
+
+// This user's own KYC row, read fresh: the session copy is not guaranteed to carry the KYC columns.
+$kyc_self = [];
+$q_self = mysqli_query($connection_server, "SELECT kyc_status, kyc_reject_reason, kyc_submitted_at, kyc_reviewed_at,
+        govt_id_card, kyc_face_image, proof_of_address, liveliness_video, liveliness_picture, kyc_id_type
+    FROM sas_users WHERE id='" . (int)$get_logged_user_details['id'] . "' LIMIT 1");
+if (!$q_self) {
+    // Safe fallback if the timeline columns are not migrated on this database yet.
+    $q_self = mysqli_query($connection_server, "SELECT kyc_status, kyc_reject_reason, govt_id_card, kyc_face_image,
+            proof_of_address, liveliness_video, liveliness_picture, kyc_id_type
+        FROM sas_users WHERE id='" . (int)$get_logged_user_details['id'] . "' LIMIT 1");
+}
+if ($q_self) $kyc_self = mysqli_fetch_assoc($q_self) ?: [];
+$kyc_status = (int)($kyc_self['kyc_status'] ?? $get_logged_user_details['kyc_status']);
+$kyc_still_needed = $enabled_checks ? bc_kyc_checks_pending($kyc_self, $enabled_checks) : [];
+
 $is_kyc_enabled = isKYCEnforced($vid);
 
 // Check if VoveID is enabled for this vendor
@@ -39,34 +62,119 @@ if (isset($_POST['submit_bvn_nin'])) {
 
 if (isset($_POST['submit_media'])) {
     $upload_dir = $_SERVER['DOCUMENT_ROOT'] . "/uploads/kyc/";
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+    if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
 
-    $user_id = $get_logged_user_details['id'];
+    // Uploaded IDs and live photos are private evidence. Deny direct HTTP access to the directory and
+    // serve them only through the authenticated viewers (here for the owner, bc-admin/KYCManagement.php
+    // for the vendor). Ignored where AllowOverride is off, so the viewers work regardless.
+    $htaccess_file = $upload_dir . '.htaccess';
+    if (is_dir($upload_dir) && !file_exists($htaccess_file)) {
+        @file_put_contents($htaccess_file, "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
+    }
+
+    $user_id = (int)$get_logged_user_details['id'];
     $updates = [];
-    $allowed = ['jpg', 'jpeg', 'png', 'pdf'];
+    $uploaded = [];
 
-    foreach (['govt_id' => 'govt_id_card', 'selfie' => 'kyc_face_image'] as $input_name => $db_col) {
-        if (!empty($_FILES[$input_name]['name'])) {
-            $ext = strtolower(pathinfo($_FILES[$input_name]['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, $allowed)) {
-                $filename = "kyc_" . $user_id . "_" . $input_name . "_" . time() . "." . $ext;
-                if (move_uploaded_file($_FILES[$input_name]['tmp_name'], $upload_dir . $filename)) {
-                    $updates[] = "$db_col = '$filename'";
-                }
-            }
+    // input name => [column, allowed extensions, max MB]. The selfie is images only: it is meant to be
+    // taken with the camera, and a PDF cannot be one.
+    $kinds = [
+        'govt_id'          => ['govt_id_card',     ['jpg', 'jpeg', 'png', 'webp', 'pdf'], 8],
+        'selfie'           => ['kyc_face_image',   ['jpg', 'jpeg', 'png', 'webp'], 8],
+        'proof_of_address' => ['proof_of_address', ['jpg', 'jpeg', 'png', 'webp', 'pdf'], 8],
+        'liveliness_video' => ['liveliness_video', ['mp4', 'mov', 'webm', 'mkv'], 25],
+    ];
+
+    foreach ($kinds as $input_name => $spec) {
+        list($db_col, $exts, $max_mb) = $spec;
+        if (empty($_FILES[$input_name]['name'])) continue;
+        if (($_FILES[$input_name]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+        $tmp = $_FILES[$input_name]['tmp_name'];
+        if (!is_uploaded_file($tmp)) continue;
+        if (filesize($tmp) > $max_mb * 1024 * 1024) continue;
+
+        $ext = strtolower(pathinfo($_FILES[$input_name]['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $exts, true)) continue;
+        // The extension is attacker-controlled, so confirm an image really is one.
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true) && @getimagesize($tmp) === false) continue;
+
+        $filename = 'kyc_' . $user_id . '_' . $input_name . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        if (move_uploaded_file($tmp, $upload_dir . $filename)) {
+            $fn_esc = mysqli_real_escape_string($connection_server, $filename);
+            $updates[] = "$db_col = '$fn_esc'";
+            $uploaded[] = $input_name;
         }
     }
 
     if (!empty($updates)) {
-        $updates[] = "kyc_status = 1"; // Set to Pending
-        $sql = "UPDATE sas_users SET " . implode(", ", $updates) . " WHERE id='$user_id'";
-        mysqli_query($connection_server, $sql);
-        $_SESSION['product_purchase_response'] = "Identity documents uploaded and submitted for review.";
+        // What the user says the document is (passport, licence, ...): the manual flow must accept IDs
+        // that carry no BVN/NIN number.
+        $doc_type = (string)($_POST['doc_type'] ?? '');
+        if (in_array($doc_type, ['BVN', 'NIN', 'Passport', "Driver's Licence", "Voter's Card", 'National ID'], true)) {
+            $updates[] = "kyc_id_type = '" . mysqli_real_escape_string($connection_server, $doc_type) . "'";
+        }
+        // Flag what has now been provided, so the vendor's checklist and any gating stay accurate.
+        if (in_array('govt_id', $uploaded, true))         $updates[] = "kyc_id_ok = 1";
+        if (in_array('selfie', $uploaded, true))          $updates[] = "kyc_picture_ok = 1";
+        if (in_array('liveliness_video', $uploaded, true)) $updates[] = "kyc_video_ok = 1";
+        if (in_array('proof_of_address', $uploaded, true)) $updates[] = "kyc_address_ok = 1";
+        $updates[] = "kyc_status = 1";           // back into the review queue
+        $updates[] = "kyc_submitted_at = NOW()"; // the submission clock, not the account's reg_date
+        $updates[] = "kyc_reject_reason = NULL"; // a new submission clears the previous rejection
+
+        mysqli_query($connection_server, "UPDATE sas_users SET " . implode(", ", $updates) . " WHERE id='$user_id' AND vendor_id='$vid'");
+
+        // Tell the user exactly what is still missing instead of a bare "submitted".
+        $q_after = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE id='$user_id' LIMIT 1");
+        $after = $q_after ? (mysqli_fetch_assoc($q_after) ?: []) : [];
+        $still = $enabled_checks ? bc_kyc_checks_pending($after, $enabled_checks) : [];
+        $msg = "Documents submitted and waiting for review.";
+        if (!empty($still)) {
+            $still_names = array_map('bc_kyc_check_label', $still);
+            $msg .= " Still needed: " . implode(', ', $still_names) . ".";
+        } else {
+            $msg .= " Everything your provider requires is now with them.";
+        }
+        $_SESSION['product_purchase_response'] = $msg;
     } else {
-        $_SESSION['product_purchase_response'] = "Error: No valid documents selected.";
+        $_SESSION['product_purchase_response'] = "Error: no valid file received. Check the file type and that it is under the size limit.";
     }
 
     header("Location: KYCVerification.php");
+    exit();
+}
+
+// Private evidence viewer: the signed-in user, their own files only. Mirrors the vendor console viewer.
+if (isset($_GET['doc'])) {
+    $doc_map = ['id' => 'govt_id_card', 'selfie' => 'kyc_face_image', 'poa' => 'proof_of_address', 'video' => 'liveliness_video'];
+    $kind = (string)$_GET['doc'];
+    if (!isset($doc_map[$kind])) { http_response_code(400); exit('Unknown document'); }
+
+    $col = $doc_map[$kind];
+    $q_doc = mysqli_query($connection_server, "SELECT `$col` AS f FROM sas_users WHERE id='" . (int)$get_logged_user_details['id'] . "' LIMIT 1");
+    $row_doc = $q_doc ? mysqli_fetch_assoc($q_doc) : null;
+    $doc_file = trim($row_doc['f'] ?? '');
+    if ($doc_file === '') { http_response_code(404); exit('No such document'); }
+
+    $doc_base = realpath($_SERVER['DOCUMENT_ROOT'] . '/uploads/kyc/');
+    $doc_path = realpath($_SERVER['DOCUMENT_ROOT'] . '/uploads/kyc/' . basename($doc_file));
+    if (!$doc_base || !$doc_path || strpos($doc_path, $doc_base) !== 0 || !is_file($doc_path)) {
+        http_response_code(404); exit('Document missing on disk');
+    }
+
+    $doc_mimes = [
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif',
+        'webp' => 'image/webp', 'pdf' => 'application/pdf',
+        'mp4' => 'video/mp4', 'mov' => 'video/quicktime', 'webm' => 'video/webm', 'mkv' => 'video/x-matroska',
+    ];
+    $doc_ext = strtolower(pathinfo($doc_path, PATHINFO_EXTENSION));
+
+    header('Content-Type: ' . ($doc_mimes[$doc_ext] ?? 'application/octet-stream'));
+    header('Content-Length: ' . filesize($doc_path));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    header('Content-Disposition: inline; filename="' . basename($doc_path) . '"');
+    readfile($doc_path);
     exit();
 }
 
@@ -105,20 +213,77 @@ if (isset($_POST['submit_media'])) {
             <div class="col-lg-4">
                 <div class="card kyc-card p-4 text-center">
                     <div class="mb-3">
-                        <?php if($get_logged_user_details['kyc_status'] == 2): ?>
+                        <?php if($kyc_status == 2): ?>
                             <i class="bi bi-patch-check-fill text-success display-1"></i>
                             <h4 class="fw-bold mt-2">Fully Verified</h4>
                             <p class="text-muted small">Your identity has been confirmed. You have unrestricted access to all services.</p>
-                        <?php elseif($get_logged_user_details['kyc_status'] == 1): ?>
+                        <?php elseif($kyc_status == 1): ?>
                             <i class="bi bi-clock-history text-warning display-1"></i>
                             <h4 class="fw-bold mt-2">Under Review</h4>
-                            <p class="text-muted small">Your documents are being processed by our compliance team.</p>
+                            <p class="text-muted small">Your documents are with a reviewer. Services that need verification unlock once they approve.</p>
+                        <?php elseif($kyc_status == 3): ?>
+                            <i class="bi bi-x-octagon-fill text-danger display-1"></i>
+                            <h4 class="fw-bold mt-2">Not Accepted</h4>
+                            <p class="text-muted small">Your last submission was rejected. Fix what is listed below and submit again.</p>
                         <?php else: ?>
                             <i class="bi bi-shield-lock text-primary display-1"></i>
                             <h4 class="fw-bold mt-2">Unverified</h4>
                             <p class="text-muted small">Please complete the required steps below to secure your account.</p>
                         <?php endif; ?>
                     </div>
+
+                    <?php if ($kyc_status == 3 && !empty($kyc_self['kyc_reject_reason'])): ?>
+                      <div class="alert alert-danger small text-start">
+                        <strong>Reviewer said:</strong><br/>
+                        <?php echo nl2br(htmlspecialchars($kyc_self['kyc_reject_reason'])); ?>
+                      </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($kyc_still_needed)): ?>
+                      <div class="alert alert-warning small text-start">
+                        <strong>Still needed:</strong>
+                        <ul class="mb-0 ps-3">
+                          <?php foreach ($kyc_still_needed as $need): ?>
+                            <li><?php echo htmlspecialchars(bc_kyc_check_label($need)); ?></li>
+                          <?php endforeach; ?>
+                        </ul>
+                      </div>
+                    <?php endif; ?>
+
+                    <?php
+                      // Evidence the user has already sent, so they can see the same things the reviewer sees.
+                      $self_docs = [
+                        'id'     => ['label' => 'Government ID',    'file' => $kyc_self['govt_id_card'] ?? ''],
+                        'selfie' => ['label' => 'Live photo',       'file' => $kyc_self['kyc_face_image'] ?? ''],
+                        'poa'    => ['label' => 'Proof of address', 'file' => $kyc_self['proof_of_address'] ?? ''],
+                        'video'  => ['label' => 'Liveliness video', 'file' => $kyc_self['liveliness_video'] ?? ''],
+                      ];
+                    ?>
+                    <?php if (array_filter(array_column($self_docs, 'file'))): ?>
+                      <div class="text-start mt-3">
+                        <h6 class="fw-bold small mb-2">What you have submitted</h6>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                          <?php foreach ($self_docs as $kind => $doc): ?>
+                            <?php if (trim((string)$doc['file']) === '') continue; ?>
+                            <?php $self_ext = strtolower(pathinfo($doc['file'], PATHINFO_EXTENSION)); ?>
+                            <?php $self_url = 'KYCVerification.php?doc=' . urlencode($kind); ?>
+                            <?php if (in_array($self_ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)): ?>
+                              <a href="<?php echo $self_url; ?>" target="_blank" rel="noopener" title="<?php echo htmlspecialchars($doc['label']); ?>">
+                                <img src="<?php echo $self_url; ?>" alt="<?php echo htmlspecialchars($doc['label']); ?>"
+                                     class="rounded-3 border" style="width:78px;height:78px;object-fit:cover;">
+                              </a>
+                            <?php else: ?>
+                              <a href="<?php echo $self_url; ?>" target="_blank" rel="noopener" class="badge bg-light text-dark border text-decoration-none">
+                                <?php echo htmlspecialchars($doc['label']); ?>
+                              </a>
+                            <?php endif; ?>
+                          <?php endforeach; ?>
+                        </div>
+                        <?php if (!empty($kyc_self['kyc_submitted_at'])): ?>
+                          <p class="small text-muted mt-2 mb-0">Submitted <?php echo date('M d, Y H:i', strtotime($kyc_self['kyc_submitted_at'])); ?>.</p>
+                        <?php endif; ?>
+                      </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -176,6 +341,67 @@ if (isset($_POST['submit_media'])) {
                                         <input type="text" name="value" class="form-control rounded-3 shadow-sm" placeholder="Enter 11-digit number" value="<?php echo $get_logged_user_details['bvn'] ?: $get_logged_user_details['nin']; ?>" required>
                                     </div>
                                     <button name="submit_bvn_nin" type="submit" class="btn btn-primary w-100 rounded-pill fw-bold shadow-sm">Update ID</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Manual document upload (non-API KYC) -->
+                    <?php if (!empty($manual_checks)): ?>
+                    <div class="col-12">
+                        <div class="card kyc-card">
+                            <div class="card-body p-4">
+                                <h6 class="fw-bold mb-1"><i class="bi bi-camera me-2 text-primary"></i>Upload your documents</h6>
+                                <p class="small text-muted mb-3">
+                                    These are checked by a person, not an algorithm. Take the photo now where you can - screenshots or
+                                    photos of an old photo are rejected.
+                                </p>
+                                <form method="post" enctype="multipart/form-data">
+                                    <?php if (in_array('govt_id', $manual_checks, true)): ?>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold">Document type</label>
+                                            <select name="doc_type" class="form-select rounded-3 shadow-sm">
+                                                <option value="">Select...</option>
+                                                <?php foreach (['BVN', 'NIN', 'Passport', "Driver's Licence", "Voter's Card", 'National ID'] as $dt): ?>
+                                                    <option value="<?php echo htmlspecialchars($dt); ?>" <?php echo (($kyc_self['kyc_id_type'] ?? '') === $dt) ? 'selected' : ''; ?>><?php echo htmlspecialchars($dt); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label class="form-label small fw-bold">Government ID (photo or PDF, max 8 MB)</label>
+                                            <input type="file" name="govt_id" accept="image/*,application/pdf" class="form-control rounded-3 shadow-sm">
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <?php if (in_array('liveliness_picture', $manual_checks, true)): ?>
+                                    <div class="mt-3">
+                                        <label class="form-label small fw-bold">Take a live photo of yourself now</label>
+                                        <input type="file" name="selfie" accept="image/*" capture="user" class="form-control rounded-3 shadow-sm">
+                                        <div class="form-text">Use the camera so your face is clearly lit and uncovered.</div>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <?php if (in_array('proof_of_address', $manual_checks, true)): ?>
+                                    <div class="mt-3">
+                                        <label class="form-label small fw-bold">Proof of address (utility bill, bank statement, last 3 months)</label>
+                                        <input type="file" name="proof_of_address" accept="image/*,application/pdf" class="form-control rounded-3 shadow-sm">
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <?php if (in_array('liveliness_video', $manual_checks, true)): ?>
+                                    <div class="mt-3">
+                                        <label class="form-label small fw-bold">Short video - say your full name and today's date</label>
+                                        <input type="file" name="liveliness_video" accept="video/*" capture="user" class="form-control rounded-3 shadow-sm">
+                                        <div class="form-text">MP4/MOV/WebM, max 25 MB.</div>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <button name="submit_media" type="submit" class="btn btn-primary w-100 rounded-pill fw-bold shadow-sm mt-3">
+                                        Submit for review
+                                    </button>
                                 </form>
                             </div>
                         </div>

@@ -65,5 +65,39 @@ bc_assert('action is case-insensitive', bc_kyc_decision('APPROVE')['status'], 2)
 bc_assert('action is trimmed', bc_kyc_decision("  reject  ", 'blurry')['status'], 3);
 bc_assert('reason is trimmed', bc_kyc_decision('reject', "  blurry  ")['reason'], 'blurry');
 
+// ── Requirement mapping: every check a vendor can enable must be satisfiable by the manual flow ───
+// PaymentGateway.php offers exactly these six checks. If one of them had no column behind it, a vendor
+// could require something no user is able to submit - which is how "proof_of_address" and
+// "liveliness_video" were collected nowhere before.
+$vendor_selectable_checks = ['bvn', 'nin', 'liveliness_video', 'liveliness_picture', 'govt_id', 'proof_of_address'];
+$map = bc_kyc_check_map();
+bc_assert('every selectable check has an evidence mapping', array_values(array_diff($vendor_selectable_checks, array_keys($map))), []);
+foreach ($vendor_selectable_checks as $c) {
+    bc_assert("mapping for '$c' points at at least one column", count($map[$c]['columns']) >= 1, true);
+}
+
+$blank_user = ['username' => 'jane'];
+bc_assert('a blank user satisfies nothing (bvn)', bc_kyc_check_satisfied('bvn', $blank_user), false);
+bc_assert('a blank user satisfies nothing (govt_id)', bc_kyc_check_satisfied('govt_id', $blank_user), false);
+bc_assert('unknown check name is never satisfied', bc_kyc_check_satisfied('passport_scan', $blank_user), false);
+bc_assert('a non-array user is handled', bc_kyc_check_satisfied('bvn', null), false);
+
+bc_assert('bvn column satisfies the bvn check', bc_kyc_check_satisfied('bvn', ['bvn' => '22123456789']), true);
+bc_assert('empty string does not satisfy a check', bc_kyc_check_satisfied('bvn', ['bvn' => '']), false);
+bc_assert('declared document type NIN satisfies the nin check', bc_kyc_check_satisfied('nin', ['kyc_id_type' => 'NIN']), true);
+bc_assert('kyc_face_image satisfies the live-photo check', bc_kyc_check_satisfied('liveliness_picture', ['kyc_face_image' => 'a.jpg']), true);
+bc_assert('liveliness_picture column also satisfies it', bc_kyc_check_satisfied('liveliness_picture', ['liveliness_picture' => 'b.jpg']), true);
+bc_assert('proof_of_address column satisfies that check', bc_kyc_check_satisfied('proof_of_address', ['proof_of_address' => 'bill.pdf']), true);
+
+$enabled = ['govt_id', 'liveliness_picture', 'proof_of_address'];
+$partial = ['govt_id_card' => 'id.jpg'];
+bc_assert('pending list names exactly what is missing', bc_kyc_checks_pending($partial, $enabled), ['liveliness_picture', 'proof_of_address']);
+$complete = ['govt_id_card' => 'id.jpg', 'kyc_face_image' => 'face.jpg', 'proof_of_address' => 'bill.pdf'];
+bc_assert('nothing pending when everything is provided', bc_kyc_checks_pending($complete, $enabled), []);
+bc_assert('no enabled checks means nothing pending', bc_kyc_checks_pending($partial, []), []);
+
+bc_assert('label for a known check', bc_kyc_check_label('proof_of_address'), 'Proof of address');
+bc_assert('label falls back for an unknown check', bc_kyc_check_label('something_new'), 'Something New');
+
 echo "\n$checks checks, $fails failures\n";
 exit($fails === 0 ? 0 : 1);
