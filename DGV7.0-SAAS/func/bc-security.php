@@ -701,4 +701,62 @@ if (!function_exists('bc_kyc_notification_message')) {
     }
 }
 
+if (!function_exists('bc_kyc_effective_statuses')) {
+    /**
+     * The effective KYC check list for one vendor: `name => status`, exactly one entry per check.
+     *
+     * Why this exists: sas_kyc_verifications historically had NO unique key while the installer
+     * seeded it with `INSERT IGNORE` on every request, so the table accumulated a new copy of every
+     * check each time a page loaded. Consumers that appended to a plain array (the review console,
+     * the mobile endpoint) then showed one badge per copy - "Liveliness video / Live photo /
+     * Government ID" repeating dozens of times for a single user. The set is read grouped by name,
+     * and a check counts as enabled if ANY of its rows says 1 (the admin UI writes 1 = on, 0/2 = off).
+     *
+     * @return array<string,int> verification_name => 1 (enabled) or 0
+     */
+    function bc_kyc_effective_statuses($connection_server, $vendor_id)
+    {
+        $out = array();
+        $vendor_id = (int)$vendor_id;
+        if (!$connection_server || $vendor_id <= 0) return $out;
+
+        $q = @mysqli_query($connection_server, "SELECT verification_name,
+                    MAX(CASE WHEN status='1' THEN 1 ELSE 0 END) AS enabled
+                FROM sas_kyc_verifications WHERE vendor_id='$vendor_id'
+                GROUP BY verification_name");
+
+        if (!$q) {
+            // Unexpected schema: still collapse duplicates by name rather than return nothing.
+            $q = @mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vendor_id'");
+            while ($q && ($r = mysqli_fetch_assoc($q))) {
+                $name = (string)$r['verification_name'];
+                $on = ((int)$r['status'] === 1) ? 1 : 0;
+                $out[$name] = (isset($out[$name]) && $out[$name] === 1) ? 1 : $on;
+            }
+            return $out;
+        }
+
+        while ($r = mysqli_fetch_assoc($q)) {
+            $out[(string)$r['verification_name']] = ((int)$r['enabled'] === 1) ? 1 : 0;
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('bc_kyc_enabled_checks')) {
+    /**
+     * The names of the checks this vendor requires, each exactly once.
+     *
+     * @return string[]
+     */
+    function bc_kyc_enabled_checks($connection_server, $vendor_id)
+    {
+        $names = array();
+        foreach (bc_kyc_effective_statuses($connection_server, $vendor_id) as $name => $status) {
+            if ((int)$status === 1 && $name !== '') $names[] = $name;
+        }
+        return $names;
+    }
+}
+
 

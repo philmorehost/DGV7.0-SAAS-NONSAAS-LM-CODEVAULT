@@ -22,11 +22,12 @@ $kyc_doc_columns = [
 // endpoint and both review consoles cannot drift apart.
 
 // This vendor's enabled KYC checks, so the reviewer can see whether a submission is complete.
-$vendor_kyc_checks = [];
-$q_vkc = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vid'");
-while ($q_vkc && $r = mysqli_fetch_assoc($q_vkc)) {
-    if ((int)$r['status'] === 1) $vendor_kyc_checks[] = $r['verification_name'];
-}
+// Read through the shared helper: a plain SELECT appended one entry per row, so once the settings
+// table accumulated duplicate rows this list held dozens of copies of the same three checks and the
+// console rendered a badge per copy. The cap is belt and braces - the page stays a fixed size even
+// if the table is fed junk again.
+$vendor_kyc_checks = bc_kyc_enabled_checks($connection_server, $vid);
+if (count($vendor_kyc_checks) > 12) $vendor_kyc_checks = array_slice($vendor_kyc_checks, 0, 12);
 
 // ── Reviewer decision ────────────────────────────────────────────────────────────────────────────
 // POST + CSRF. These were GET links, so any page the signed-in admin loaded (or a link prefetch)

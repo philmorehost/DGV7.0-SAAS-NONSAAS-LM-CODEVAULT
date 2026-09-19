@@ -325,11 +325,36 @@ if ($connection_server) {
             }
         }
 
-        // Migration: Ensure default KYC config for all vendors (0 = Disabled by default)
+        // ── KYC CHECKS: one row per vendor/check, enforced by the database ───────────────────────
+        // sas_kyc_verifications had no unique key, and the seeding loop below writes INSERT IGNORE,
+        // which only ignores DUPLICATE-KEY errors. So every request added another copy of all six
+        // default checks for every vendor, and the review console rendered one badge per copy (the
+        // same three checks repeating dozens of times for a single user). Collapse the copies, give
+        // the table the key that makes INSERT IGNORE mean what it says, and address rows by id.
+        $kyc_id_col = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_kyc_verifications` LIKE 'id'");
+        if ($kyc_id_col && mysqli_num_rows($kyc_id_col) == 0) {
+            @mysqli_query($connection_server, "ALTER TABLE `sas_kyc_verifications` ADD COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST");
+        }
+        $kyc_uniq = mysqli_query($connection_server, "SHOW INDEX FROM `sas_kyc_verifications` WHERE Key_name = 'uniq_vendor_check'");
+        if ($kyc_uniq && mysqli_num_rows($kyc_uniq) == 0) {
+            // Keep one row per vendor/check: the ENABLED copy wins (status 1) so a vendor's setting
+            // is never silently lost, then the newest, then the lowest id, so exactly one survives.
+            @mysqli_query($connection_server, "DELETE t1 FROM `sas_kyc_verifications` t1 JOIN `sas_kyc_verifications` t2
+                 ON t1.vendor_id = t2.vendor_id AND t1.verification_name = t2.verification_name
+                AND ( (t1.status <> 1 AND t2.status = 1)
+                   OR (t1.status  = t2.status AND t1.date < t2.date)
+                   OR (t1.status  = t2.status AND t1.date = t2.date AND t1.id > t2.id) )");
+            @mysqli_query($connection_server, "ALTER TABLE `sas_kyc_verifications` ADD UNIQUE KEY uniq_vendor_check (vendor_id, verification_name)");
+        }
+
+        // Migration: Ensure default KYC config (0 = Disabled by default) for vendors that are missing
+        // some, so a normal request issues one query instead of six inserts per vendor.
         $kyc_defaults = array("bvn", "nin", "liveliness_video", "liveliness_picture", "govt_id", "proof_of_address");
-        $vendors_q = mysqli_query($connection_server, "SELECT id FROM sas_vendors");
-        while($v_row = mysqli_fetch_assoc($vendors_q)){
-            $v_id = $v_row['id'];
+        $vendors_q = mysqli_query($connection_server, "SELECT v.id FROM sas_vendors v
+                LEFT JOIN (SELECT vendor_id, COUNT(*) AS c FROM sas_kyc_verifications GROUP BY vendor_id) k ON k.vendor_id = v.id
+                WHERE COALESCE(k.c, 0) < " . count($kyc_defaults));
+        while($vendors_q && $v_row = mysqli_fetch_assoc($vendors_q)){
+            $v_id = (int)$v_row['id'];
             foreach($kyc_defaults as $kd){
                 mysqli_query($connection_server, "INSERT IGNORE INTO sas_kyc_verifications (vendor_id, verification_name, status) VALUES ('$v_id', '$kd', '0')");
             }
@@ -462,9 +487,7 @@ if ($connection_server) {
 					$is_config_page = in_array($current_uri, ["/web/AccountSettings.php", "/web/KYCVerification.php", "/web/SecurityQuest.php"]);
 
 					if ($is_config_page || !isset($_SESSION['kyc_data_cache']) || !isset($_SESSION['kyc_data_vid']) || $_SESSION['kyc_data_vid'] != $vendor_id || !isset($_SESSION['kyc_data_time']) || (time() - $_SESSION['kyc_data_time'] > 30)) {
-						$kyc_data = [];
-						$kyc_res = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vendor_id'");
-						while($krow = mysqli_fetch_assoc($kyc_res)) $kyc_data[$krow['verification_name']] = (int)$krow['status'];
+						$kyc_data = bc_kyc_effective_statuses($connection_server, $vendor_id);
 						$_SESSION['kyc_data_cache'] = $kyc_data;
 						$_SESSION['kyc_data_vid'] = $vendor_id;
 						$_SESSION['kyc_data_time'] = time();

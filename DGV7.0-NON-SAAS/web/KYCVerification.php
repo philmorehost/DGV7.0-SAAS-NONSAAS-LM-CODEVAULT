@@ -4,16 +4,13 @@ include("../func/bc-config.php");
 $username = $get_logged_user_details['username'];
 $vid = $get_logged_user_details['vendor_id'];
 
-// Get Vendor Specific KYC Settings
-$kyc_settings = [];
-$q_kyc = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vid'");
-while($r = mysqli_fetch_assoc($q_kyc)) $kyc_settings[$r['verification_name']] = (int)$r['status'];
+// Get Vendor Specific KYC Settings. Read through the shared helper so this page, the mobile app and
+// both review consoles cannot disagree about which checks are on (and so duplicate settings rows
+// cannot turn into duplicate requirements here).
+$kyc_settings = bc_kyc_effective_statuses($connection_server, $vid);
 
 // The checks this vendor actually requires - shared mapping in func/bc-security.php.
-$enabled_checks = [];
-foreach ($kyc_settings as $check_name => $check_status) {
-    if ((int)$check_status === 1) $enabled_checks[] = $check_name;
-}
+$enabled_checks = bc_kyc_enabled_checks($connection_server, $vid);
 // The checks a user can satisfy by uploading something from this page.
 $manual_checks = array_values(array_intersect($enabled_checks, ['govt_id', 'liveliness_picture', 'liveliness_video', 'proof_of_address']));
 

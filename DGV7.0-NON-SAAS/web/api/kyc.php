@@ -41,11 +41,9 @@ $action = trim(strip_tags($_POST['action'] ?? ''));
 
 // The checks this vendor requires. Used to tell the app what is still outstanding after a submission
 // and to keep the app, the website and both review consoles answering the same question.
-$enabled_checks = [];
-$q_enabled = mysqli_query($connection_server, "SELECT verification_name, status FROM sas_kyc_verifications WHERE vendor_id='$vendor_id'");
-while ($q_enabled && $r_enabled = mysqli_fetch_assoc($q_enabled)) {
-    if ((int)$r_enabled['status'] === 1) $enabled_checks[] = $r_enabled['verification_name'];
-}
+// The checks this vendor requires. Read through the shared helper: a plain SELECT appended one entry
+// per row, so duplicate settings rows told the app to collect the same document several times over.
+$enabled_checks = bc_kyc_enabled_checks($connection_server, $vendor_id);
 
 // Return current KYC status
 if ($action === 'status') {

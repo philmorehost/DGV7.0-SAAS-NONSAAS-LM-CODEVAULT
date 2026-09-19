@@ -18,12 +18,11 @@
                 $each_verification_status = isset($_POST["verification-status-".$each_verification_name]) ? "1" : "2";
                 
                 if(in_array($each_verification_name, $kyc_verification_array)){
-                    $get_kyc_verification_details = mysqli_query($connection_server, "SELECT * FROM sas_kyc_verifications WHERE vendor_id='$vendor_id' && verification_name='$each_verification_name'");
-                    if(mysqli_num_rows($get_kyc_verification_details) > 0){
-                        mysqli_query($connection_server, "UPDATE sas_kyc_verifications SET status='$each_verification_status' WHERE vendor_id='$vendor_id' && verification_name='$each_verification_name'");
-                    }else{
-                        mysqli_query($connection_server, "INSERT INTO sas_kyc_verifications (vendor_id, verification_name, status) VALUES ('$vendor_id', '$each_verification_name', '$each_verification_status')");
-                    }
+                    // UPDATE + INSERT IGNORE instead of SELECT/UPDATE/INSERT: with uniq_vendor_check on
+                    // (vendor_id, verification_name) this is one idempotent pair of statements and can
+                    // never leave a second row behind for the same check.
+                    mysqli_query($connection_server, "UPDATE sas_kyc_verifications SET status='$each_verification_status' WHERE vendor_id='$vendor_id' && verification_name='$each_verification_name'");
+                    mysqli_query($connection_server, "INSERT IGNORE INTO sas_kyc_verifications (vendor_id, verification_name, status) VALUES ('$vendor_id', '$each_verification_name', '$each_verification_status')");
                 }
             }
             $_SESSION["product_purchase_response"] = "KYC Verification Information Updated Successfully";
@@ -378,9 +377,12 @@
                                 </div>
                             </div>
 
-                            <?php foreach($kyc_verification_array as $verification_name):
-                                $get_verification_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_kyc_verifications WHERE vendor_id='".$get_logged_admin_details["id"]."' && verification_name='$verification_name'"));
-                                $is_active = ($get_verification_details && $get_verification_details["status"] == 1);
+                            <?php
+                            // One read for the whole list instead of one query per switch. Read through the
+                            // shared helper so a duplicated settings row can never mark a check active twice.
+                            if (!isset($pg_kyc_statuses)) $pg_kyc_statuses = bc_kyc_effective_statuses($connection_server, $get_logged_admin_details["id"]);
+                            foreach($kyc_verification_array as $verification_name):
+                                $is_active = (isset($pg_kyc_statuses[$verification_name]) && (int)$pg_kyc_statuses[$verification_name] === 1);
 
                                 $kyc_names_map = [
                                     'govt_id' => 'Government ID Card',
