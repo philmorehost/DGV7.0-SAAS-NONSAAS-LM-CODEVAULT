@@ -40,14 +40,23 @@ try {
 }
 
 // Fetch Paystack Balance
+//
+// The Settlement Pool is the platform's LIVE Paystack balance, so the mode is stated
+// explicitly. Omitting it used to inherit the admin's own is_test_mode (schema default 1)
+// and query the sandbox account instead.
 $paystack_balance = 0;
-$paystack_res = paystack_call('balance');
-if ($paystack_res && $paystack_res['status']) {
+$paystack_balance_error = '';
+$paystack_res = paystack_call('balance', 'GET', [], false);
+if ($paystack_res && !empty($paystack_res['status'])) {
     foreach($paystack_res['data'] as $b) {
         if ($b['currency'] === 'NGN') {
             $paystack_balance = $b['balance'] / 100;
         }
     }
+} else {
+    // A gateway failure must never be rendered as a genuine zero balance.
+    $paystack_balance_error = $paystack_res['message'] ?? 'Gateway did not return a balance';
+    error_log('[PayHub] Settlement pool balance unavailable: ' . $paystack_balance_error);
 }
 
 // Calculate success rate
@@ -133,8 +142,10 @@ include '../includes/dashboard-head.php';
                         </div>
                     </div>
                     <div class="text-left sm:text-right w-full">
-                        <p class="text-xl sm:text-2xl font-bold text-white"><?php echo formatCurrency($paystack_balance); ?></p>
-                        <p class="text-[9px] text-indigo-400 font-bold uppercase mt-1">Settlement Pool</p>
+                        <p class="text-xl sm:text-2xl font-bold text-white"><?php echo $paystack_balance_error === '' ? formatCurrency($paystack_balance) : 'Unavailable'; ?></p>
+                        <p class="text-[9px] font-bold uppercase mt-1 <?php echo $paystack_balance_error === '' ? 'text-indigo-400' : 'text-amber-300'; ?>"<?php echo $paystack_balance_error !== '' ? ' title="' . htmlspecialchars($paystack_balance_error, ENT_QUOTES, 'UTF-8') . '"' : ''; ?>>
+                            Settlement Pool<?php echo $paystack_balance_error === '' ? '' : ' &mdash; gateway error'; ?>
+                        </p>
                     </div>
                 </div>
 

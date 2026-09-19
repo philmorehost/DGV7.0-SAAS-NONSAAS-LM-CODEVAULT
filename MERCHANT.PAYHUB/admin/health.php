@@ -24,7 +24,7 @@ $db_latency = round((microtime(true) - $start) * 1000, 2);
 // API Latency check (using Paystack API as a benchmark)
 $api_start = microtime(true);
 $api_latency = 'N/A';
-$paystack_res = paystack_call('bank');
+$paystack_res = paystack_call('bank', 'GET', [], false);
 if ($paystack_res) {
     $api_latency = round((microtime(true) - $api_start) * 1000, 2) . 'ms';
 }

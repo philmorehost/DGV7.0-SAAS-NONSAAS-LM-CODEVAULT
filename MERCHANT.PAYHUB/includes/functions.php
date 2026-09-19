@@ -598,8 +598,20 @@ function get_stats($userId, $is_test = 0) {
  */
 function paystack_call($endpoint, $method = 'GET', $data = [], $is_test = null) {
     if ($is_test === null) {
+        /*
+         * Infer the environment from the signed-in MERCHANT only.
+         *
+         * Every users row carries is_test_mode, and its schema default is 1 - so inferring
+         * from an ADMIN row silently pointed platform-level calls (the settlement balance,
+         * the bank list) at the sandbox account. That was invisible while this function
+         * quietly substituted the live key on failure; once it began failing closed, the
+         * admin dashboard's Settlement Pool started reading 0.00.
+         *
+         * A caller who is not a merchant is talking about the platform, and the platform
+         * means the live account. Callers that care should still pass the mode explicitly.
+         */
         $user = getAuthUser();
-        $is_test = $user ? ($user['is_test_mode'] == 1) : false;
+        $is_test = ($user && ($user['role'] ?? '') === 'merchant') ? ($user['is_test_mode'] == 1) : false;
     }
     $is_test = (bool)$is_test;
 
