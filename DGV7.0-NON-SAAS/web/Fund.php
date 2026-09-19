@@ -263,6 +263,16 @@ $retry_amount = $_GET['amount'] ?? '';
                                 if (data && data.status === 'paid') {
                                     clearInterval(payhubPoll);
                                     window.location.href = '/web/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
+                                } else if (data && data.status === 'failed') {
+                                    // A definitive failure: stop polling and say so, instead of holding
+                                    // the modal open for the whole 10-minute window on a payment that is
+                                    // already over. Nothing was credited.
+                                    clearInterval(payhubPoll);
+                                    btn.innerHTML = originalText;
+                                    btn.style.pointerEvents = "auto";
+                                    alert("This payment was not completed by PayHub, so no wallet was credited."
+                                        + (data.message ? "\n\n" + data.message : "")
+                                        + "\n\nIf money left your account, contact support with reference " + reference + ".");
                                 }
                             })
                             .catch(() => {});

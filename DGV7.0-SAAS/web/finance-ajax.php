@@ -354,8 +354,16 @@ if (isset($_GET['action'])) {
         $is_paid = ($tx_status == 'success' || $tx_status == 'successful');
 
         if (!$is_paid) {
+            // Tell a DEFINITIVE failure apart from "not confirmed yet". Both used to answer
+            // "pending", so the Fund page kept polling for its whole 10-minute window on a payment
+            // that was already over, and the customer waited for a credit that was never coming.
+            $verdict = bc_gateway_provider_verdict(array('status' => $tx_status));
             if (ob_get_length()) ob_clean();
-            echo json_encode(['status' => 'pending', 'payhub_ref' => $verify_ref]);
+            echo json_encode([
+                'status'     => ($verdict === 'failed') ? 'failed' : 'pending',
+                'message'    => ($verdict === 'failed') ? (string)($tx_data['gateway_response'] ?? '') : '',
+                'payhub_ref' => $verify_ref,
+            ]);
             exit;
         }
 

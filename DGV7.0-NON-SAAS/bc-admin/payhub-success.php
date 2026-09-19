@@ -93,8 +93,18 @@ if (!empty($reference) || !empty($payhub_ref)) {
                             $credit_message = 'Payment confirmed but crediting failed. Please contact support.';
                         }
                     } else {
-                        $credit_status = 'pending';
-                        $credit_message = 'Payment is still being confirmed. Your wallet will be credited automatically.';
+                        // A DEFINITIVE gateway failure is not the same as "not confirmed yet", and it
+                        // must not read as "still being confirmed": the vendor may already have been
+                        // charged, so they must be told now instead of waiting for a credit that
+                        // will never arrive. PayHub marks a transaction failed when one of ITS own
+                        // integrity checks blocks fulfilment - including an amount-mismatch block.
+                        if (bc_gateway_provider_verdict(array('status' => $tx_status)) === 'failed') {
+                            $credit_status = 'error';
+                            $credit_message = 'The payment was not completed by the gateway, so your wallet was not funded. If money left your account, contact support with reference ' . ($reference !== '' ? $reference : $verify_ref) . '.';
+                        } else {
+                            $credit_status = 'pending';
+                            $credit_message = 'Payment is still being confirmed. Your wallet will be credited automatically.';
+                        }
                     }
                 } else {
                     $credit_status = 'pending';

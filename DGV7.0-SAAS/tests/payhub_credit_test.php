@@ -380,6 +380,49 @@ foreach (array('/web/payhub-success.php', '/bc-admin/payhub-success.php', '/web/
     bc_assert_true("$rel is identical in both editions", $saas !== false && $saas === $non);
 }
 
+/* ==========================================================================
+ * E. A definitive gateway FAILURE must not read as "still being confirmed"
+ *
+ * PayHub's own integrity checks can block fulfilment - it then reports
+ * data.status = 'failed' and marks the transaction failed with
+ * failure_reason = 'amount_mismatch'. That is a verdict, not a delay, and on
+ * 2026-09-19 one such block (settled N103.15 against a record for N101.60 - the
+ * 1.5% card fee added on top, i.e. the very case amount_covers() accepts) left the
+ * customer's page saying "Payment is still being confirmed. Your wallet will be
+ * credited automatically." for a payment that had already been taken and would
+ * never be credited by PayHub. Both were reported as 'pending', so the Fund page
+ * also polled for its full ~10-minute window and then gave up silently.
+ * ========================================================================== */
+echo "\n== E. definitive failure is reported as failed ==\n";
+
+bc_assert('a failed status word is a failure', bc_gateway_provider_verdict(array('status' => 'failed')), 'failed');
+bc_assert('a declined status word is a failure', bc_gateway_provider_verdict(array('status' => 'declined')), 'failed');
+bc_assert('a reversed status word is a failure', bc_gateway_provider_verdict(array('status' => 'reversed')), 'failed');
+bc_assert('pending stays pending', bc_gateway_provider_verdict(array('status' => 'pending')), 'pending');
+bc_assert('an unknown word is not a failure', bc_gateway_provider_verdict(array('status' => 'weird')), null);
+
+foreach ($ED as $edition => $root) {
+    foreach (array('/web/payhub-success.php', '/bc-admin/payhub-success.php') as $rel) {
+        $page = @file_get_contents($root . $rel);
+        if ($page === false) { bc_assert_true("$edition$rel readable", false); continue; }
+        bc_assert_true("$edition$rel separates a definitive failure from a delay",
+            strpos($page, "bc_gateway_provider_verdict(array('status' => \$tx_status)) === 'failed'") !== false);
+        bc_assert_true("$edition$rel still reassures while it is only unconfirmed",
+            strpos($page, 'Payment is still being confirmed.') !== false);
+        bc_assert_true("$edition$rel tells the payer what to do about a failure",
+            strpos($page, 'contact support with reference') !== false);
+    }
+
+    $ajax = @file_get_contents($root . '/web/finance-ajax.php');
+    $fund = @file_get_contents($root . '/web/Fund.php');
+    bc_assert_true("$edition: the poll answers 'failed' for a failure",
+        $ajax !== false && strpos($ajax, "(\$verdict === 'failed') ? 'failed' : 'pending'") !== false);
+    bc_assert_true("$edition: the poll keeps 'pending' for an unresolved payment",
+        $ajax !== false && strpos($ajax, "echo json_encode(['status' => 'pending', 'payhub_ref' => \$verify_ref]);") !== false);
+    bc_assert_true("$edition: the Fund page stops polling on a failure",
+        $fund !== false && strpos($fund, "data.status === 'failed'") !== false);
+}
+
 echo "\n----------------------------------------\n";
 echo ($checks - $fails) . "/$checks checks passed" . ($fails ? " - $fails FAILED" : "") . "\n";
 exit($fails ? 1 : 0);
