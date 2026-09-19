@@ -23,7 +23,7 @@
    $curl_postfields_data = json_encode($post_data, true);
    curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
    $curl_result = curl_exec($curl_request);
-   $curl_json_result = json_decode($curl_result, true);
+   $curl_json_result = function_exists('bc_gateway_json_decode') ? bc_gateway_json_decode($curl_result) : json_decode($curl_result, true);
    if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 
 
@@ -70,5 +70,5 @@
   $api_response_description = "Service not available";
   $api_response_status = 3;
  }
-curl_close($curl_request);
+if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, "Transaction Failed | no valid response from the upstream gateway", $curl_result ?? ""); }
 ?>

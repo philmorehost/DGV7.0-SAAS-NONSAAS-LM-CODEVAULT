@@ -16,7 +16,7 @@
 // leaves no marker and the next request runs the file again - everything here is written to be
 // repeatable, which is what makes that safe.
 // To force a full run regardless (installer, debugging): $GLOBALS['bc_tables_force_run'] = true;
-if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-1');
+if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-2');
 
 if ($connection_server && empty($GLOBALS['bc_tables_force_run'])) {
     // Two cheap statements instead of hundreds: an options lookup and one data-dictionary probe.
@@ -650,6 +650,14 @@ if ($create_user_transaction_table) {
     $check_col_trans = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_transactions` LIKE 'batch_number'");
     if (mysqli_num_rows($check_col_trans) == 0) {
         mysqli_query($connection_server, "ALTER TABLE `sas_transactions` ADD COLUMN batch_number INT UNSIGNED AFTER reference");
+    }
+
+    // Bounded late-reversal rechecks: counts how many times a transaction has been
+    // re-queried so a RECENT successful purchase is only rechecked a few times (see
+    // automated-cron-requery.php).
+    $check_col_trans = mysqli_query($connection_server, "SHOW COLUMNS FROM `sas_transactions` LIKE 'requery_count'");
+    if (mysqli_num_rows($check_col_trans) == 0) {
+        mysqli_query($connection_server, "ALTER TABLE `sas_transactions` ADD COLUMN requery_count INT UNSIGNED NOT NULL DEFAULT 0");
     }
 
     // Branch DG6.7 Optimization: Add indexes to sas_transactions for faster lookups

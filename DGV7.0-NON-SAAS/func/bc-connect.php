@@ -41,6 +41,7 @@
 
     // Now include functions that may depend on $connection_server
     include_once(__DIR__ . "/bc-func.php");
+    include_once(__DIR__ . "/bc-gateway.php");
     include_once(__DIR__ . "/bc-bulk-queue.php");
     include_once(__DIR__ . "/bc-mail-queue.php");
     include_once(__DIR__ . "/bc-demo-mode.php");

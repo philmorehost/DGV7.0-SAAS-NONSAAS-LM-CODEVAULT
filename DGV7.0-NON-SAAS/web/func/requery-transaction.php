@@ -44,7 +44,8 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                 $api_response_status = null;
 
                                 include($gateway_path . $api_gateway_name);
-                                $api_response_text = strtolower($api_response_text);
+                                $api_response_text = strtolower((string)$api_response_text);
+                                if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, ""); }
                                 if ($api_response == "successful") {
                                     if ($get_transaction_data["status"] == "3") {
                                         chargeOtherUser($get_transaction_data["username"], "debit", $get_transaction_data["product_unique_id"], "Reversed Refund", substr(str_shuffle("12345678901234567890"), 0, 15), $requery_reference, $get_transaction_data["amount"], $get_transaction_data["discounted_amount"], "Reversed refund for Ref: $requery_reference", "WEB", $_SERVER["HTTP_HOST"] ?? "CRON", 1);
@@ -56,15 +57,30 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                 }
 
                                 if ($api_response == "pending") {
-                                    alterTransaction($requery_reference, "status", $api_response_status);
-                                    alterTransaction($requery_reference, "description", $api_response_description);
-                                    $json_response_array = array("ref" => $requery_reference, "status" => "pending", "desc" => "Transaction Pending", "response_desc" => $api_response_description);
-                                    $json_response_encode = json_encode($json_response_array, true);
+                                    if ($get_transaction_data["status"] == "1") {
+                                        // Never downgrade a delivered purchase: a requery that only reports
+                                        // "pending" must not turn an already-successful order back into pending.
+                                        // A later definitive "failed" reply still reverses it (failure branch).
+                                        $json_response_array = array("ref" => $requery_reference, "status" => "success", "desc" => "Transaction Successful", "response_desc" => $get_transaction_data["description"]);
+                                        $json_response_encode = json_encode($json_response_array, true);
+                                    } else {
+                                        alterTransaction($requery_reference, "status", $api_response_status);
+                                        alterTransaction($requery_reference, "description", $api_response_description);
+                                        $json_response_array = array("ref" => $requery_reference, "status" => "pending", "desc" => "Transaction Pending", "response_desc" => $api_response_description);
+                                        $json_response_encode = json_encode($json_response_array, true);
+                                    }
                                 }
 
                                 if ($api_response == "failed") {
-                                    removeProductPurchaseList($requery_reference);
-                                    if ($get_transaction_data["status"] != "3") {
+                                    // Atomically claim the transaction so it can only be refunded ONCE:
+                                    // status='2' is a stuck pending purchase, status='1' is a purchase the
+                                    // upstream has since REVERSED (e.g. a reseller whose parent refunded its
+                                    // account after the provider failed the transaction late). A duplicate or
+                                    // concurrent requery run sees 0 affected rows and skips the credit.
+                                    $claim_result = mysqli_query($connection_server, "UPDATE sas_transactions SET status='3' WHERE reference='$requery_reference' AND status IN ('2','1')");
+                                    $claimed = ($claim_result && mysqli_affected_rows($connection_server) > 0);
+                                    if ($claimed) {
+                                        removeProductPurchaseList($requery_reference);
                                         $reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
                                         $phone_no = $get_transaction_data["product_unique_id"];
                                         $amount = $get_transaction_data["amount"];
@@ -72,7 +88,11 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                         $previous_purchase_method = $get_transaction_data["mode"];
                                         $t_username = $get_transaction_data["username"];
 
-                                        chargeOtherUser($t_username, "credit", $phone_no, "Refund", $reference_2, "", $amount, $discounted_amount, "Refund for Ref:<i>'$requery_reference'</i>", $previous_purchase_method, $_SERVER["HTTP_HOST"] ?? "CRON", "1");
+                                        $refund_result = chargeOtherUser($t_username, "credit", $phone_no, "Refund", $reference_2, "", $amount, $discounted_amount, "Refund for Ref:<i>'$requery_reference'</i>", $previous_purchase_method, $_SERVER["HTTP_HOST"] ?? "CRON", "1");
+
+                                        if ($refund_result !== "success") {
+                                            @file_put_contents(__DIR__ . "/../../logs/requery_refund_failures.log", "[" . date('Y-m-d H:i:s') . "] Refund FAILED for ref $requery_reference user $t_username amount $discounted_amount\n", FILE_APPEND);
+                                        }
 
                                         // Robust User Lookup for Email
                                         $get_user_info = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_transaction_data['vendor_id']."' AND username='$t_username' LIMIT 1"));
@@ -105,8 +125,11 @@ if (in_array($purchase_method, $purchase_method_array)) {
                         $json_response_encode = json_encode($json_response_array, true);
                     }
                 } else {
-                    //Account Refunded Already
-                    $json_response_array = array("status" => "success", "desc" => "Account Refunded Already");
+                    // Account Refunded Already - the transaction is FAILED and the account has been
+                    // reversed. This must report "failed", never "success": a reseller asking about a
+                    // purchase its parent already refunded has to learn it failed, otherwise the
+                    // reseller keeps showing its own customer a successful order and never refunds.
+                    $json_response_array = array("status" => "failed", "desc" => "Account Refunded Already");
                     $json_response_encode = json_encode($json_response_array, true);
                 }
             } else {

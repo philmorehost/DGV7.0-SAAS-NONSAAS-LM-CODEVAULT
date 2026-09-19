@@ -15,7 +15,7 @@ include_once("../../func/bc-connect.php");
 $vendor_id = resolveVendorID();
 $select_vendor_table = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='$vendor_id' AND status=1 LIMIT 1"));
 if ($select_vendor_table) {
-	if (isset($api_post_info_from_app) && !is_array($api_post_info_from_app)) {
+	if (isset($api_post_info_from_app) && is_array($api_post_info_from_app)) {
 		$purchase_method = "app";
 		$get_api_post_info = $api_post_info_from_app;
 	} else {

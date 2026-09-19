@@ -54,7 +54,13 @@ while ((microtime(true) - $start_time) < $time_budget_seconds && ($vendor = mysq
     $GLOBALS['vendor_id'] = $vendor_id;
     resolveVendorID(true);
 
-    $pending = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='$vendor_id' AND status='2' ORDER BY id LIMIT $per_vendor_limit");
+    // status='2'  → a stuck pending purchase: resolve it to success/failed.
+    // status='1'  → a RECENTLY successful purchase placed through an upstream API: rechecked a
+    //               bounded number of times, because a provider can fail a transaction only
+    //               AFTER we already reported success (and the parent refunds our account).
+    //               Without this recheck the reversal never reaches this install, the customer
+    //               keeps a successful order that was never delivered, and is never refunded.
+    $pending = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='$vendor_id' AND ( status='2' OR ( status='1' AND api_id > 0 AND api_reference <> '' AND requery_count < 3 AND date >= DATE_SUB(NOW(), INTERVAL 24 HOUR) ) ) ORDER BY (status='2') DESC, id ASC LIMIT $per_vendor_limit");
     if (!$pending || mysqli_num_rows($pending) == 0) continue;
 
     while ($tx = mysqli_fetch_assoc($pending)) {
@@ -71,6 +77,12 @@ while ((microtime(true) - $start_time) < $time_budget_seconds && ($vendor = mysq
         $action_function = 2;
         $cron_job_requery_reference = $tx["reference"];
         $json_response_encode = null;
+
+        // Count the bounded late-reversal recheck of an already-successful purchase so each
+        // transaction is only re-verified a few times instead of on every run.
+        if ((string)$tx["status"] === "1") {
+            mysqli_query($connection_server, "UPDATE sas_transactions SET requery_count = requery_count + 1 WHERE id='" . (int)$tx["id"] . "'");
+        }
 
         include(WEB_ROOT . "/func/requery-transaction.php");
         $total_processed++;

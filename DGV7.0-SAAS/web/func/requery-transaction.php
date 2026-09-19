@@ -44,7 +44,8 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                 $api_response_status = null;
 
                                 include($gateway_path . $api_gateway_name);
-                                $api_response_text = strtolower($api_response_text);
+                                $api_response_text = strtolower((string)$api_response_text);
+                                if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, ""); }
                                 
                                 if (($api_response == "successful" || $api_response == "pending") && $get_transaction_data["status"] == "3") {
                                     $amount_to_charge = $get_transaction_data["discounted_amount"];
@@ -61,18 +62,29 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                 }
 
                                 if ($api_response == "pending") {
-                                    alterTransaction($requery_reference, "status", $api_response_status);
-                                    alterTransaction($requery_reference, "description", $api_response_description);
-                                    $json_response_array = array("ref" => $requery_reference, "status" => "pending", "desc" => "Transaction Pending", "response_desc" => $api_response_description);
-                                    $json_response_encode = json_encode($json_response_array, true);
+                                    if ($get_transaction_data["status"] == "1") {
+                                        // Never downgrade a delivered purchase: a requery that only reports
+                                        // "pending" must not turn an already-successful order back into pending.
+                                        // A later definitive "failed" reply still reverses it (failure branch).
+                                        $json_response_array = array("ref" => $requery_reference, "status" => "success", "desc" => "Transaction Successful", "response_desc" => $get_transaction_data["description"]);
+                                        $json_response_encode = json_encode($json_response_array, true);
+                                    } else {
+                                        alterTransaction($requery_reference, "status", $api_response_status);
+                                        alterTransaction($requery_reference, "description", $api_response_description);
+                                        $json_response_array = array("ref" => $requery_reference, "status" => "pending", "desc" => "Transaction Pending", "response_desc" => $api_response_description);
+                                        $json_response_encode = json_encode($json_response_array, true);
+                                    }
                                 }
 
                                 if ($api_response == "failed") {
-                                    // ─── Idempotency fix: atomically claim the transaction (status 2→3)
-                                    // so it can only be refunded ONCE. A duplicate or concurrent requery
-                                    // run sees 0 affected rows and skips the credit — previously a
+                                    // ─── Idempotency fix: atomically claim the transaction so it can only be
+                                    // refunded ONCE. status='2' is a stuck pending purchase; status='1' is a
+                                    // purchase that was reported successful but has since been REVERSED by the
+                                    // upstream (e.g. a reseller whose parent refunded its account after the
+                                    // provider failed the transaction late). A duplicate or concurrent requery
+                                    // run sees 0 affected rows and skips the credit - previously a
                                     // transaction that stayed pending was refunded again on every run.
-                                    $claim_result = mysqli_query($connection_server, "UPDATE sas_transactions SET status='3' WHERE reference='$requery_reference' AND status='2'");
+                                    $claim_result = mysqli_query($connection_server, "UPDATE sas_transactions SET status='3' WHERE reference='$requery_reference' AND status IN ('2','1')");
                                     $claimed = ($claim_result && mysqli_affected_rows($connection_server) > 0);
 
                                     if ($claimed) {
@@ -121,8 +133,11 @@ if (in_array($purchase_method, $purchase_method_array)) {
                         $json_response_encode = json_encode($json_response_array, true);
                     }
                 } else {
-                    //Account Refunded Already
-                    $json_response_array = array("status" => "success", "desc" => "Account Refunded Already");
+                    // Account Refunded Already - the transaction is FAILED and the account has been
+                    // reversed. This must report "failed", never "success": a reseller asking about a
+                    // purchase its parent already refunded has to learn it failed, otherwise the
+                    // reseller keeps showing its own customer a successful order and never refunds.
+                    $json_response_array = array("status" => "failed", "desc" => "Account Refunded Already");
                     $json_response_encode = json_encode($json_response_array, true);
                 }
             } else {

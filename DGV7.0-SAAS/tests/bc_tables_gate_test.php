@@ -24,6 +24,12 @@ $src = preg_replace('#^<\?php#', '', $src, 1);
 $call_sites    = substr_count($src, 'mysqli_query(');
 $create_tables = substr_count($src, 'CREATE TABLE IF NOT EXISTS');
 
+// Read the version the file itself declares instead of hard-coding it, so bumping the schema
+// version (required whenever DDL is added) does not silently turn every scenario below into
+// "an older recorded version" and fail the steady-state assertions.
+preg_match("/BC_TABLES_VERSION',\s*'([^']+)'/", $src, $bc_t_version_match);
+$bc_tables_version = $bc_t_version_match[1] ?? '';
+
 $fails = 0;
 $checks = 0;
 function bc_assert($label, $actual, $expected) {
@@ -104,7 +110,7 @@ $connection_server = 'STUB';
 echo "bc-tables.php: $call_sites mysqli_query call sites, $create_tables CREATE TABLE IF NOT EXISTS\n\n";
 
 // ── 1. Steady state: the recorded version matches this file ──────────────────────────────────────
-bc_t_setup('2026.09.19-1');
+bc_t_setup($bc_tables_version);
 $bc_t_file = bc_t_prepare($src);
 include $bc_t_file;
 @unlink($bc_t_file);
@@ -129,7 +135,7 @@ foreach ($fresh['seen'] as $s) { if (strpos($s, 'insert into sas_super_admin_opt
 bc_assert('a completed run records the schema version for next time', $recorded, true);
 
 // ── 3. Restored / emptied database: marker present but the core table is gone ─────────────────────
-bc_t_setup('2026.09.19-1', false);
+bc_t_setup($bc_tables_version, false);
 $bc_t_file = bc_t_prepare($src);
 include $bc_t_file;
 @unlink($bc_t_file);
@@ -138,7 +144,7 @@ bc_assert('a missing core table re-runs the migrations instead of trusting the m
 
 // ── 4. The escape hatch for installers and debugging ─────────────────────────────────────────────
 $GLOBALS['bc_tables_force_run'] = true;
-bc_t_setup('2026.09.19-1');
+bc_t_setup($bc_tables_version);
 $bc_t_file = bc_t_prepare($src);
 include $bc_t_file;
 @unlink($bc_t_file);

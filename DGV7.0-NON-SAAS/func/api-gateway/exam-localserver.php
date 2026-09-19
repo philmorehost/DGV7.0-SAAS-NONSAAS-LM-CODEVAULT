@@ -32,7 +32,7 @@ if (in_array($product_name, array_keys($exam_service_provider_alter_code))) {
 		$curl_postfields_data = json_encode(array("api_key" => $api_detail["api_key"], "type" => $product_name, "quantity" => $quantity), true);
 		curl_setopt($curl_request, CURLOPT_POSTFIELDS, $curl_postfields_data);
 		$curl_result = curl_exec($curl_request);
-		$curl_json_result = json_decode($curl_result, true);
+		$curl_json_result = function_exists('bc_gateway_json_decode') ? bc_gateway_json_decode($curl_result) : json_decode($curl_result, true);
 		if(!is_array($curl_json_result)){ $curl_json_result = array(); }
 		// A non-JSON body (e.g. the 404 HTML page a wrong host returns) leaves $json_status null,
 		// so none of the branches below run and the failure defaults set at the top of this file
@@ -83,6 +83,6 @@ if (in_array($product_name, array_keys($exam_service_provider_alter_code))) {
 	$api_response_status = 3;
 }
 if ($curl_request) {
-	curl_close($curl_request);
+	if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, "Transaction Failed | no valid response from the upstream gateway", $curl_result ?? ""); }
 }
 ?>

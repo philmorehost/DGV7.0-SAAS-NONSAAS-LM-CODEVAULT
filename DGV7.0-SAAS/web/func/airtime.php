@@ -79,7 +79,8 @@ if (in_array($purchase_method, $purchase_method_array)) {
 
                                                     include($_SERVER['DOCUMENT_ROOT'] . "/func/api-gateway/" . $api_gateway_name);
                                                     
-                                                    $api_response_text = strtolower($api_response_text);
+                                                    if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, "Transaction Failed | no valid response from the upstream gateway"); }
+                                                    $api_response_text = strtolower((string)$api_response_text);
                                                     if ($api_response == "successful") {
                                                         updateProductPurchaseList($reference, $phone_no, "airtime");
                                                         alterTransaction($reference, "status", $api_response_status);

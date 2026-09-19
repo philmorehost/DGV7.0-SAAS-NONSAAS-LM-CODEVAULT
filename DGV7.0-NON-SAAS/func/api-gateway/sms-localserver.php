@@ -125,7 +125,7 @@ if (in_array($product_name, array_keys($sms_service_provider_alter_code))) {
                 $api_response_status      = 3;
                 $curl_json_result         = array();
             } else {
-                $curl_json_result = json_decode($curl_result, true);
+                $curl_json_result = function_exists('bc_gateway_json_decode') ? bc_gateway_json_decode($curl_result) : json_decode($curl_result, true);
                 if(!is_array($curl_json_result)){ $curl_json_result = array(); }
                 if (!is_array($curl_json_result)) {
                     sms_ls_log("ERROR: Response is not valid JSON", array("raw" => substr($curl_result, 0, 500)));
@@ -193,7 +193,7 @@ if (in_array($product_name, array_keys($sms_service_provider_alter_code))) {
         }
 
         if (isset($curl_request) && is_resource($curl_request)) {
-            curl_close($curl_request);
+            if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, "Transaction Failed | no valid response from the upstream gateway", $curl_result ?? ""); }
         }
 
     } else {
