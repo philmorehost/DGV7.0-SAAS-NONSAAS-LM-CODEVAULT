@@ -701,6 +701,143 @@ if (!function_exists('bc_kyc_notification_message')) {
     }
 }
 
+if (!function_exists('bc_kyc_api_verifiable_checks')) {
+    /**
+     * The checks an identity provider can prove on its own, with no document and no human.
+     * Everything else the KYC map knows (Government ID, Live photo, Liveliness video, Proof of
+     * address) needs an uploaded artefact a person has to look at.
+     *
+     * @return string[]
+     */
+    function bc_kyc_api_verifiable_checks()
+    {
+        return ['bvn', 'nin'];
+    }
+}
+
+if (!function_exists('bc_kyc_provider_verify')) {
+    /**
+     * Verify a user's identity with the vendor's configured provider and, when the provider can prove
+     * everything that vendor requires, approve the account automatically - the same outcome VoveID's
+     * signed webhook produces.
+     *
+     * Policy (deliberate, money/access critical):
+     *  - ONLY a definitive success may verify anything. A timeout, an unreadable reply or a name
+     *    mismatch is not a verification and leaves the submission for a human.
+     *  - A check the provider cannot prove (an uploaded ID card, selfie, liveliness video, proof of
+     *    address) keeps the account in the review queue even when the number checked out. Manual
+     *    uploads stay manual.
+     *  - A vendor with no required checks is never auto-approved: nothing was asked for, so nothing
+     *    was proved.
+     *  - An already-Verified account is never downgraded by a re-verification.
+     *
+     * @param array  $result  the array returned by verifyBvnNin() - it must already have passed the
+     *                        name match, i.e. ['status'=>'success','firstname'=>..,'lastname'=>..]
+     * @return array{status:string,auto_approved:bool,kyc_status:?int,still_needed:string[],message:string}
+     */
+    function bc_kyc_provider_verify($connection_server, $vendor_id, $user_id, $kind, $number, $result, $reference = '')
+    {
+        $kind = ($kind === 'nin') ? 'nin' : 'bvn';
+        $vendor_id = (int)$vendor_id;
+        $user_id = (int)$user_id;
+        $out = ['status' => 'failed', 'auto_approved' => false, 'kyc_status' => null, 'still_needed' => [], 'message' => ''];
+
+        if (!$connection_server || $user_id <= 0 || $vendor_id <= 0) {
+            $out['message'] = 'Nothing to verify';
+            return $out;
+        }
+
+        $number_clean = preg_replace('/[^0-9]/', '', (string)$number);
+        if (!is_array($result) || ($result['status'] ?? '') !== 'success' || $number_clean === '') {
+            $out['message'] = is_array($result) ? (string)($result['message'] ?? 'Verification failed') : 'Verification failed';
+            return $out;
+        }
+
+        $q_user = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE id='$user_id' AND vendor_id='$vendor_id' LIMIT 1");
+        $user = $q_user ? mysqli_fetch_assoc($q_user) : null;
+        if (!$user) {
+            $out['message'] = 'User not found';
+            return $out;
+        }
+
+        $provider = function_exists('getIdentityProvider') ? (string)getIdentityProvider($vendor_id) : '';
+        $provider_esc = mysqli_real_escape_string($connection_server, $provider);
+        $ref_esc = mysqli_real_escape_string($connection_server, (string)$reference);
+        $num_esc = mysqli_real_escape_string($connection_server, $number_clean);
+        $data_esc = mysqli_real_escape_string($connection_server, substr((string)json_encode($result), 0, 4000));
+
+        // Record the verified identifier and who verified it. kyc_api_verified=1 is what tells the
+        // review console that this number was checked against the provider, not merely typed in.
+        $sets = [
+            "$kind='$num_esc'",
+            "kyc_api_verified='1'",
+            "kyc_provider='$provider_esc'",
+            "kyc_provider_ref='$ref_esc'",
+            "kyc_provider_data='$data_esc'",
+            "kyc_api_verified_at=NOW()",
+        ];
+        if (trim((string)($user['kyc_id_type'] ?? '')) === '') $sets[] = "kyc_id_type='" . strtoupper($kind) . "'";
+        mysqli_query($connection_server, "UPDATE sas_users SET " . implode(', ', $sets) . " WHERE id='$user_id' AND vendor_id='$vendor_id'");
+
+        $q_after = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE id='$user_id' LIMIT 1");
+        $after = $q_after ? (mysqli_fetch_assoc($q_after) ?: []) : [];
+
+        $enabled = bc_kyc_enabled_checks($connection_server, $vendor_id);
+        $pending = $enabled ? array_values(bc_kyc_checks_pending($after, $enabled)) : [];
+        // Checks only a person can settle: an uploaded ID card, selfie, liveliness video or proof of
+        // address. While a vendor requires one of those the account is NEVER approved automatically -
+        // the upload has to be looked at. (An upload counts as "satisfied" for the queue, which is why
+        // this is decided from the required set and not from what is still missing.)
+        $manual_required = array_values(array_diff($enabled, bc_kyc_api_verifiable_checks()));
+
+        $out['status'] = 'verified';
+        $out['still_needed'] = $pending;
+        $who = ucfirst($provider !== '' ? str_replace('_', ' ', $provider) : 'the identity provider');
+
+        if (!$enabled) {
+            $out['kyc_status'] = (int)($after['kyc_status'] ?? 0);
+            $out['message'] = 'Identity verified with ' . $who . '. This vendor requires no KYC checks, so nothing was approved automatically.';
+            return $out;
+        }
+
+        if (empty($pending) && $manual_required === []) {
+            // Everything this vendor requires is something the provider just proved.
+            mysqli_query($connection_server, "UPDATE sas_users SET
+                    kyc_status='2',
+                    kyc_approved_date=NOW(),
+                    kyc_reviewed_at=NOW(),
+                    kyc_reject_reason=NULL,
+                    kyc_refresh_required='0',
+                    kyc_submitted_at=COALESCE(kyc_submitted_at, NOW())
+                WHERE id='$user_id' AND vendor_id='$vendor_id'");
+            $out['auto_approved'] = true;
+            $out['kyc_status'] = 2;
+            $out['message'] = 'Identity verified with ' . $who . ' - KYC approved automatically.';
+            return $out;
+        }
+
+        // Something is still outstanding. If it can only be judged by a person, the account goes to
+        // the review queue with the identity already marked verified; if it is another API check
+        // (e.g. the vendor wants BVN *and* NIN and only one was proved) it also stays pending.
+        $current = (int)($after['kyc_status'] ?? 0);
+        if ($current === 2) {
+            $out['kyc_status'] = 2;
+            $out['message'] = 'Identity verified with ' . $who . '. This account is already verified.';
+            return $out;
+        }
+
+        $waiting = $manual_required !== [] ? $manual_required : $pending;
+        mysqli_query($connection_server, "UPDATE sas_users SET
+                kyc_status='1',
+                kyc_submitted_at=COALESCE(kyc_submitted_at, NOW())
+            WHERE id='$user_id' AND vendor_id='$vendor_id'");
+        $out['kyc_status'] = 1;
+        $out['message'] = 'Identity verified with ' . $who . '. Awaiting review for: '
+            . implode(', ', array_map('bc_kyc_check_label', $waiting)) . '.';
+        return $out;
+    }
+}
+
 if (!function_exists('bc_kyc_effective_statuses')) {
     /**
      * The effective KYC check list for one vendor: `name => status`, exactly one entry per check.

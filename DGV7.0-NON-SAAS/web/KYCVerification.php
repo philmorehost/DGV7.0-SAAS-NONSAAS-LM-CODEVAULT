@@ -45,13 +45,30 @@ while($r = mysqli_fetch_assoc($voveid_q)) {
 // Handle Submissions
 if (isset($_POST['submit_bvn_nin'])) {
     $type = ($_POST['type'] == 'nin') ? 'nin' : 'bvn'; // Whitelist to prevent SQL injection
-    $value = mysqli_real_escape_string($connection_server, trim($_POST['value']));
+    $value = preg_replace('/[^0-9]/', '', (string)($_POST['value'] ?? ''));
+    $uid = (int)$get_logged_user_details['id'];
+    $value_esc = mysqli_real_escape_string($connection_server, $value);
 
     if (strlen($value) < 10) {
         $_SESSION['product_purchase_response'] = "Error: Invalid $type format.";
+        header("Location: KYCVerification.php");
+        exit();
+    }
+
+    // Ask the vendor's identity provider (Dojah / QoreID / Smile ID / Monnify) whether this number
+    // belongs to THIS account holder. verifyBvnNin() does the name match for us and only returns
+    // success when the provider's record matches the name on the account.
+    $verification = verifyBvnNin($value, $type, '', '', $get_logged_user_details['firstname'], $get_logged_user_details['lastname'], $vid);
+    $outcome = bc_kyc_provider_verify($connection_server, $vid, $uid, $type, $value, $verification, 'KYC-' . strtoupper($type) . '-' . $uid);
+
+    if ($outcome['status'] === 'verified') {
+        $_SESSION['product_purchase_response'] = "Success: " . $outcome['message'];
     } else {
-        mysqli_query($connection_server, "UPDATE sas_users SET $type='$value' WHERE id='".$get_logged_user_details['id']."'");
-        $_SESSION['product_purchase_response'] = "Success: ".strtoupper($type)." updated successfully.";
+        // Not verified. The number is still kept (so the reviewer sees what the user typed) but it is
+        // explicitly marked as UNVERIFIED - it must never look like a checked identity, and a person
+        // decides what to do with it.
+        mysqli_query($connection_server, "UPDATE sas_users SET $type='$value_esc', kyc_api_verified='0', kyc_provider=NULL, kyc_provider_ref=NULL, kyc_api_verified_at=NULL WHERE id='$uid'");
+        $_SESSION['product_purchase_response'] = "Notice: " . strtoupper($type) . " saved, but it could not be verified with the identity provider (" . $outcome['message'] . "). Your submission will be reviewed manually.";
     }
     header("Location: KYCVerification.php");
     exit();

@@ -190,7 +190,16 @@ if ($connection_server) {
             "kyc_submitted_at" => "DATETIME NULL",
             "kyc_reviewed_at" => "DATETIME NULL",
             "proof_of_address" => "VARCHAR(255)",
-            "kyc_address_ok" => "TINYINT DEFAULT 0"
+            "kyc_address_ok" => "TINYINT DEFAULT 0",
+            // API (provider) identity verification. kyc_api_verified=1 means the BVN/NIN in these rows
+            // was confirmed against the provider's records for THIS account holder - not merely typed
+            // in - which is what lets the review console trust it and what lets a vendor whose checks
+            // are all API-provable have the account approved automatically.
+            "kyc_api_verified" => "TINYINT(1) DEFAULT 0",
+            "kyc_provider" => "VARCHAR(40) DEFAULT NULL",
+            "kyc_provider_ref" => "VARCHAR(120) DEFAULT NULL",
+            "kyc_provider_data" => "LONGTEXT NULL",
+            "kyc_api_verified_at" => "DATETIME NULL"
         );
 
         // Migration: EPIN Plan Pricing tiers

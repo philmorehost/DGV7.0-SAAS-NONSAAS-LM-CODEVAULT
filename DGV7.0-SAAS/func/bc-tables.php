@@ -16,7 +16,7 @@
 // leaves no marker and the next request runs the file again - everything here is written to be
 // repeatable, which is what makes that safe.
 // To force a full run regardless (installer, debugging): $GLOBALS['bc_tables_force_run'] = true;
-if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-3');
+if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-4');
 
 if ($connection_server && empty($GLOBALS['bc_tables_force_run'])) {
     // Two cheap statements instead of hundreds: an options lookup and one data-dictionary probe.
@@ -433,7 +433,14 @@ if ($create_user_table) {
         // Manual (non-API) KYC timeline, used by bc-admin/KYCManagement.php. Created here as well as in
         // bc-config.php so the vendor console does not depend on a visitor hitting a front-end page first.
         "kyc_submitted_at" => "DATETIME NULL",
-        "kyc_reviewed_at" => "DATETIME NULL"
+        "kyc_reviewed_at" => "DATETIME NULL",
+        // API (provider) identity verification: kyc_api_verified=1 means the BVN/NIN was confirmed
+        // against the provider's records for this account holder, not merely typed in.
+        "kyc_api_verified" => "TINYINT(1) DEFAULT 0",
+        "kyc_provider" => "VARCHAR(40) DEFAULT NULL",
+        "kyc_provider_ref" => "VARCHAR(120) DEFAULT NULL",
+        "kyc_provider_data" => "LONGTEXT NULL",
+        "kyc_api_verified_at" => "DATETIME NULL"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_users");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];

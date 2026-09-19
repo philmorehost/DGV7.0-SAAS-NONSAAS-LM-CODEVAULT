@@ -175,7 +175,10 @@ foreach ($shipped as $edition => $src) {
     // The index the queue needs.
     $tables = file_get_contents($ED[$edition] . '/func/bc-tables.php');
     bc_assert_true("$edition: queue index declared", strpos($tables, "'idx_users_kyc' => '(vendor_id, kyc_status, id)'") !== false);
-    bc_assert_true("$edition: schema version bumped for it", strpos($tables, "BC_TABLES_VERSION', '2026.09.19-3'") !== false);
+    // Read the declared version instead of hard-coding it: a later bump for unrelated DDL must not break
+    // this test - only a recorded version older than the one adding the queue index must.
+    preg_match("/BC_TABLES_VERSION',\s*'([^']+)'/", $tables, $bc_v);
+    bc_assert_true("$edition: schema version is at least the one adding the queue index (" . ($bc_v[1] ?? '?') . ')', version_compare(str_replace('-', '.', $bc_v[1] ?? '0'), '2026.09.19.3', '>='));
 }
 
 echo "\n== C. the two editions stay in sync ==\n";

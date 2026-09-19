@@ -343,6 +343,20 @@ if (isset($_GET['view'])) {
                     <span class="badge bg-light text-dark border"><?php echo htmlspecialchars($ru_id_label); ?></span>
                     <span class="ms-2 fw-bold"><?php echo $ru_id_value !== '' ? htmlspecialchars($ru_id_value) : '<span class="text-muted">not provided</span>'; ?></span>
                   </p>
+                  <?php if (!empty($review_user['kyc_api_verified'])): ?>
+                    <p class="small text-success mb-1">
+                      <i class="bi bi-patch-check-fill"></i>
+                      Verified with <?php echo htmlspecialchars(ucfirst(str_replace('_', ' ', (string)($review_user['kyc_provider'] ?? '')))); ?>
+                      <?php echo !empty($review_user['kyc_api_verified_at']) ? 'on ' . date('M d, Y H:i', strtotime($review_user['kyc_api_verified_at'])) : ''; ?>
+                      <?php if (!empty($review_user['kyc_provider_ref'])): ?>&middot; ref <?php echo htmlspecialchars($review_user['kyc_provider_ref']); ?><?php endif; ?>
+                      &mdash; the provider matched this number to this account holder, so it needs no second look.
+                    </p>
+                  <?php elseif ($ru_id_value !== ''): ?>
+                    <p class="small text-warning mb-1">
+                      <i class="bi bi-exclamation-triangle"></i>
+                      Typed in by the user and <strong>not</strong> checked with an identity provider. Confirm it against the document before approving.
+                    </p>
+                  <?php endif; ?>
                   <p class="small text-muted">
                     A missing number is not a rejection on its own: an ID document can carry the number instead.
                   </p>
@@ -504,7 +518,7 @@ if (isset($_GET['view'])) {
                                         </td>
                                         <td>
                                             <?php if ($u_id_label !== ''): ?><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($u_id_label); ?></span><?php endif; ?>
-                                            <div class="fw-bold small"><?php echo $u_id_value !== '' ? htmlspecialchars($u_id_value) : '<span class="text-muted">no number</span>'; ?></div>
+                                            <div class="fw-bold small"><?php echo $u_id_value !== '' ? htmlspecialchars($u_id_value) : '<span class="text-muted">no number</span>'; ?><?php if (!empty($user['kyc_api_verified'])): ?><span class="badge bg-success ms-1" title="Checked with <?php echo htmlspecialchars((string)($user['kyc_provider'] ?? 'the provider')); ?>">API</span><?php elseif ($u_id_value !== ''): ?><span class="badge bg-warning text-dark ms-1" title="Not checked with an identity provider">unverified</span><?php endif; ?></div>
                                         </td>
                                         <td>
                                             <?php if (empty($u_docs)): ?>

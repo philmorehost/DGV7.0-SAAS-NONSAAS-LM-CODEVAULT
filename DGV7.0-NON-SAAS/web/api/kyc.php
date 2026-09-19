@@ -158,14 +158,37 @@ if ($action === 'voveid_session') {
 // Submit BVN or NIN
 if ($action === 'submit_bvn_nin') {
     $type  = ($_POST['type'] ?? '') === 'nin' ? 'nin' : 'bvn';
-    $value = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST['value'] ?? '')));
+    $value = preg_replace('/[^0-9]/', '', (string)($_POST['value'] ?? ''));
     if (strlen($value) < 10) {
         echo json_encode(["status" => "failed", "desc" => "Invalid $type format"]);
         exit;
     }
+
+    $uid = (int)$user['id'];
+    $value_esc = mysqli_real_escape_string($connection_server, $value);
+
+    // Verify with the vendor's provider and let it approve the account when it can prove everything
+    // this vendor requires (VoveID does the same through its webhook). Manual-upload checks stay
+    // manual: they keep the submission in the review queue either way.
+    $verification = verifyBvnNin($value, $type, '', '', $user['firstname'] ?? '', $user['lastname'] ?? '', $vendor_id);
+    $outcome = bc_kyc_provider_verify($connection_server, $vendor_id, $uid, $type, $value, $verification, 'KYC-' . strtoupper($type) . '-' . $uid);
+
+    if ($outcome['status'] === 'verified') {
+        echo json_encode([
+            "status"       => "success",
+            "desc"         => $outcome['message'],
+            "kyc_status"   => $outcome['kyc_status'],
+            "auto_approved"=> $outcome['auto_approved'],
+            "still_needed" => array_map('bc_kyc_check_label', $outcome['still_needed']),
+        ]);
+        exit;
+    }
+
+    // Not verified: keep the number but mark it unverified so nothing downstream treats it as checked
+    // identity, and leave the decision to the reviewer.
     mysqli_query($connection_server,
-        "UPDATE sas_users SET $type='$value' WHERE id='".(int)$user['id']."'");
-    echo json_encode(["status" => "success", "desc" => strtoupper($type)." saved successfully"]);
+        "UPDATE sas_users SET $type='$value_esc', kyc_api_verified='0', kyc_provider=NULL, kyc_provider_ref=NULL, kyc_api_verified_at=NULL WHERE id='$uid'");
+    echo json_encode(["status" => "failed", "desc" => $outcome['message'], "unverified_saved" => true]);
     exit;
 }
 
