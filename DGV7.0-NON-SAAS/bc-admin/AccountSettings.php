@@ -941,7 +941,7 @@ if (isset($_POST["update-security-settings"])) {
     $voveid_environment = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_environment"] ?? 'sandbox')));
     $voveid_flow_id = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_flow_id"] ?? '')));
     $voveid_webhook_secret = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_webhook_secret"] ?? '')));
-
+        $voveid_secret_key = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_secret_key"] ?? '')));
     mysqli_query($connection_server, "UPDATE sas_vendors SET force_security_pin='$force_pin', reg_otp_enabled='$force_otp', trans_email_enabled='$force_email', force_google_sso='$force_sso', google_client_id='$google_id', smtp_host='$smtp_host', smtp_user='$smtp_user', smtp_pass='$smtp_pass', smtp_port='$smtp_port', smtp_sec='$smtp_sec', support_whatsapp='$support_whatsapp' WHERE id='" . $get_logged_admin_details["id"] . "'");
 
     // Save VoveID settings to sas_vendor_settings
@@ -951,6 +951,7 @@ if (isset($_POST["update-security-settings"])) {
         'voveid_environment' => $voveid_environment,
         'voveid_flow_id' => $voveid_flow_id,
         'voveid_webhook_secret' => $voveid_webhook_secret,
+        'voveid_secret_key' => $voveid_secret_key,
     ];
     foreach ($voveid_settings as $key => $value) {
         $key_esc = mysqli_real_escape_string($connection_server, $key);
@@ -1815,13 +1816,29 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID Webhook Secret (Optional)</label>
+                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID API / Secret Key</label>
+                                    <input name="voveid_secret_key" type="password" value="<?php
+                                        $voveid_sk = '';
+                                        $voveid_sk_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_secret_key' LIMIT 1");
+                                        if ($voveid_sk_q && $r = mysqli_fetch_assoc($voveid_sk_q)) $voveid_sk = $r['option_value'];
+                                        echo htmlspecialchars($voveid_sk); ?>" class="form-control" placeholder="sk_live_..." />
+                                    <div class="small text-muted">Sent as the <code>x-api-key</code> header when the server reads verification results, and therefore required for the automated approval to work at all. The public key alone is not enough for server-side calls. A public key above, with this empty, means sessions are created but results can never be read back.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">VoveID Webhook Secret (Required for automation)</label>
                                     <input name="voveid_webhook_secret" type="password" value="<?php 
                                         $voveid_ws = '';
                                         $voveid_ws_q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vid' AND option_name='voveid_webhook_secret' LIMIT 1");
                                         if ($voveid_ws_q && $r = mysqli_fetch_assoc($voveid_ws_q)) $voveid_ws = $r['option_value'];
                                         echo htmlspecialchars($voveid_ws); ?>" class="form-control" placeholder="Webhook secret for signature verification" />
-                                    <div class="small text-muted">Secret for verifying VoveID webhook signatures. Configure webhook URL in VoveID dashboard: <code><?php echo $web_http_host; ?>/api/voveid-webhook.php</code></div>
+                                    <div class="small text-muted">Every webhook is signed with this secret (HMAC-SHA256 of the raw body) and a webhook whose signature does not match is rejected without touching anyone's KYC, so this must match the secret in your VoveID dashboard. Configure the webhook URL as <code><?php echo $web_http_host; ?>/api/voveid-webhook.php</code>.</div>
+                                    <?php if (($voveid_enabled ?? false) && $voveid_ws === ''): ?>
+                                        <div class="alert alert-warning border-0 rounded-3 py-2 px-3 small mt-2 mb-0">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                            <strong>Automatic approval is off:</strong> VoveID is enabled but no webhook secret is saved, and unsigned webhooks are refused. Add the secret to turn automatic KYC approval back on.
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
 
                                 <?php $demo_state = bc_demo_state($connection_server); ?>

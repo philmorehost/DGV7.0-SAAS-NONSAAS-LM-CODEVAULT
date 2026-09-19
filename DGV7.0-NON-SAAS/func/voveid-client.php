@@ -152,16 +152,14 @@ class VoveIDClient {
     }
     
     /**
-     * Verify webhook signature (if VoveID provides signature verification)
-     * 
-     * @param string $payload Raw webhook payload
-     * @param string $signature Signature header
-     * @return bool
+     * Verify a webhook signature against this client's webhook secret.
+     *
+     * Thin wrapper so callers that already hold a client can use it; the standalone helper
+     * voveid_verify_webhook_signature() holds the actual logic (and can run with a secret even when
+     * the API credentials are incomplete).
      */
-    public function verifyWebhook(string $payload, string $signature): bool {
-        // VoveID webhook verification would go here
-        // Implementation depends on VoveID's webhook signing method
-        return true;
+    public function verifyWebhook(string $payload, string $signature, string $timestamp = '', string $secret = ''): bool {
+        return voveid_verify_webhook_signature($secret, $payload, $signature, $timestamp);
     }
     
     /**
@@ -199,24 +197,110 @@ function voveid_get_client(int $vendor_id): ?VoveIDClient {
     if (!$connection_server) return null;
     
     // Get VoveID settings from vendor settings
+    // NOTE: the settings page saves `voveid_public_key`, while this lookup used to ask only for
+    // `voveid_api_key` - which nothing ever wrote. The client therefore never had a key, session
+    // creation always failed and the whole automated flow was dead on arrival. Accept every key name
+    // the settings page (or an earlier version of it) can produce.
     $q = mysqli_query($connection_server, "
-        SELECT option_value FROM sas_vendor_settings 
-        WHERE vendor_id='$vendor_id' AND option_name IN ('voveid_api_key', 'voveid_environment', 'voveid_flow_id')
+        SELECT option_name, option_value FROM sas_vendor_settings 
+        WHERE vendor_id='$vendor_id' AND option_name IN ('voveid_api_key', 'voveid_secret_key', 'voveid_public_key', 'voveid_environment', 'voveid_flow_id', 'voveid_webhook_secret')
     ");
     
     $settings = [];
-    while ($r = mysqli_fetch_assoc($q)) {
+    while ($q && $r = mysqli_fetch_assoc($q)) {
         $settings[$r['option_name']] = $r['option_value'];
     }
     
-    if (empty($settings['voveid_api_key'])) {
+    $apiKey = '';
+    foreach (['voveid_api_key', 'voveid_secret_key', 'voveid_public_key'] as $key_name) {
+        if (!empty($settings[$key_name])) { $apiKey = (string)$settings[$key_name]; break; }
+    }
+    if ($apiKey === '') {
         return null;
     }
     
     $environment = $settings['voveid_environment'] ?? 'production';
-    $apiKey = $settings['voveid_api_key'];
     
     return new VoveIDClient($apiKey, $environment);
+}
+
+/**
+ * This vendor's VoveID webhook signing secret, or '' when it has not been configured.
+ */
+function voveid_webhook_secret(int $vendor_id): string {
+    global $connection_server;
+    if (!$connection_server || $vendor_id <= 0) return '';
+
+    $vendor_id = (int)$vendor_id;
+    $q = mysqli_query($connection_server, "SELECT option_value FROM sas_vendor_settings WHERE vendor_id='$vendor_id' AND option_name='voveid_webhook_secret' LIMIT 1");
+    $r = $q ? mysqli_fetch_assoc($q) : null;
+
+    return trim((string)($r['option_value'] ?? ''));
+}
+
+/**
+ * Pull the signature and (optional) signing timestamp out of the request headers.
+ *
+ * Any of the usual names is accepted, because the exact header VoveID sends is not documented in this
+ * codebase and a wrong guess must not silently disable verification.
+ *
+ * @return array{0:string,1:string} [signature, timestamp]
+ */
+function voveid_webhook_signature_from_request() {
+    $signature = '';
+    foreach (['HTTP_X_VOVEID_SIGNATURE', 'HTTP_X_WEBHOOK_SIGNATURE', 'HTTP_X_SIGNATURE', 'HTTP_X_HUB_SIGNATURE_256', 'HTTP_X_HUB_SIGNATURE'] as $header) {
+        if (!empty($_SERVER[$header])) { $signature = (string)$_SERVER[$header]; break; }
+    }
+    if ($signature === '' && isset($_REQUEST['signature'])) $signature = (string)$_REQUEST['signature'];
+
+    $timestamp = '';
+    foreach (['HTTP_X_VOVEID_TIMESTAMP', 'HTTP_X_TIMESTAMP', 'HTTP_X_WEBHOOK_TIMESTAMP'] as $header) {
+        if (!empty($_SERVER[$header])) { $timestamp = (string)$_SERVER[$header]; break; }
+    }
+
+    return [trim($signature), trim($timestamp)];
+}
+
+/**
+ * Verify a VoveID webhook signature: HMAC-SHA256 over the raw request body, keyed with the vendor's
+ * webhook secret.
+ *
+ * Deliberately strict:
+ *  - an empty secret NEVER verifies (this used to be "return true", so anyone who knew a refId could
+ *    post {"status":"successful"} and self-approve their KYC);
+ *  - the digest may arrive hex or base64, optionally prefixed like "sha256=";
+ *  - when a signing timestamp is supplied it must be recent, so a captured request cannot be replayed.
+ *
+ * @return bool
+ */
+function voveid_verify_webhook_signature($secret, $payload, $signature, $timestamp = '') {
+    $secret = (string)$secret;
+    $signature = trim((string)$signature);
+    if ($secret === '' || $signature === '') return false;
+
+    // Replay window, only enforced when the sender gives us a timestamp to check.
+    if (trim((string)$timestamp) !== '') {
+        $ts = (int)$timestamp;
+        if ($ts > 0 && abs(time() - $ts) > 300) return false;
+    }
+
+    $candidates = [hash_hmac('sha256', $payload, $secret)];                      // hex over the body
+    $candidates[] = base64_encode(hash_hmac('sha256', $payload, $secret, true));  // base64 over the body
+    if (trim((string)$timestamp) !== '') {
+        // Some providers sign "timestamp.body" instead of the body alone.
+        $candidates[] = hash_hmac('sha256', $timestamp . '.' . $payload, $secret);
+        $candidates[] = base64_encode(hash_hmac('sha256', $timestamp . '.' . $payload, $secret, true));
+    }
+
+    $given = $signature;
+    if (stripos($given, 'sha256=') === 0) $given = substr($given, 7);
+    $given = trim($given);
+
+    foreach ($candidates as $expected) {
+        if (hash_equals($expected, $given)) return true;
+    }
+
+    return false;
 }
 
 /**
