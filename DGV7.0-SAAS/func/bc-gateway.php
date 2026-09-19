@@ -21,6 +21,9 @@
  *                                    never a refund on its own.
  *  - bc_gateway_refund_is_safe()     a refund may only be given on a DEFINITIVE provider
  *                                    failure, never on an unreadable/absent reply.
+ *  - bc_gateway_amount_covers()      did the money that settled COVER the amount the reference
+ *                                    was created for? One-sided: paying more is the gateway's fee
+ *                                    added on top and is still a real payment; paying less is not.
  *  - bc_gateway_log_raw_response()   keep the unreadable body for diagnosis.
  *
  * Both editions (SAAS / NON-SAAS) ship an identical copy of this file.
@@ -160,6 +163,40 @@ if (!function_exists('bc_gateway_refund_is_safe')) {
         $word = trim(strtolower((string)$api_response_text));
 
         return $word !== '' && !in_array($word, array('1', '0', 'true', 'false'), true);
+    }
+}
+
+if (!function_exists('bc_gateway_amount_covers')) {
+    /**
+     * Did the money that actually settled COVER what this reference was created for?
+     *
+     * One-sided on purpose. A payer is normally charged MORE than the merchant asked for, because
+     * the gateway adds its transaction fee on top at the moment of payment: a reference created for
+     * N100 settles as N101.53. Demanding equality read that as an amount-manipulation attempt and
+     * refused to credit a payment that had already been taken - the customer's money had left their
+     * account and the wallet was never funded ("Payment confirmed but crediting failed").
+     *
+     * The property worth keeping is UNDERPAYMENT. The amount is rendered into the page that drives
+     * the payment, so it can be rewritten there - or the gateway called directly with the same
+     * reference - to settle a token sum while the record still holds the larger figure. Paying MORE
+     * than was asked cannot be turned against the merchant and cannot conjure a credit that was
+     * never funded, so it is accepted; the caller credits the RECORDED amount, never the inflated
+     * settled figure, so the gateway's fee is not credited to the customer.
+     *
+     * Comparison is done in integer minor units (kobo) so binary floating-point drift cannot turn an
+     * exact payment into a mismatch.
+     *
+     * @param float $expected Amount the reference was created for, in major units.
+     * @param float $settled  Amount the gateway reports as settled, in major units.
+     * @param int   $tolerance_minor Allowed shortfall in minor units (rounding noise only).
+     * @return bool
+     */
+    function bc_gateway_amount_covers($expected, $settled, $tolerance_minor = 1)
+    {
+        $expected_minor = (int)round(((float)$expected) * 100);
+        $settled_minor  = (int)round(((float)$settled) * 100);
+
+        return $settled_minor >= ($expected_minor - (int)$tolerance_minor);
     }
 }
 

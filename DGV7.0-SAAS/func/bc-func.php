@@ -4118,10 +4118,31 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
 
         $amount_paid = null;
         $reported_in_minor_units = false;
+        $settled_seen = null;
         foreach ($candidates as $candidate) {
-            if (abs($candidate[0] - $expected_naira) < 0.1) {
-                $amount_paid = $candidate[0];
+            $settled_seen = (float)$candidate[0];
+
+            // When we know what the gateway actually SETTLED, accept any figure that COVERS the
+            // recorded amount. A payer is normally charged MORE than was asked for - the gateway
+            // adds its fee on top at the moment of payment, so a record for 100 settles as
+            // 101.53 - and requiring equality refused a payment the customer had already made:
+            // their money left the account and the wallet was never funded, which is the
+            // "Payment confirmed but crediting failed" report. Without a settled figure all we
+            // have is our own requested amount echoed back, which matches by construction, so the
+            // older exact comparison still applies there.
+            $matches = ($settled_naira > 0)
+                ? bc_gateway_amount_covers($expected_naira, $settled_seen)
+                : (abs($settled_seen - $expected_naira) < 0.1);
+
+            if ($matches) {
                 $reported_in_minor_units = $candidate[1];
+                // Credit what this reference was CREATED FOR, never the inflated settled figure:
+                // the difference is the gateway's own fee, charged to the payer on top, and is not
+                // money the merchant received.
+                $amount_paid = ($settled_naira > 0) ? $expected_naira : $settled_seen;
+                if ($settled_naira > 0 && $settled_seen > $expected_naira + 0.01) {
+                    $log("FEE ON TOP: gateway settled $settled_seen against a record for $expected_naira - accepted as paid, credited the recorded amount.");
+                }
                 break;
             }
         }
@@ -4132,7 +4153,7 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
             // anyway - that is how a manipulated payment (PayHub reporting 10,175 against a
             // settled 102.54) funds a wallet that was never paid for. Leave the record
             // pending so it can be reviewed and credited by hand if the payment is genuine.
-            $log("BLOCKED amount mismatch: gateway settled $settled_naira (gateway_amount=" . ($data["gateway_amount"] ?? 'n/a') . ", amount=$raw_amount) but the recorded amount for this reference is $expected_naira. Refusing to credit.");
+            $log("BLOCKED amount short: gateway settled " . ($settled_seen === null ? 'n/a' : $settled_seen) . " (gateway_amount=" . ($data["gateway_amount"] ?? 'n/a') . ", amount=$raw_amount) but the recorded amount for this reference is $expected_naira. Refusing to credit.");
             return false;
         }
 
@@ -4226,7 +4247,10 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
                 $ref_match_sql = "($ref_match_sql OR reference='$u_ref_esc' OR product_unique_id='$u_ref_esc')";
             }
             $log("Matching Vendor via SQL: $ref_match_sql");
-            $select_transaction_history = mysqli_query($connection_server,"SELECT id, reference, status FROM sas_vendor_transactions WHERE vendor_id='$vendor_id' && $ref_match_sql LIMIT 1");
+            // product_unique_id must be SELECTed: the activation branches below read it from this
+            // row, and reading a column that was never fetched yielded an undefined-key warning and
+            // silently treated a plisio/payout activation as ordinary wallet funding.
+            $select_transaction_history = mysqli_query($connection_server,"SELECT id, reference, status, product_unique_id FROM sas_vendor_transactions WHERE vendor_id='$vendor_id' && $ref_match_sql LIMIT 1");
             if ($vtx = mysqli_fetch_assoc($select_transaction_history)) {
                 if ($vtx['status'] != 1) {
                     $bal_before = (float)($rv['balance'] ?? 0);
