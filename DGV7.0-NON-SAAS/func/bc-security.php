@@ -572,3 +572,36 @@ if (!function_exists('bc_verify_password')) {
 }
 
 
+// ── Manual (non-API) KYC decisions ────────────────────────────────────────────────────────────────
+// Status model, identical everywhere it is read (web/api/kyc.php, the app, the two consoles):
+//   0 = Unverified, 1 = Under review (pending), 2 = Verified, 3 = Rejected.
+// A vendor rejecting a submission used to write 0, which is indistinguishable from "never submitted"
+// and threw the reason away - so a rejected user could not be told apart from a fresh account.
+// Pure function on purpose: the mapping is unit-tested without a database.
+//
+// @return array|null null for an unknown action, otherwise:
+//         status           int   value for sas_users.kyc_status
+//         approved_date    bool  true => set kyc_approved_date = NOW()
+//         reason           string  value for kyc_reject_reason ('' clears it)
+//         refresh_required int   value for sas_users.kyc_refresh_required
+//         label            string  human-readable result, shown back to the vendor
+if (!function_exists('bc_kyc_decision')) {
+    function bc_kyc_decision($action, $reason = '') {
+        $action = strtolower(trim((string)$action));
+        $reason = trim((string)$reason);
+        switch ($action) {
+            case 'approve':
+                return ['status' => 2, 'approved_date' => true,  'reason' => '',    'refresh_required' => 0, 'label' => 'Approved'];
+            case 'reject':
+                return ['status' => 3, 'approved_date' => false, 'reason' => $reason, 'refresh_required' => 0, 'label' => 'Rejected'];
+            case 'reopen':
+                return ['status' => 1, 'approved_date' => false, 'reason' => '',    'refresh_required' => 0, 'label' => 'Re-opened for review'];
+            case 'unverify':
+                return ['status' => 0, 'approved_date' => false, 'reason' => '',    'refresh_required' => 1, 'label' => 'Reset to unverified'];
+            default:
+                return null;
+        }
+    }
+}
+
+

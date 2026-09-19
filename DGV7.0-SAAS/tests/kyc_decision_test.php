@@ -1,0 +1,69 @@
+<?php
+/**
+ * Contract test for the manual (non-API) KYC decision mapping in func/bc-security.php.
+ *
+ * Run with:  C:\xampp\php\php.exe -n tests/kyc_decision_test.php
+ *
+ * The SHIPPED security file is loaded the way the app loads it (so a helper that never gets reached
+ * fails here too - see the loading-regression section of tests/password_hash_test.php), then
+ * bc_kyc_decision() is exercised directly. No database is involved; the SQL is built by the caller.
+ */
+
+$src_file = __DIR__ . '/../func/bc-security.php';
+if (!is_file($src_file)) { fwrite(STDERR, "cannot read $src_file\n"); exit(1); }
+
+$include_result = include $src_file;
+
+$fails = 0;
+$checks = 0;
+function bc_assert($label, $actual, $expected) {
+    global $fails, $checks;
+    $checks++;
+    if ($actual !== $expected) {
+        $fails++;
+        echo "FAIL  $label  (expected " . var_export($expected, true) . ", got " . var_export($actual, true) . ")\n";
+    } else {
+        echo "ok    $label\n";
+    }
+}
+
+bc_assert('shipped bc-security.php runs to the end (include returns 1)', $include_result, 1);
+bc_assert('bc_kyc_decision() is defined', function_exists('bc_kyc_decision'), true);
+
+// The status numbers are a wire contract: web/api/kyc.php, the app, both consoles and every gate
+// that checks `kyc_status == 2` depend on them. 3 = Rejected used to be written as 0 by the console.
+$approve = bc_kyc_decision('approve');
+bc_assert('approve -> status 2 (Verified)', $approve['status'], 2);
+bc_assert('approve -> sets kyc_approved_date', $approve['approved_date'], true);
+bc_assert('approve -> clears the reject reason', $approve['reason'], '');
+bc_assert('approve -> refresh_required 0', $approve['refresh_required'], 0);
+bc_assert('approve -> label', $approve['label'], 'Approved');
+
+$reject = bc_kyc_decision('reject', 'The selfie is too blurry to match the ID photo.');
+bc_assert('reject -> status 3 (Rejected), not 0', $reject['status'], 3);
+bc_assert('reject -> keeps the reason for the user', $reject['reason'], 'The selfie is too blurry to match the ID photo.');
+bc_assert('reject -> does not set kyc_approved_date', $reject['approved_date'], false);
+bc_assert('reject -> label', $reject['label'], 'Rejected');
+
+$reject_no_reason = bc_kyc_decision('reject', '   ');
+bc_assert('reject without a reason still maps to 3 (the console blocks the submit)', $reject_no_reason['status'], 3);
+bc_assert('reject without a reason stores nothing', $reject_no_reason['reason'], '');
+
+$reopen = bc_kyc_decision('reopen');
+bc_assert('reopen -> status 1 (back in the queue)', $reopen['status'], 1);
+bc_assert('reopen -> clears the old rejection reason', $reopen['reason'], '');
+bc_assert('reopen -> clears kyc_approved_date', $reopen['approved_date'], false);
+
+$unverify = bc_kyc_decision('unverify');
+bc_assert('unverify -> status 0', $unverify['status'], 0);
+bc_assert('unverify -> asks the app to refresh the ID', $unverify['refresh_required'], 1);
+
+// Input hygiene: the value arrives from a form field.
+bc_assert('unknown action -> null (caller reports an error)', bc_kyc_decision('delete'), null);
+bc_assert('empty action -> null', bc_kyc_decision(''), null);
+bc_assert('action is case-insensitive', bc_kyc_decision('APPROVE')['status'], 2);
+bc_assert('action is trimmed', bc_kyc_decision("  reject  ", 'blurry')['status'], 3);
+bc_assert('reason is trimmed', bc_kyc_decision('reject', "  blurry  ")['reason'], 'blurry');
+
+echo "\n$checks checks, $fails failures\n";
+exit($fails === 0 ? 0 : 1);

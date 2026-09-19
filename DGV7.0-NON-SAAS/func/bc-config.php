@@ -185,6 +185,10 @@ if ($connection_server) {
             "kyc_id_expiry" => "DATE NULL",
             "kyc_refresh_required" => "TINYINT DEFAULT 0",
             "kyc_reject_reason" => "TEXT",
+            // Manual (non-API) KYC: when the user last submitted evidence for review, and when a vendor
+            // last decided on it. kyc_approved_date only ever records approvals.
+            "kyc_submitted_at" => "DATETIME NULL",
+            "kyc_reviewed_at" => "DATETIME NULL",
             "proof_of_address" => "VARCHAR(255)",
             "kyc_address_ok" => "TINYINT DEFAULT 0"
         );

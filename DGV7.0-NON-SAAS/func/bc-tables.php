@@ -393,7 +393,11 @@ if ($create_user_table) {
         "kyc_status" => "TINYINT(1) DEFAULT 0",
         "kyc_id_expiry" => "VARCHAR(50) DEFAULT NULL",
         "kyc_refresh_required" => "TINYINT(1) DEFAULT 0",
-        "kyc_id_ok" => "TINYINT(1) DEFAULT 0"
+        "kyc_id_ok" => "TINYINT(1) DEFAULT 0",
+        // Manual (non-API) KYC timeline, used by bc-admin/KYCManagement.php. Created here as well as in
+        // bc-config.php so the vendor console does not depend on a visitor hitting a front-end page first.
+        "kyc_submitted_at" => "DATETIME NULL",
+        "kyc_reviewed_at" => "DATETIME NULL"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_users");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
