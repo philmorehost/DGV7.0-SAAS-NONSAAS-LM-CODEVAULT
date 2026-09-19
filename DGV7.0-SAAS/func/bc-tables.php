@@ -16,7 +16,7 @@
 // leaves no marker and the next request runs the file again - everything here is written to be
 // repeatable, which is what makes that safe.
 // To force a full run regardless (installer, debugging): $GLOBALS['bc_tables_force_run'] = true;
-if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-2');
+if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-3');
 
 if ($connection_server && empty($GLOBALS['bc_tables_force_run'])) {
     // Two cheap statements instead of hundreds: an options lookup and one data-dictionary probe.
@@ -451,7 +451,11 @@ if ($create_user_table) {
         'idx_vendor_status_reg' => '(vendor_id, status, reg_date)',
         'idx_username' => '(username)',
         'idx_email' => '(email)',
-        'idx_phone' => '(phone_number)'
+        'idx_phone' => '(phone_number)',
+        // The KYC review queue filters on (vendor_id, kyc_status) and pages through it. Without this
+        // index every page of the queue was a full scan of the vendor's users. No dependency on
+        // kyc_submitted_at, which may not exist yet on an older install.
+        'idx_users_kyc' => '(vendor_id, kyc_status, id)'
     ];
     foreach($idx_to_add as $name => $def) {
         $check_idx = mysqli_query($connection_server, "SHOW INDEX FROM `sas_users` WHERE Key_name = '$name'");

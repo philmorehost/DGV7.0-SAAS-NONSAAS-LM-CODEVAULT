@@ -209,7 +209,11 @@ foreach ($ED as $edition => $root) {
     // B7: the recheck needs the column, and the schema gate must be re-run for it to be created.
     $tables = file_get_contents($root . '/func/bc-tables.php');
     bc_assert_true("$edition: requery_count column declared", strpos($tables, "ADD COLUMN requery_count INT UNSIGNED NOT NULL DEFAULT 0") !== false);
-    bc_assert_true("$edition: schema version bumped for it", strpos($tables, "BC_TABLES_VERSION', '2026.09.19-2'") !== false);
+    // Read the declared version instead of hard-coding it, so a later bump for unrelated DDL does
+    // not break this test - only a version OLDER than the one that adds requery_count must fail.
+    preg_match("/BC_TABLES_VERSION',\s*'([^']+)'/", $tables, $bc_v);
+    $declared = str_replace('-', '.', $bc_v[1] ?? '0');
+    bc_assert_true("$edition: schema version is at least the one that adds requery_count (" . ($bc_v[1] ?? '?)') . ')', version_compare($declared, '2026.09.19.2', '>='));
 
     // B8: the helper has to be loaded everywhere a gateway can run.
     bc_assert_true("$edition: bc-gateway.php included by bootstrap", strpos(file_get_contents($root . '/func/bc-connect.php'), 'bc-gateway.php') !== false);
