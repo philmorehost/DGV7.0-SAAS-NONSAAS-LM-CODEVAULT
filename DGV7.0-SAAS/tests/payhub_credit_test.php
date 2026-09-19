@@ -320,6 +320,66 @@ $non_decision  = $decision_block(@file_get_contents($ED['NON-SAAS'] . '/func/bc-
 bc_assert_true('the amount decision is identical in both editions',
     $saas_decision !== null && $saas_decision === $non_decision);
 
+/* ==========================================================================
+ * D. NON-SAAS parity: the card flow must exist there too
+ *
+ * NON-SAAS used to be a whole release behind: its success pages were static
+ * ("Payment Received!" unconditionally, no verify, no credit), its
+ * gateway_redirect sent the local reference PayHub ignores, it captured no
+ * PayHub reference, it had no payhub_status poll, and its create_checkout
+ * INSERT omitted the NOT NULL api_website column. Crediting there depended
+ * entirely on the webhook. These assertions keep the two editions in step.
+ * ========================================================================== */
+echo "\n== D. NON-SAAS funding-flow parity ==\n";
+
+foreach ($ED as $edition => $root) {
+    $ajax = @file_get_contents($root . '/web/finance-ajax.php');
+    $fund = @file_get_contents($root . '/web/Fund.php');
+    if ($ajax === false || $fund === false) { bc_assert_true("$edition: funding files readable", false); continue; }
+
+    // The server reference PayHub will verify against must be THEIRS, not ours.
+    bc_assert_true("$edition: gateway_redirect captures PayHub's own reference",
+        strpos($ajax, "\$inner['data']['reference']") !== false && strpos($ajax, '$payhub_ref = trim((string)$payhub_ref);') !== false);
+    bc_assert_true("$edition: the PayHub reference is returned to the front-end",
+        strpos($ajax, "'checkout_url' => \$url, 'payhub_ref' => \$payhub_ref") !== false);
+    bc_assert_true("$edition: the local transaction is mapped to the PayHub reference",
+        strpos($ajax, "UPDATE sas_transactions SET api_reference='\$ph_ref_esc' WHERE reference='\$loc_ref_esc' AND vendor_id='\$vid'") !== false);
+    bc_assert_true("$edition: a checkout row is keyed by the PayHub reference",
+        strpos($ajax, "INSERT INTO sas_user_payment_checkouts (vendor_id, username, reference, status) VALUES ('\$vid'") !== false);
+    // PayHub ignores a top-level reference/callback_url, so sending them is misleading - but the
+    // local reference must still reach PayHub inside metadata. One occurrence each, not two.
+    $init_start = strpos($ajax, 'makePayhubRequest("POST", "api/transaction/initialize", [');
+    $init_end   = ($init_start === false) ? false : strpos($ajax, '], $vid, $is_vendor_funding);', $init_start);
+    $init_block = ($init_start === false || $init_end === false) ? null : substr($ajax, $init_start, $init_end - $init_start);
+    bc_assert("$edition: the local reference is sent ONLY inside metadata",
+        $init_block === null ? -1 : substr_count($init_block, '"reference" =>'), 1);
+    bc_assert("$edition: callback_url is sent ONLY inside metadata",
+        $init_block === null ? -1 : substr_count($init_block, '"callback_url" =>'), 1);
+    bc_assert("$edition: the initialize payload still carries metadata",
+        $init_block === null ? -1 : substr_count($init_block, '"metadata" =>'), 1);
+    bc_assert_true("$edition: create_checkout supplies api_website (NOT NULL, was a silent failure)",
+        strpos($ajax, "description, mode, api_website, status) VALUES") !== false);
+
+    // Without the poll the modal often just resets and the customer is never credited.
+    bc_assert_true("$edition: a payhub_status poll endpoint exists", strpos($ajax, "\$action == 'payhub_status'") !== false);
+    bc_assert_true("$edition: the poll verifies a payment before crediting (not the top-level boolean)",
+        strpos($ajax, "if (\$is_paid)") !== false || strpos($ajax, "\$is_paid = (\$tx_status == 'success'") !== false);
+    bc_assert_true("$edition: the poll credits through processPayhubSuccess()",
+        strpos($ajax, "processPayhubSuccess(\$vid, \$tx_data['reference'], \$tx_data, \$payhub_keys, \$username)") !== false);
+    bc_assert_true("$edition: the Fund page polls payhub_status",
+        strpos($fund, "finance-ajax.php?action=payhub_status&reference=") !== false);
+    bc_assert_true("$edition: the Fund page carries the PayHub reference into the poll and redirect",
+        strpos($fund, "&payhub_ref=' + encodeURIComponent(payhubRef)") !== false);
+    bc_assert_true("$edition: the Fund page recognises PayHub's postMessage shape",
+        strpos($fund, "msg.type === 'payhub_success'") !== false);
+}
+
+foreach (array('/web/payhub-success.php', '/bc-admin/payhub-success.php', '/web/api/payhub-checkout.php') as $rel) {
+    $saas = @file_get_contents($ED['SAAS'] . $rel);
+    $non  = @file_get_contents($ED['NON-SAAS'] . $rel);
+    bc_assert_true("$rel is identical in both editions", $saas !== false && $saas === $non);
+}
+
 echo "\n----------------------------------------\n";
 echo ($checks - $fails) . "/$checks checks passed" . ($fails ? " - $fails FAILED" : "") . "\n";
 exit($fails ? 1 : 0);

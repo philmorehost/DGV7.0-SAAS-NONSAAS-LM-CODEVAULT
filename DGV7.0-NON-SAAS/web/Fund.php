@@ -195,12 +195,16 @@ $retry_amount = $_GET['amount'] ?? '';
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>PREPARING...';
             btn.style.pointerEvents = "none";
 
-            fetch('finance-ajax.php?action=gateway_redirect&gateway=payhub&reference=' + reference)
+            fetch('finance-ajax.php?action=gateway_redirect&gateway=payhub&reference=' + reference + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value))
             .then(response => response.json())
             .then(res => {
                 if (res.status === 'success') {
                     const url = new URL(res.checkout_url);
                     url.searchParams.set('embed', '1');
+                    // PayHub's initialize generates its own PH_... reference (it ignores ours) -
+                    // use it for status polling and the success redirect so the server verifies the
+                    // correct PayHub transaction.
+                    const payhubRef = (res.payhub_ref || '').trim();
 
                     // Create Modal for Inline Checkout
                     const modalId = 'payhubModal';
@@ -218,7 +222,7 @@ $retry_amount = $_GET['amount'] ?? '';
                                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                     </div>
                                     <div class="modal-body p-0" style="height: 600px; max-height: 80vh;">
-                                        <iframe id="payhubIframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+                                        <iframe id="payhubIframe" src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-read; clipboard-write; payment" allowfullscreen></iframe>
                                     </div>
                                 </div>
                             </div>
@@ -234,12 +238,35 @@ $retry_amount = $_GET['amount'] ?? '';
                     btn.style.pointerEvents = "auto";
 
                     window.addEventListener('message', function(event) {
+                        // The PayHub checkout iframe posts {type:'payhub_success', data:{reference,status:'success'}}.
                         if (event.origin.includes('merchant.payhub.com.ng')) {
-                            if (event.data === 'payment_success' || (event.data && event.data.status === 'success')) {
-                                window.location.href = "/web/Dashboard.php";
+                            const msg = event.data;
+                            const ok = msg && (msg === 'payment_success' || msg.type === 'payhub_success' || (msg.data && msg.data.status === 'success'));
+                            if (ok) {
+                                // Prefer the reference PayHub reported back; fall back to the one we stored.
+                                const phRef = (msg && msg.data && msg.data.reference) ? msg.data.reference : payhubRef;
+                                window.location.href = '/web/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(phRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
                             }
                         }
                     }, false);
+
+                    // PayHub's postMessage isn't reliable (the modal often just resets), so also
+                    // poll the server: it verifies the payment and credits the wallet, then we
+                    // redirect to the dashboard - same behaviour as Paystack.
+                    let payhubPollCount = 0;
+                    let payhubPoll = setInterval(() => {
+                        payhubPollCount++;
+                        if (payhubPollCount > 150) { clearInterval(payhubPoll); return; } // ~10 min cap
+                        fetch('finance-ajax.php?action=payhub_status&reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef))
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.status === 'paid') {
+                                    clearInterval(payhubPoll);
+                                    window.location.href = '/web/payhub-success.php?reference=' + encodeURIComponent(reference) + '&payhub_ref=' + encodeURIComponent(payhubRef) + '&amount=' + encodeURIComponent(document.getElementById("amount-to-pay").value);
+                                }
+                            })
+                            .catch(() => {});
+                    }, 4000);
 
                 } else {
                     throw new Error(res.message || "Unknown API Error");
