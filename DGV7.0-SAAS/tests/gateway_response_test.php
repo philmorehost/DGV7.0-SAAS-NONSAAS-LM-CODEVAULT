@@ -63,18 +63,53 @@ bc_assert('noise both sides: status recovered', $r['status'] ?? null, 'failed');
 bc_assert('unparseable body returns empty array', bc_gateway_json_decode('502 Bad Gateway'), array());
 bc_assert('empty body returns empty array', bc_gateway_json_decode(''), array());
 
-// An unsettled outcome must never survive: the caller has already debited the customer.
+// A transport error is only safe to fail when the request provably never left us.
+bc_assert('DNS failure never sent the request -> failed', bc_gateway_curl_outcome(6), 'failed');
+bc_assert('connection refused never sent the request -> failed', bc_gateway_curl_outcome(7), 'failed');
+bc_assert('timeout may have been processed -> pending', bc_gateway_curl_outcome(28), 'pending');
+bc_assert('empty reply may have been processed -> pending', bc_gateway_curl_outcome(52), 'pending');
+bc_assert('receive error may have been processed -> pending', bc_gateway_curl_outcome(56), 'pending');
+
+// The provider's own status word is the only verdict we accept.
+bc_assert('provider "successful"', bc_gateway_provider_verdict(array('Status' => 'successful'), 'Status'), 'successful');
+bc_assert('provider "Success" (mixed case)', bc_gateway_provider_verdict(array('Status' => ' Success '), 'Status'), 'successful');
+bc_assert('provider "pending"', bc_gateway_provider_verdict(array('Status' => 'pending'), 'Status'), 'pending');
+bc_assert('provider "failed"', bc_gateway_provider_verdict(array('Status' => 'failed'), 'Status'), 'failed');
+bc_assert('lowercase status key', bc_gateway_provider_verdict(array('status' => 'failed')), 'failed');
+bc_assert('an auth error body is NOT a verdict', bc_gateway_provider_verdict(array('detail' => 'Invalid token.'), 'Status'), null);
+bc_assert('an empty body is NOT a verdict', bc_gateway_provider_verdict(array(), 'Status'), null);
+bc_assert('a word we do not know is NOT a verdict', bc_gateway_provider_verdict(array('Status' => 'weird'), 'Status'), null);
+
+// Only a definitive provider failure may be refunded.
+$r = 'failed'; $t = 'failed';
+bc_assert('definitive provider failure is refundable', bc_gateway_refund_is_safe($r, $t), true);
+$r = 'failed'; $t = '';
+bc_assert('a failure with no provider word is not refundable', bc_gateway_refund_is_safe($r, $t), false);
+$r = 'failed'; $t = 1;
+bc_assert('the transport sentinel is not refundable', bc_gateway_refund_is_safe($r, $t), false);
+$r = 'pending'; $t = 'failed';
+bc_assert('a pending outcome is never refundable', bc_gateway_refund_is_safe($r, $t), false);
+$r = 'successful'; $t = 'successful';
+bc_assert('a successful outcome is never refundable', bc_gateway_refund_is_safe($r, $t), false);
+
+// An unsettled outcome must never survive - and must never become a refund on its own, because
+// the provider debits its own side as soon as it accepts the request.
 $api_response = null; $api_response_text = null; $api_response_description = null; $api_response_status = null;
-$forced = bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, 'Transaction Failed | no valid response from the upstream gateway', '');
+$forced = bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, '', '');
 bc_assert('NULL outcome is settled', $forced, true);
-bc_assert('NULL outcome becomes failed', $api_response, 'failed');
-bc_assert('NULL outcome gets status 3', $api_response_status, 3);
+bc_assert('NULL outcome becomes pending (never a refund)', $api_response, 'pending');
+bc_assert('NULL outcome gets status 2', $api_response_status, 2);
 bc_assert_true('NULL outcome gets a description', strlen((string)$api_response_description) > 0);
 
-// A provider-specific state the handler does not understand ("queued") is also unsettled.
+// A provider-specific state the handler does not understand ("queued") is unsettled too.
 $api_response = 'queued'; $api_response_text = ''; $api_response_description = ''; $api_response_status = 9;
 bc_assert('unknown state is settled', bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, 'x', ''), true);
-bc_assert('unknown state becomes failed', $api_response, 'failed');
+bc_assert('unknown state becomes pending by default', $api_response, 'pending');
+
+// The explicit opt-in is still available for a caller that knows failure is the right default.
+$api_response = 'queued'; $api_response_text = ''; $api_response_description = ''; $api_response_status = 9;
+bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, 'x', '', 'failed');
+bc_assert('unknown state can be forced to failed on request', $api_response, 'failed');
 
 // A classified outcome is never overridden.
 foreach (array('successful' => 1, 'pending' => 2, 'failed' => 3) as $state => $status_code) {
@@ -106,14 +141,40 @@ foreach ($ED as $edition => $root) {
     bc_assert('no unconditional curl_close() left in gateways', $close_left, array());
 
     // B2b: the purchase handlers normalise the outcome right after the gateway include, so a
-    // provider gateway *without* its own bailout still cannot leave the purchase unsettled.
+    // provider gateway *without* its own bailout still cannot leave the purchase unresolved, and
+    // they refuse to refund anything that is not a definitive provider failure.
     $handlers = array('data.php', 'airtime.php', 'betting.php', 'cable.php', 'card.php', 'electric.php', 'exam.php', 'sms.php');
     $no_net = array();
+    $no_gate = array();
     foreach ($handlers as $h) {
         $src = file_get_contents($root . '/web/func/' . $h);
         if (strpos($src, 'bc_gateway_settle_purchase') === false) $no_net[] = $h;
+        if (strpos($src, 'bc_gateway_refund_is_safe') === false) $no_gate[] = $h;
     }
     bc_assert('purchase handlers settle the outcome', $no_net, array());
+    bc_assert('purchase handlers only refund a definitive provider failure', $no_gate, array());
+
+    // B2c: the HDK DATA gateways are the ones the wallet is debited at, so they must not fail a
+    // purchase on a transport error or on a reply they cannot read.
+    foreach (array('cg', 'sme', 'shared') as $service) {
+        $buy = $root . '/func/api-gateway/' . $service . '-data-hdkdata-com.php';
+        $src = file_get_contents($buy);
+        bc_assert_true("$edition HDK/$service buy: uses the provider verdict", strpos($src, 'bc_gateway_provider_verdict') !== false);
+        bc_assert_true("$edition HDK/$service buy: no blind catch-all failure", strpos($src, '!in_array($curl_json_result["Status"],array("successful","pending"))') === false);
+        bc_assert_true("$edition HDK/$service buy: transport outcome classified", strpos($src, 'bc_gateway_curl_outcome') !== false);
+        bc_assert_true("$edition HDK/$service buy: key normalised", strpos($src, 'str_ireplace("Token "') !== false);
+        bc_assert_true("$edition HDK/$service buy: no unconditional curl_close", preg_match('/\bcurl_close\s*\(/', $src) === 0);
+
+        $re = $root . '/func/api-gateway/requery/' . $service . '-data-hdkdata-com.php';
+        $src = file_get_contents($re);
+        bc_assert_true("$edition HDK/$service requery: uses the provider verdict", strpos($src, 'bc_gateway_provider_verdict') !== false);
+        bc_assert_true("$edition HDK/$service requery: no blind catch-all failure", strpos($src, '!in_array($curl_json_result["Status"],array("successful","pending"))') === false);
+        bc_assert_true("$edition HDK/$service requery: base url normalised", strpos($src, "preg_replace('#^https?://#'") !== false);
+        bc_assert_true("$edition HDK/$service requery: key normalised", strpos($src, 'str_ireplace("Token "') !== false);
+        bc_assert_true("$edition HDK/$service requery: double-space Token header gone", strpos($src, 'Token  "') === false);
+        bc_assert_true("$edition HDK/$service requery: has a timeout", strpos($src, 'CURLOPT_TIMEOUT') !== false);
+        bc_assert_true("$edition HDK/$service requery: no unconditional curl_close", preg_match('/\bcurl_close\s*\(/', $src) === 0);
+    }
 
     // B3: a purchase the upstream has since reversed (status 1) must be refundable — the atomic
     // claim has to cover status 1 as well as a stuck pending 2, and only ever fire once.
@@ -121,6 +182,7 @@ foreach ($ED as $edition => $root) {
     bc_assert_true("$edition: refund claim covers reversed successes", (bool)preg_match("/status IN \('2','1'\)/", $requery));
     bc_assert_true("$edition: refund claim stays atomic", strpos($requery, 'mysqli_affected_rows($connection_server) > 0') !== false);
     bc_assert_true("$edition: requery settles an unclassified reply", strpos($requery, 'bc_gateway_settle_purchase') !== false);
+    bc_assert_true("$edition: requery only refunds a definitive failure", strpos($requery, 'bc_gateway_refund_is_safe') !== false);
     bc_assert_true("$edition: pending never downgrades a success", strpos($requery, 'Never downgrade a delivered purchase') !== false);
 
     // B4: "Account Refunded Already" means the transaction FAILED and was reversed. Reporting it

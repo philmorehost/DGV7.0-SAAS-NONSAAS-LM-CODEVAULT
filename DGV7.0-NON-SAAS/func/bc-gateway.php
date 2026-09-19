@@ -2,17 +2,26 @@
 /**
  * bc-gateway.php - shared helpers for upstream API gateway responses.
  *
- * A purchase is debited BEFORE its upstream gateway is called. If the gateway cannot
- * classify the upstream reply, `$api_response` stayed NULL, every status branch in the
- * purchase handler missed, NO refund branch ran and the customer was left charged for a
- * purchase that was neither delivered nor reversed. The helpers here close that hole:
+ * A purchase is debited BEFORE its upstream gateway is called, and the provider debits ITS own
+ * side the moment it accepts the request. So an unreadable reply must NOT be treated as proof
+ * of failure: refunding it while the provider has already delivered and charged our wallet is a
+ * straight loss. The helpers here encode that:
  *
- *  - bc_gateway_json_decode()   decode tolerantly - a remote host with display_errors on
- *                               wraps its JSON in deprecation/notice text, which made
- *                               json_decode() fail and hid a perfectly good status.
- *  - bc_gateway_settle_purchase() force any unresolved outcome to "failed" so the
- *                               caller's refund branch always runs.
- *  - bc_gateway_log_raw_response() keep the unparseable body for diagnosis.
+ *  - bc_gateway_json_decode()        decode tolerantly - a remote host with display_errors on
+ *                                    wraps its JSON in deprecation/notice text, which made
+ *                                    json_decode() fail and hid a perfectly good status.
+ *  - bc_gateway_curl_outcome()       classify a transport error: "could not connect" means the
+ *                                    request was never sent (safe to fail), while a timeout or a
+ *                                    lost reply means the provider may have processed it.
+ *  - bc_gateway_provider_verdict()   map the provider's own status word onto
+ *                                    successful|pending|failed, or NULL when it is not a verdict
+ *                                    at all (an unknown word is not a failure).
+ *  - bc_gateway_settle_purchase()    settle whatever the gateway left behind: an unresolved
+ *                                    purchase becomes PENDING (reconciled by the requery queue),
+ *                                    never a refund on its own.
+ *  - bc_gateway_refund_is_safe()     a refund may only be given on a DEFINITIVE provider
+ *                                    failure, never on an unreadable/absent reply.
+ *  - bc_gateway_log_raw_response()   keep the unreadable body for diagnosis.
  *
  * Both editions (SAAS / NON-SAAS) ship an identical copy of this file.
  */
@@ -64,18 +73,108 @@ if (!function_exists('bc_gateway_log_raw_response')) {
     }
 }
 
+if (!function_exists('bc_gateway_curl_outcome')) {
+    /**
+     * Classify a cURL transport error.
+     *
+     * "failed"  - the request never left us (DNS or connect failure), so nothing can have been
+     *             charged provider-side and refunding is correct.
+     * "pending" - anything else (timeout, empty/lost reply, reset after send). The provider may
+     *             have received, processed and charged the request, so the transaction must be
+     *             reconciled by a requery instead of refunded blind.
+     *
+     * @return string "failed" or "pending"
+     */
+    function bc_gateway_curl_outcome($curl_errno)
+    {
+        $never_sent = array(6 /* COULDNT_RESOLVE_HOST */, 7 /* COULDNT_CONNECT */, 3 /* URL_MALFORMAT */);
+        return in_array((int)$curl_errno, $never_sent, true) ? "failed" : "pending";
+    }
+}
+
+if (!function_exists('bc_gateway_provider_verdict')) {
+    /**
+     * Map the provider's own status word to one of the three states the handlers know.
+     *
+     * @return string|null "successful" | "pending" | "failed", or NULL when the payload carries
+     *                     no verdict we recognise. NULL must NEVER be treated as a failure: a
+     *                     word we do not know (or a missing key, an auth error, an HTML error
+     *                     page) is not evidence that the provider did nothing.
+     */
+    function bc_gateway_provider_verdict($payload, $status_key = 'status')
+    {
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $raw = null;
+        foreach (array($status_key, 'status', 'Status', 'STATUS', 'state', 'State') as $key) {
+            if (isset($payload[$key]) && is_scalar($payload[$key])) {
+                $candidate = strtolower(trim((string)$payload[$key]));
+                if ($candidate !== '') {
+                    $raw = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($raw === null) {
+            return null;
+        }
+
+        if (in_array($raw, array('successful', 'success', 'successfull', 'completed', 'complete', 'delivered', 'done', 'ok', '200'), true)) {
+            return "successful";
+        }
+        if (in_array($raw, array('pending', 'processing', 'process', 'queued', 'queue', 'in-progress', 'in_progress', 'awaiting', 'submitted'), true)) {
+            return "pending";
+        }
+        if (in_array($raw, array('failed', 'fail', 'failure', 'cancelled', 'canceled', 'rejected', 'reverse', 'reversed', 'refunded', 'refund', 'error', 'declined', 'invalid', 'expired'), true)) {
+            return "failed";
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('bc_gateway_refund_is_safe')) {
+    /**
+     * May this outcome be refunded?
+     *
+     * Only a definitive provider failure may. Anything else - a timeout, an unreadable body, a
+     * missing status, a transport error during a requery - must leave the transaction where it is
+     * so the requery queue can still resolve it, because the provider may already have delivered
+     * the service and charged our wallet for it.
+     *
+     * @return bool
+     */
+    function bc_gateway_refund_is_safe(&$api_response, &$api_response_text, $require_provider_word = true)
+    {
+        if ($api_response !== "failed") {
+            return false;
+        }
+        if (!$require_provider_word) {
+            return true;
+        }
+
+        // "1"/"0"/"true"/"false" are what the gateways write when the request transport failed -
+        // that is a sentinel, not a provider verdict, so it must not authorise a refund.
+        $word = trim(strtolower((string)$api_response_text));
+
+        return $word !== '' && !in_array($word, array('1', '0', 'true', 'false'), true);
+    }
+}
+
 if (!function_exists('bc_gateway_settle_purchase')) {
     /**
-     * Guarantee a purchase attempt ends in one of the three states the purchase
-     * handlers understand: "successful", "pending" or "failed".
+     * Settle whatever a gateway left behind, so no purchase can stay unclassified.
      *
-     * An unrecognised/unparseable upstream reply is settled as "failed" (never left
-     * NULL), so the handler's refund branch runs instead of silently keeping the money.
-     * A reply the gateway already classified is never overridden.
+     * An unrecognised/unparseable upstream reply becomes PENDING, not failed: the provider may
+     * have accepted the request and charged our wallet, and the requery queue will establish the
+     * real outcome (and refund then, if the provider says it failed). A reply the gateway already
+     * classified is never overridden.
      *
-     * @return bool true when the outcome had to be forced to "failed"
+     * @return bool true when the outcome had to be forced
      */
-    function bc_gateway_settle_purchase(&$api_response, &$api_response_text, &$api_response_description, &$api_response_status, $label = '', $raw_response = '')
+    function bc_gateway_settle_purchase(&$api_response, &$api_response_text, &$api_response_description, &$api_response_status, $label = '', $raw_response = '', $on_unknown = 'pending')
     {
         if (in_array($api_response, array("successful", "pending", "failed"), true)) {
             return false;
@@ -83,14 +182,14 @@ if (!function_exists('bc_gateway_settle_purchase')) {
 
         $previous = is_null($api_response) ? 'NULL' : (string)$api_response;
 
-        $api_response = "failed";
+        $api_response = ($on_unknown === 'failed') ? "failed" : "pending";
         $api_response_text = "";
         if (trim((string)$api_response_description) === '') {
-            $api_response_description = ($label !== '' ? $label : "Transaction Failed | no valid response from the upstream gateway");
+            $api_response_description = ($label !== '' ? $label : (($api_response === "failed") ? "Transaction Failed | no valid response from the upstream gateway" : "Transaction Pending | awaiting confirmation from the upstream gateway"));
         }
-        $api_response_status = 3;
+        $api_response_status = ($api_response === "failed") ? 3 : 2;
 
-        bc_gateway_log_raw_response($raw_response, "UNSETTLED(" . $previous . ")");
+        bc_gateway_log_raw_response($raw_response, "UNRESOLVED(" . $previous . ")");
 
         return true;
     }

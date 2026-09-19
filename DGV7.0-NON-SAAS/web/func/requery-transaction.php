@@ -45,7 +45,13 @@ if (in_array($purchase_method, $purchase_method_array)) {
 
                                 include($gateway_path . $api_gateway_name);
                                 $api_response_text = strtolower((string)$api_response_text);
-                                if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, ""); }
+                                if (function_exists('bc_gateway_settle_purchase')) { bc_gateway_settle_purchase($api_response, $api_response_text, $api_response_description, $api_response_status, "", $curl_result ?? ""); }
+                                // A refund needs a DEFINITIVE provider failure. A gateway that could not classify
+                                // the reply (timeout, unreadable body, transport error, an auth/HTTP error page)
+                                // must never trigger one: the provider may already have delivered the service and
+                                // charged our wallet, so refunding loses that money. Downgrading to pending leaves
+                                // the transaction for the next requery, which is what tells the truth.
+                                if (function_exists('bc_gateway_refund_is_safe') && !bc_gateway_refund_is_safe($api_response, $api_response_text) && $api_response == "failed") { $api_response = "pending"; $api_response_text = ""; $api_response_description = "Transaction Pending | awaiting confirmation from the upstream provider"; $api_response_status = 2; }
                                 if ($api_response == "successful") {
                                     if ($get_transaction_data["status"] == "3") {
                                         chargeOtherUser($get_transaction_data["username"], "debit", $get_transaction_data["product_unique_id"], "Reversed Refund", substr(str_shuffle("12345678901234567890"), 0, 15), $requery_reference, $get_transaction_data["amount"], $get_transaction_data["discounted_amount"], "Reversed refund for Ref: $requery_reference", "WEB", $_SERVER["HTTP_HOST"] ?? "CRON", 1);
