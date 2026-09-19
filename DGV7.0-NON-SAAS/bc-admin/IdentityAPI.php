@@ -33,6 +33,40 @@
         exit();
     }
 
+    // VoveID Identity Verification (KYC) settings. Moved here from the Account Settings security tab so
+    // every KYC integration a vendor can use - provider API, VoveID, NIN card, BVN verify - is
+    // configured on one page.
+    if (isset($_POST["update-voveid-kyc"])) {
+        $vid = (int)$get_logged_admin_details['id'];
+
+        $voveid_enabled        = isset($_POST["voveid_enabled"]) ? 1 : 0;
+        $voveid_public_key     = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_public_key"] ?? '')));
+        $voveid_environment    = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_environment"] ?? 'sandbox')));
+        $voveid_flow_id        = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_flow_id"] ?? '')));
+        $voveid_webhook_secret = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_webhook_secret"] ?? '')));
+        $voveid_secret_key     = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["voveid_secret_key"] ?? '')));
+
+        $voveid_settings = array(
+            'voveid_enabled'        => $voveid_enabled,
+            'voveid_public_key'     => $voveid_public_key,
+            'voveid_environment'    => $voveid_environment,
+            'voveid_flow_id'        => $voveid_flow_id,
+            'voveid_webhook_secret' => $voveid_webhook_secret,
+            'voveid_secret_key'     => $voveid_secret_key,
+        );
+        foreach ($voveid_settings as $key => $value) {
+            $key_esc = mysqli_real_escape_string($connection_server, $key);
+            $val_esc = mysqli_real_escape_string($connection_server, $value);
+            mysqli_query($connection_server, "INSERT INTO sas_vendor_settings (vendor_id, option_name, option_value) VALUES ('$vid', '$key_esc', '$val_esc') ON DUPLICATE KEY UPDATE option_value='$val_esc'");
+        }
+
+        $_SESSION["product_purchase_response"] = $voveid_enabled
+            ? "VoveID identity verification saved and enabled."
+            : "VoveID identity verification settings saved (currently disabled).";
+        header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit();
+    }
+
 
 
     if (isset($_POST["update-nin-card-pricing"])) {
@@ -186,6 +220,77 @@
                         sel.addEventListener('change', toggleBlocks);
                     })();
                     </script>
+                </div>
+            </div>
+
+            <?php
+                // VoveID Identity Verification (KYC). Moved here from the Account Settings security tab so
+                // every KYC integration the vendor can use is configured on this one page.
+                $voveid_q = mysqli_query($connection_server, "SELECT option_name, option_value FROM sas_vendor_settings WHERE vendor_id='".(int)$get_logged_admin_details['id']."' AND option_name IN ('voveid_enabled','voveid_public_key','voveid_secret_key','voveid_environment','voveid_flow_id','voveid_webhook_secret')");
+                $voveid_cfg = array();
+                while ($voveid_q && $r = mysqli_fetch_assoc($voveid_q)) $voveid_cfg[$r['option_name']] = $r['option_value'];
+                $voveid_enabled  = (int)($voveid_cfg['voveid_enabled'] ?? 0) === 1;
+                $voveid_ws_saved = trim((string)($voveid_cfg['voveid_webhook_secret'] ?? ''));
+                $voveid_host     = $web_http_host ?? ($_SERVER['HTTP_HOST'] ?? 'your-domain');
+            ?>
+            <!-- VoveID Identity Verification Card -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4">
+                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0 text-primary">VoveID Identity Verification (KYC)
+                        <?php echo $voveid_enabled
+                            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:.65rem;">ENABLED</span>'
+                            : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary ms-2" style="font-size:.65rem;">OFF</span>'; ?>
+                    </h5>
+                    <i class="bi bi-person-vcard text-muted fs-4"></i>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info border-0 rounded-4 small mb-4">
+                        VoveID runs the complete verification and reports the result to <code><?php echo htmlspecialchars($voveid_host); ?>/api/voveid-webhook.php</code>, so a successful check can approve KYC automatically. Keys come from <a href="https://dashboard.voveid.com" target="_blank" rel="noopener">your VoveID dashboard</a>.
+                    </div>
+                    <form method="post">
+                        <div class="form-check form-switch mb-4">
+                            <input class="form-check-input fs-3" type="checkbox" role="switch" name="voveid_enabled" id="voveidEnabled" <?php echo $voveid_enabled ? 'checked' : ''; ?>>
+                            <label class="form-check-label fw-bold" for="voveidEnabled">Enable VoveID Identity Verification</label>
+                            <div class="small text-muted">Users verify with government-issued documents plus biometric liveness detection.</div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">VoveID Public Key</label>
+                                <input name="voveid_public_key" type="text" value="<?php echo htmlspecialchars((string)($voveid_cfg['voveid_public_key'] ?? '')); ?>" class="form-control" placeholder="pk_live_... or pk_test_..." />
+                                <div class="form-text small">Initialises the VoveID SDK on the website and in the mobile app.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">VoveID API / Secret Key</label>
+                                <input name="voveid_secret_key" type="password" value="<?php echo htmlspecialchars((string)($voveid_cfg['voveid_secret_key'] ?? '')); ?>" class="form-control" placeholder="sk_live_..." />
+                                <div class="form-text small">Sent as the <code>x-api-key</code> header when the server reads verification results, so automated approval needs it - the public key alone is not enough.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Environment</label>
+                                <select name="voveid_environment" class="form-select">
+                                    <option value="sandbox" <?php echo (($voveid_cfg['voveid_environment'] ?? 'sandbox') === 'sandbox') ? 'selected' : ''; ?>>Sandbox (Testing)</option>
+                                    <option value="production" <?php echo (($voveid_cfg['voveid_environment'] ?? 'sandbox') === 'production') ? 'selected' : ''; ?>>Production (Live)</option>
+                                </select>
+                                <div class="form-text small">Sandbox for testing, Production for live verification.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Flow ID (Optional)</label>
+                                <input name="voveid_flow_id" type="text" value="<?php echo htmlspecialchars((string)($voveid_cfg['voveid_flow_id'] ?? '')); ?>" class="form-control" placeholder="Custom flow ID from the VoveID dashboard" />
+                                <div class="form-text small">Leave empty to use the default flow.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Webhook Secret (Required for automation)</label>
+                                <input name="voveid_webhook_secret" type="password" value="<?php echo htmlspecialchars($voveid_ws_saved); ?>" class="form-control" placeholder="Webhook signing secret" />
+                                <div class="form-text small">Every webhook is signed with this secret (HMAC-SHA256 of the raw body) and an unsigned or mismatched webhook is rejected without touching anyone's KYC - so it must match the secret in your VoveID dashboard.</div>
+                                <?php if ($voveid_enabled && $voveid_ws_saved === ''): ?>
+                                    <div class="alert alert-warning border-0 rounded-3 py-2 px-3 small mt-2 mb-0">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                        <strong>Automatic approval is off:</strong> VoveID is enabled but no webhook secret is saved, and unsigned webhooks are refused. Add the secret to turn automatic KYC approval on.
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <button name="update-voveid-kyc" type="submit" class="btn btn-primary px-5 rounded-pill fw-bold mt-4">Save VoveID Settings</button>
+                    </form>
                 </div>
             </div>
 

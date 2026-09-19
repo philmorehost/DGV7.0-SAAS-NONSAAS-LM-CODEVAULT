@@ -97,10 +97,20 @@ foreach ($ED as $edition => $root) {
     bc_assert_true("$edition: the client uses the key the settings page saves", strpos($client, "foreach (['voveid_api_key', 'voveid_secret_key', 'voveid_public_key']") !== false);
     bc_assert_true("$edition: a webhook secret loader exists", strpos($client, 'function voveid_webhook_secret(') !== false);
 
+    // The VoveID settings card lives with the other KYC integrations (bc-admin/IdentityAPI.php), not in
+    // the Account Settings security tab: everything a vendor can pay for is configured on one page.
+    $identity_page = file_get_contents($root . '/bc-admin/IdentityAPI.php');
+    bc_assert_true("$edition: IdentityAPI hosts the VoveID card", strpos($identity_page, 'VoveID Identity Verification (KYC)') !== false && strpos($identity_page, 'name="update-voveid-kyc"') !== false);
+    bc_assert_true("$edition: IdentityAPI collects the API/secret key", strpos($identity_page, 'name="voveid_secret_key"') !== false);
+    bc_assert_true("$edition: IdentityAPI saves all six settings", strpos($identity_page, "'voveid_secret_key'     => \$voveid_secret_key") !== false || strpos($identity_page, "'voveid_secret_key' => \$voveid_secret_key") !== false);
+    bc_assert_true("$edition: IdentityAPI warns when the webhook secret is missing", strpos($identity_page, 'Automatic approval is off') !== false);
+    bc_assert_true("$edition: the webhook secret is required, not optional", strpos($identity_page, 'VoveID Webhook Secret (Optional)') === false);
+
     $settings = file_get_contents($root . '/bc-admin/AccountSettings.php');
-    bc_assert_true("$edition: settings collects the API/secret key", strpos($settings, 'name="voveid_secret_key"') !== false && strpos($settings, "'voveid_secret_key' => \$voveid_secret_key") !== false);
-    bc_assert_true("$edition: settings warns when the webhook secret is missing", strpos($settings, 'Automatic approval is off') !== false);
-    bc_assert_true("$edition: the webhook secret is required, not optional", strpos($settings, 'VoveID Webhook Secret (Optional)') === false);
+    // Assert on the form fields, not the words: the page keeps a one-line pointer comment naming VoveID.
+    bc_assert_true("$edition: Account Settings no longer hosts the VoveID card", strpos($settings, 'name="voveid_enabled"') === false && strpos($settings, 'name="voveid_public_key"') === false);
+    bc_assert_true("$edition: Account Settings no longer saves VoveID keys", strpos($settings, 'voveid_settings') === false && strpos($settings, 'voveid_secret_key') === false);
+    bc_assert_true("$edition: it points at the new location instead", strpos($settings, 'configured in IdentityAPI.php') !== false);
 }
 
 echo "\n== C. editions stay in sync ==\n";
