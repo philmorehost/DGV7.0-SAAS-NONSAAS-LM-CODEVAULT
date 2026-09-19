@@ -75,6 +75,7 @@ if (isset($_POST['submit_media'])) {
     $user_id = (int)$get_logged_user_details['id'];
     $updates = [];
     $uploaded = [];
+    $selfie_filename = '';
 
     // input name => [column, allowed extensions, max MB]. The selfie is images only: it is meant to be
     // taken with the camera, and a PDF cannot be one.
@@ -103,6 +104,7 @@ if (isset($_POST['submit_media'])) {
             $fn_esc = mysqli_real_escape_string($connection_server, $filename);
             $updates[] = "$db_col = '$fn_esc'";
             $uploaded[] = $input_name;
+            if ($input_name === 'selfie') $selfie_filename = $filename;
         }
     }
 
@@ -118,6 +120,11 @@ if (isset($_POST['submit_media'])) {
         if (in_array('selfie', $uploaded, true))          $updates[] = "kyc_picture_ok = 1";
         if (in_array('liveliness_video', $uploaded, true)) $updates[] = "kyc_video_ok = 1";
         if (in_array('proof_of_address', $uploaded, true)) $updates[] = "kyc_address_ok = 1";
+        // A selfie captured live in the browser is mirrored into the purpose-built liveliness column, so
+        // the reviewer can tell a live capture from an uploaded photo without guessing.
+        if (!empty($_POST['selfie_live']) && $selfie_filename !== '') {
+            $updates[] = "liveliness_picture = '" . mysqli_real_escape_string($connection_server, $selfie_filename) . "'";
+        }
         $updates[] = "kyc_status = 1";           // back into the review queue
         $updates[] = "kyc_submitted_at = NOW()"; // the submission clock, not the account's reg_date
         $updates[] = "kyc_reject_reason = NULL"; // a new submission clears the previous rejection
@@ -379,8 +386,22 @@ if (isset($_GET['doc'])) {
                                     <?php if (in_array('liveliness_picture', $manual_checks, true)): ?>
                                     <div class="mt-3">
                                         <label class="form-label small fw-bold">Take a live photo of yourself now</label>
-                                        <input type="file" name="selfie" accept="image/*" capture="user" class="form-control rounded-3 shadow-sm">
-                                        <div class="form-text">Use the camera so your face is clearly lit and uncovered.</div>
+                                        <input type="hidden" name="selfie_live" id="selfie_live" value="0">
+                                        <div id="liveSelfieBox" class="border rounded-3 p-2 d-none" style="max-width:340px;background:#000;">
+                                            <video id="liveSelfieVideo" autoplay playsinline muted class="w-100 rounded-2" style="max-height:240px;"></video>
+                                            <canvas id="liveSelfieCanvas" class="d-none"></canvas>
+                                            <img id="liveSelfieShot" class="w-100 rounded-2 d-none" alt="Captured selfie" style="max-height:240px;object-fit:cover;">
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            <button type="button" id="liveSelfieStart" class="btn btn-outline-primary btn-sm rounded-pill">Start camera</button>
+                                            <button type="button" id="liveSelfieCapture" class="btn btn-primary btn-sm rounded-pill d-none">Capture photo</button>
+                                            <button type="button" id="liveSelfieRetake" class="btn btn-outline-secondary btn-sm rounded-pill d-none">Retake</button>
+                                        </div>
+                                        <div id="liveSelfieMsg" class="form-text"></div>
+                                        <div class="mt-2">
+                                            <input type="file" name="selfie" id="selfieFile" accept="image/*" capture="user" class="form-control rounded-3 shadow-sm">
+                                            <div class="form-text">No camera here, or prefer to upload? Use the box above. A screenshot or a photo of a photo is not a live photo.</div>
+                                        </div>
                                     </div>
                                     <?php endif; ?>
 
@@ -591,3 +612,89 @@ if (isset($_GET['doc'])) {
         document.addEventListener('DOMContentLoaded', initVoveID);
     </script>
     <?php endif; ?>
+
+    <script>
+    // Live selfie capture. getUserMedia needs a secure context and a camera, so on an http host (or an
+    // unsupported browser) the capture buttons explain themselves and stay out of the way - the plain
+    // file input above is always rendered and still works.
+    (function () {
+        var startBtn = document.getElementById('liveSelfieStart');
+        if (!startBtn) return;
+
+        var video      = document.getElementById('liveSelfieVideo');
+        var canvas     = document.getElementById('liveSelfieCanvas');
+        var shot       = document.getElementById('liveSelfieShot');
+        var box        = document.getElementById('liveSelfieBox');
+        var capBtn     = document.getElementById('liveSelfieCapture');
+        var retakeBtn  = document.getElementById('liveSelfieRetake');
+        var msg        = document.getElementById('liveSelfieMsg');
+        var fileInput  = document.getElementById('selfieFile');
+        var liveFlag   = document.getElementById('selfie_live');
+        var stream     = null;
+
+        function stopStream() {
+            if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+            video.srcObject = null;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.isSecureContext) {
+            startBtn.classList.add('d-none');
+            msg.textContent = 'Live capture is not available here (it needs https and a camera). Please upload a photo instead.';
+            return;
+        }
+
+        startBtn.addEventListener('click', function () {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 } }, audio: false })
+                .then(function (s) {
+                    stream = s;
+                    video.srcObject = s;
+                    box.classList.remove('d-none');
+                    startBtn.classList.add('d-none');
+                    capBtn.classList.remove('d-none');
+                    msg.textContent = 'Look straight at the camera, then press Capture photo.';
+                })
+                .catch(function () {
+                    msg.textContent = 'Camera permission was refused. Please upload a photo instead.';
+                });
+        });
+
+        capBtn.addEventListener('click', function () {
+            var w = video.videoWidth, h = video.videoHeight;
+            if (!w || !h) { msg.textContent = 'The camera is still starting - try again in a second.'; return; }
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+            canvas.toBlob(function (blob) {
+                if (!blob) { msg.textContent = 'Could not capture the frame. Please upload a photo instead.'; return; }
+                var file = new File([blob], 'selfie_live_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+                try {
+                    var dt = new DataTransfer();
+                    dt.items.add(file);
+                    fileInput.files = dt.files;
+                } catch (e) {
+                    msg.textContent = 'This browser cannot attach the captured photo. Please upload a file instead.';
+                    return;
+                }
+                shot.src = URL.createObjectURL(blob);
+                shot.classList.remove('d-none');
+                video.classList.add('d-none');
+                if (liveFlag) liveFlag.value = '1';
+                capBtn.classList.add('d-none');
+                retakeBtn.classList.remove('d-none');
+                msg.textContent = 'Captured. Press Retake if you blinked or moved.';
+                stopStream();
+            }, 'image/jpeg', 0.92);
+        });
+
+        retakeBtn.addEventListener('click', function () {
+            if (liveFlag) liveFlag.value = '0';
+            fileInput.value = '';
+            shot.classList.add('d-none');
+            video.classList.remove('d-none');
+            retakeBtn.classList.add('d-none');
+            startBtn.classList.remove('d-none');
+            msg.textContent = '';
+            stopStream();
+        });
+    })();
+    </script>

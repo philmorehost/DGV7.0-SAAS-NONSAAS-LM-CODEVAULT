@@ -655,4 +655,50 @@ if (!function_exists('bc_kyc_checks_pending')) {
     }
 }
 
+if (!function_exists('bc_kyc_notification_message')) {
+    /**
+     * Builds the [subject, body] of the email a user receives when their KYC is decided.
+     *
+     * Pure on purpose - the caller supplies the saved template text and does the sending - so the
+     * wording and the placeholder substitution are unit-tested without touching the database or SMTP.
+     * A vendor can override the wording by saving an email template with email_type `kyc_decision`
+     * (subject + body); placeholders: {firstname} {lastname} {username} {decision} {reason} {website}
+     *
+     * @return array{0:string,1:string} [subject, body]
+     */
+    function bc_kyc_notification_message($decision, $user_row, $template_subject = '', $template_body = '', $website = '') {
+        $user_row = is_array($user_row) ? $user_row : [];
+        $status   = is_array($decision) ? (int)($decision['status'] ?? 0) : 0;
+        $label    = is_array($decision) ? (string)($decision['label'] ?? '') : '';
+        $reason   = is_array($decision) ? trim((string)($decision['reason'] ?? '')) : '';
+
+        $subject = trim((string)$template_subject);
+        $body    = trim((string)$template_body);
+
+        if ($subject === '' || $body === '') {
+            if ($status === 2) {
+                $subject = 'Your identity verification was approved';
+                $body    = "Hello {firstname},\n\nYour identity documents have been checked and approved. Everything that needs verification is now open to you.\n\nThank you for taking the time.";
+            } elseif ($status === 3) {
+                $subject = 'Your identity verification needs another look';
+                $body    = "Hello {firstname},\n\nWe could not accept your last submission.\n\nReason: {reason}\n\nPlease open the identity verification page, fix the point above and submit again. Your other details are kept, so you only need to send the item mentioned.";
+            } else {
+                $subject = 'Your identity verification status changed';
+                $body    = "Hello {firstname},\n\nYour verification status is now: {decision}.\n\nOpen the identity verification page to see what is needed next.";
+            }
+        }
+
+        $replacements = [
+            '{firstname}' => trim((string)($user_row['firstname'] ?? '')),
+            '{lastname}'  => trim((string)($user_row['lastname'] ?? '')),
+            '{username}'  => trim((string)($user_row['username'] ?? '')),
+            '{decision}'  => $label,
+            '{reason}'    => $reason,
+            '{website}'   => trim((string)$website),
+        ];
+
+        return [strtr($subject, $replacements), strtr($body, $replacements)];
+    }
+}
+
 

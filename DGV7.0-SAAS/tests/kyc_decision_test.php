@@ -99,5 +99,32 @@ bc_assert('no enabled checks means nothing pending', bc_kyc_checks_pending($part
 bc_assert('label for a known check', bc_kyc_check_label('proof_of_address'), 'Proof of address');
 bc_assert('label falls back for an unknown check', bc_kyc_check_label('something_new'), 'Something New');
 
+// ── What the user is told (the decision email) ────────────────────────────────────────────────────
+// A decision the user never hears about is how a rejection used to look like nothing happening.
+$jane = ['firstname' => 'Jane', 'lastname' => 'Doe', 'username' => 'jane'];
+list($s1, $b1) = bc_kyc_notification_message(bc_kyc_decision('approve'), $jane);
+bc_assert('approval email subject', $s1, 'Your identity verification was approved');
+bc_assert('approval email greets the user by name', strpos($b1, 'Jane') !== false, true);
+bc_assert('approval email leaves no placeholder behind', strpos($b1, '{') === false, true);
+
+list($s2, $b2) = bc_kyc_notification_message(bc_kyc_decision('reject', 'The selfie was too blurry'), $jane);
+bc_assert('rejection email carries the reason', strpos($b2, 'The selfie was too blurry') !== false, true);
+bc_assert('rejection email subject', $s2, 'Your identity verification needs another look');
+
+// A vendor's saved template wins, and every placeholder is substituted from the row.
+list($s3, $b3) = bc_kyc_notification_message(
+    bc_kyc_decision('approve'),
+    $jane,
+    'KYC {decision} on {website}',
+    'Hi {firstname}, your {decision} is done. Visit {website}.',
+    'shop.example.com'
+);
+bc_assert('saved template subject is used', $s3, 'KYC Approved on shop.example.com');
+bc_assert('saved template body is used', $b3, 'Hi Jane, your Approved is done. Visit shop.example.com.');
+
+list($s4, $b4) = bc_kyc_notification_message(null, []);
+bc_assert('a missing decision still yields a usable email', ($s4 !== '' && $b4 !== ''), true);
+bc_assert('no placeholder survives an empty user row', strpos($b4, '{') === false, true);
+
 echo "\n$checks checks, $fails failures\n";
 exit($fails === 0 ? 0 : 1);

@@ -39,7 +39,7 @@ if (isset($_POST['kyc_decision'])) {
     $reason   = trim(strip_tags($_POST['reason'] ?? ''));
     $decision = bc_kyc_decision($_POST['kyc_decision'] ?? '', $reason);
 
-    $owned_q = mysqli_query($connection_server, "SELECT username FROM sas_users WHERE id='$uid' AND vendor_id='$vid' LIMIT 1");
+    $owned_q = mysqli_query($connection_server, "SELECT username, email, firstname, lastname FROM sas_users WHERE id='$uid' AND vendor_id='$vid' LIMIT 1");
     $owned   = $owned_q ? mysqli_fetch_assoc($owned_q) : null;
 
     if (!$decision || !$owned) {
@@ -55,7 +55,24 @@ if (isset($_POST['kyc_decision'])) {
                 kyc_refresh_required='" . (int)$decision['refresh_required'] . "',
                 kyc_reviewed_at=NOW()
             WHERE id='$uid' AND vendor_id='$vid'");
-        $_SESSION['product_purchase_response'] = 'KYC ' . $decision['label'] . ' for @' . $owned['username'] . '.';
+        $flash = 'KYC ' . $decision['label'] . ' for @' . $owned['username'] . '.';
+
+        // Tell the user. Without this a rejection is only discovered if they happen to reopen the KYC
+        // page, so a rejected submission looked like nothing had happened at all. The wording can be
+        // overridden with an email template of type kyc_decision.
+        if (!empty($owned['email'])) {
+            list($mail_subject, $mail_body) = bc_kyc_notification_message(
+                $decision,
+                $owned,
+                (string) getUserEmailTemplate('kyc_decision', 'subject'),
+                (string) getUserEmailTemplate('kyc_decision', 'body'),
+                (string) ($get_all_super_admin_site_details['site_title'] ?? '')
+            );
+            $flash .= sendVendorEmail($owned['email'], $mail_subject, $mail_body)
+                ? ' The user has been emailed.'
+                : ' The email to the user could not be sent.';
+        }
+        $_SESSION['product_purchase_response'] = $flash;
     }
     header("Location: KYCManagement.php?status=" . (int)($_POST['return_status'] ?? 1));
     exit();
@@ -211,7 +228,7 @@ if (isset($_GET['view'])) {
                         <div class="col-md-6">
                           <div class="border rounded-4 p-2 h-100" style="background:#f8f9fa;">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                              <span class="small fw-bold"><?php echo htmlspecialchars($kyc_doc_columns[$kind]['label']); ?></span>
+                              <span class="small fw-bold"><?php echo htmlspecialchars($kyc_doc_columns[$kind]['label']); ?><?php echo ($kind === 'selfie' && !empty($review_user['liveliness_picture'])) ? ' <span class="badge bg-success">live capture</span>' : ''; ?></span>
                               <a href="<?php echo $doc_url; ?>" target="_blank" rel="noopener" class="small">Open full size</a>
                             </div>
                             <?php if ($is_img): ?>
@@ -390,7 +407,7 @@ if (isset($_GET['view'])) {
                                                     <?php $doc_url = 'KYCManagement.php?uid=' . (int)$user['id'] . '&doc=' . urlencode($kind); ?>
                                                     <a href="<?php echo $doc_url; ?>" target="_blank" rel="noopener"
                                                        class="badge bg-primary text-decoration-none">
-                                                        <?php echo htmlspecialchars($kyc_doc_columns[$kind]['label']); ?>
+                                                        <?php echo htmlspecialchars($kyc_doc_columns[$kind]['label']); ?><?php echo ($kind === 'selfie' && !empty($user['liveliness_picture'])) ? ' &middot; live' : ''; ?>
                                                     </a>
                                                 <?php endforeach; ?>
                                             <?php endif; ?>

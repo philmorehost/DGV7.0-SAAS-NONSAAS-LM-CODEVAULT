@@ -22,7 +22,7 @@ if (isset($_POST['kyc_decision'])) {
     $reason   = trim(strip_tags($_POST['reason'] ?? ''));
     $decision = bc_kyc_decision($_POST['kyc_decision'] ?? '', $reason);
 
-    $target_q = mysqli_query($connection_server, "SELECT username FROM sas_users WHERE id='$uid' LIMIT 1");
+    $target_q = mysqli_query($connection_server, "SELECT username, email, firstname, lastname, vendor_id FROM sas_users WHERE id='$uid' LIMIT 1");
     $target   = $target_q ? mysqli_fetch_assoc($target_q) : null;
 
     if (!$decision || !$target) {
@@ -38,7 +38,31 @@ if (isset($_POST['kyc_decision'])) {
                 kyc_refresh_required='" . (int)$decision['refresh_required'] . "',
                 kyc_reviewed_at=NOW()
             WHERE id='$uid'");
-        $_SESSION['product_purchase_response'] = 'Global KYC ' . $decision['label'] . ' for @' . $target['username'] . '.';
+        $flash = 'Global KYC ' . $decision['label'] . ' for @' . $target['username'] . '.';
+
+        // Tell the user (their own vendor's SMTP, and that vendor's template if one exists).
+        // sendVendorEmail() otherwise picks its sending account from the logged-in vendor/admin or from
+        // resolveVendorID() - which on this host is the platform, not the user's vendor. resolveVendorID()
+        // honours $GLOBALS['vendor_id'] before the host lookup, so it is set for the duration of the send.
+        if (!empty($target['email'])) {
+            $previous_vendor_override = $GLOBALS['vendor_id'] ?? null;
+            $GLOBALS['vendor_id'] = (int)$target['vendor_id'];
+            list($mail_subject, $mail_body) = bc_kyc_notification_message(
+                $decision,
+                $target,
+                (string) getUserEmailTemplate('kyc_decision', 'subject'),
+                (string) getUserEmailTemplate('kyc_decision', 'body'),
+                (string) ($get_all_super_admin_site_details['site_title'] ?? '')
+            );
+            $mail_sent = sendVendorEmail($target['email'], $mail_subject, $mail_body);
+            if ($previous_vendor_override === null) {
+                unset($GLOBALS['vendor_id']);
+            } else {
+                $GLOBALS['vendor_id'] = $previous_vendor_override;
+            }
+            $flash .= $mail_sent ? ' The user has been emailed.' : ' The email to the user could not be sent.';
+        }
+        $_SESSION['product_purchase_response'] = $flash;
     }
     header("Location: KYCManagement.php?status=" . (int)($_POST['return_status'] ?? 1));
     exit();
