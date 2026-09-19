@@ -17,6 +17,10 @@ $gateway = mysqli_fetch_assoc($gateway_query);
 $secret_key = $gateway['secret_key'];
 
 $curl = curl_init();
+// cURL waits forever by default - bound the connect and the whole call so one slow provider cannot
+// hold this PHP worker open indefinitely.
+curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($curl, CURLOPT_TIMEOUT, 30);
 curl_setopt_array($curl, array(
     CURLOPT_URL => "https://api.paystack.co/transaction/verify/" . rawurlencode($reference),
     CURLOPT_RETURNTRANSFER => true,

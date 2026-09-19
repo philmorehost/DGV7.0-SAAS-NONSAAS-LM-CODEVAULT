@@ -166,6 +166,10 @@
                                     ];
 
                                     $curl = curl_init();
+// cURL waits forever by default - bound the connect and the whole call so one slow provider cannot
+// hold this PHP worker open indefinitely.
+curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($curl, CURLOPT_TIMEOUT, 30);
                                     curl_setopt_array($curl, array(
                                         CURLOPT_URL => "https://api.paystack.co/transaction/initialize",
                                         CURLOPT_RETURNTRANSFER => true,

@@ -122,6 +122,10 @@
 
 	function confirmPaymentDeposited($method,$url,$header,$json){
 		$ch = curl_init($url);
+// cURL waits forever by default - bound the connect and the whole call so one slow provider cannot
+// hold this PHP worker open indefinitely.
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 		curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
 		if($method == "POST") curl_setopt($ch,CURLOPT_POST,true);
 		if($method == "GET") curl_setopt($ch,CURLOPT_HTTPGET,true);

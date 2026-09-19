@@ -46,6 +46,10 @@
 
 	function confirmPaymentDeposited($method,$url,$header,$json){
 		$apiwalletBalance = curl_init($url);
+// cURL waits forever by default - bound the connect and the whole call so one slow provider cannot
+// hold this PHP worker open indefinitely.
+curl_setopt($apiwalletBalance, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($apiwalletBalance, CURLOPT_TIMEOUT, 30);
 		$apiwalletBalanceUrl = $url;
 		curl_setopt($apiwalletBalance,CURLOPT_URL,$apiwalletBalanceUrl);
 		curl_setopt($apiwalletBalance,CURLOPT_RETURNTRANSFER,true);
