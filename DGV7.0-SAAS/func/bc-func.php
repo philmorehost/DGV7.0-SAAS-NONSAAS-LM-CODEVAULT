@@ -4993,6 +4993,44 @@ function award_daily_bonus($user_id, $transaction_timestamp) {
  * min_points_conversion, and coins_email_threshold (the balance at which the
  * "how to convert" guide email is sent automatically).
  */
+if (!function_exists('bc_resolve_referral_id')) {
+    /**
+     * Resolve a referral code to the referrer's sas_users.id, or "" when it matches nobody.
+     *
+     * The code is the referrer's USERNAME - that is what web/Register.php matches on, what the web
+     * dashboard shares, and what web/api/referral.php hands out. The legacy api/app-backend/ stack
+     * instead issued base64_encode(username) (see api/app-backend/app-info.php "referral-code"), so
+     * a code copied out of an older build would silently fail to credit anyone. Both forms are
+     * accepted here, which is what makes the two generations of app interoperable.
+     */
+    function bc_resolve_referral_id($db, $vendor_id, $code) {
+        if (!$db) return "";
+        $code = strtolower(trim((string) $code));
+        if ($code === '') return "";
+
+        $candidates = [$code];
+
+        // Legacy base64(username). Only attempted when it decodes to something username-shaped, so
+        // a genuine username that happens to be valid base64 is still matched directly first.
+        $decoded = base64_decode($code, true);
+        if ($decoded !== false && $decoded !== '' && preg_match('/^[A-Za-z0-9_.\-]{3,225}$/', $decoded)) {
+            $candidates[] = strtolower($decoded);
+        }
+
+        $vid = (int) $vendor_id;
+        foreach ($candidates as $candidate) {
+            $stmt = mysqli_prepare($db, "SELECT id FROM sas_users WHERE vendor_id = ? AND LOWER(username) = ? LIMIT 1");
+            if (!$stmt) continue;
+            mysqli_stmt_bind_param($stmt, "is", $vid, $candidate);
+            mysqli_stmt_execute($stmt);
+            $q = mysqli_stmt_get_result($stmt);
+            $row = $q ? mysqli_fetch_assoc($q) : null;
+            if ($row) return (string) $row['id'];
+        }
+        return "";
+    }
+}
+
 function bc_get_coin_settings($vendor_id) {
     global $connection_server;
     $vendor_id = (int)$vendor_id;

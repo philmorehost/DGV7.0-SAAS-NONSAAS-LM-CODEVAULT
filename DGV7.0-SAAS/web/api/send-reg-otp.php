@@ -94,13 +94,9 @@ if (($select_vendor_table["reg_otp_enabled"] ?? 1) == 0) {
     $last_login = date('Y-m-d H:i:s.u');
 
     // Resolve referral
-    $referral_edited = "";
-    if (!empty($referral)) {
-        $ref_q = mysqli_query($connection_server, "SELECT id FROM sas_users WHERE vendor_id='$vendor_id' AND username='$referral' LIMIT 1");
-        if (mysqli_num_rows($ref_q) == 1) {
-            $referral_edited = (int)mysqli_fetch_array($ref_q)["id"];
-        }
-    }
+    $referral_edited = function_exists('bc_resolve_referral_id')
+        ? bc_resolve_referral_id($connection_server, $vendor_id, $referral)
+        : "";
 
     $q = "INSERT INTO sas_users (vendor_id, email, username, password, phone_number, balance, firstname, lastname, othername, home_address, referral_id, account_level, api_key, last_login, api_status, status) VALUES ('$vendor_id', '$email', '$user', '$pass_md5', '$phone', '0', '$first', '$last', '$other', '$address', '$referral_edited', '1', '$api_key', '$last_login', '2', '1')";
 

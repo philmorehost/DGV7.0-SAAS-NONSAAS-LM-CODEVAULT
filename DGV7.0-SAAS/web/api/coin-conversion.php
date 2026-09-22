@@ -99,7 +99,9 @@ if ($action === 'submit') {
 
 // Default (GET): settings + balance + history for the app's conversion screen.
 $history = [];
-$stmt = mysqli_prepare($connection_server, "SELECT id, points, amount, status, completion_date FROM sas_conversions WHERE vendor_id = ? AND username = ? ORDER BY id DESC LIMIT 20");
+// request_date is included because completion_date is NULL until an admin approves or declines,
+// so a pending request would otherwise be returned with no date at all.
+$stmt = mysqli_prepare($connection_server, "SELECT id, points, amount, status, request_date, completion_date FROM sas_conversions WHERE vendor_id = ? AND username = ? ORDER BY id DESC LIMIT 20");
 mysqli_stmt_bind_param($stmt, "is", $vendor_id, $username);
 mysqli_stmt_execute($stmt);
 $hq = mysqli_stmt_get_result($stmt);

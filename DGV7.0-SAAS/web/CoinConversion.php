@@ -152,7 +152,8 @@ if (isset($_POST["convert-coins"])) {
                             <?php else: ?>
                                 <?php foreach ($conversion_history as $conversion): ?>
                                     <tr>
-                                        <td><?php echo date("Y-m-d H:i", strtotime($conversion['date'])); ?></td>
+                                        <?php /* sas_conversions has request_date/completion_date - there is no "date" column, so the old strtotime($conversion['date']) rendered 1970-01-01. */ ?>
+                                        <td><?php echo date("Y-m-d H:i", strtotime($conversion['request_date'] ?? '')); ?></td>
                                         <td><?php echo number_format($conversion['points'], 0); ?></td>
                                         <td><?php echo number_format($conversion['amount'], 2); ?></td>
                                         <td>

@@ -50,13 +50,9 @@ if (mysqli_num_rows($check_user) > 0) {
     exit;
 }
 
-$referral_id = "";
-if (!empty($referral)) {
-    $check_ref = mysqli_query($connection_server, "SELECT id FROM sas_users WHERE vendor_id='$vendor_id' AND username='$referral' LIMIT 1");
-    if (mysqli_num_rows($check_ref) == 1) {
-        $referral_id = mysqli_fetch_assoc($check_ref)['id'];
-    }
-}
+$referral_id = function_exists('bc_resolve_referral_id')
+    ? bc_resolve_referral_id($connection_server, $vendor_id, $referral)
+    : "";
 
 $md5_pass = md5($pass);
 $api_key = substr(str_shuffle("abdcefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12345678901234567890"), 0, 50);
