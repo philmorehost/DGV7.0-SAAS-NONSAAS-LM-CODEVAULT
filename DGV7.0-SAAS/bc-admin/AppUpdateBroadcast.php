@@ -97,7 +97,12 @@
     $update_version_name = trim($app_update_settings["apk_version_name"] ?? "");
     if ($update_version_name === "") { $update_version_name = "1.0.0"; }
     $update_apk_filename = trim($app_update_settings["apk_filename"] ?? "");
-    if ($update_apk_filename === "") { $update_apk_filename = "datagifting-{$update_version_name}.apk"; }
+    if ($update_apk_filename === "") {
+        // Brand-aware default - see bc_app_brand_slug(). Must match the "<brand>-<version>.apk"
+        // the app requests, so this can no longer be one hardcoded brand name.
+        $__brand_slug = function_exists("bc_app_brand_slug") ? bc_app_brand_slug($connection_server, $vendor_id) : "";
+        $update_apk_filename = ($__brand_slug !== "" ? $__brand_slug . "-" : "") . $update_version_name . ".apk";
+    }
     $update_changelog    = trim($app_update_settings["changelog"] ?? "");
     $__update_host       = function_exists("bc_safe_host") ? bc_safe_host() : ($_SERVER["HTTP_HOST"] ?? "localhost");
 
@@ -248,7 +253,7 @@
           <div class="card info-card px-4 py-4">
             <h5 class="card-title">📣 Broadcast Update Notification</h5>
             <p class="text-muted">
-              Sends a push notification to all users who have the DataGifting app installed.
+              Sends a push notification to all users who have your app installed.
               Their app will immediately check for a new APK version and prompt them to update.
             </p>
             <p>
@@ -341,7 +346,7 @@
               <div class="mb-3" id="play-url-wrap">
                 <label class="form-label">Google Play Store URL</label>
                 <input type="url" name="play_store_url" class="form-control"
-                  placeholder="https://play.google.com/store/apps/details?id=com.datagifting.app"
+                  placeholder="https://play.google.com/store/apps/details?id=com.example.app"
                   value="<?php echo htmlspecialchars($play_store_url); ?>"/>
                 <div class="form-text">Required while the source is Google Play. Clearing it makes the app report “up to date” again.</div>
               </div>
@@ -363,7 +368,7 @@
                 <div class="col-md-6 mb-3" id="apk-file-wrap">
                   <label class="form-label">APK filename (local host only)</label>
                   <input type="text" name="apk_filename" class="form-control"
-                    placeholder="datagifting-1.1.0.apk"
+                    placeholder="<?php echo htmlspecialchars($update_apk_filename); ?>"
                     value="<?php echo htmlspecialchars($update_apk_filename); ?>"/>
                   <div class="form-text">Must exist in <code>/apk/</code>; otherwise the app is told it is up to date.</div>
                 </div>

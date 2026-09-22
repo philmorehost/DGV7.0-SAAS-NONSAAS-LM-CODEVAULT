@@ -5,15 +5,15 @@
  * Returns the latest Android APK version info so the app can prompt the user
  * to update when a newer version is available.
  *
- * The admin uploads the APK to the cPanel file manager (e.g. /apk/datagifting.apk)
- * and updates the version info below.
+ * The admin uploads the APK to the cPanel file manager (e.g. /apk/<brand>-1.1.0.apk)
+ * and updates the version info below. "<brand>" defaults to this vendor's site title.
  *
  * Response (when an update is available):
  *   {
  *     "status":       "update_available",
  *     "version_code": 2,
  *     "version_name": "1.1.0",
- *     "apk_url":      "https://yourdomain.com/apk/datagifting-1.1.0.apk",
+ *     "apk_url":      "https://yourdomain.com/apk/<brand>-1.1.0.apk",
  *     "changelog":    "Bug fixes and performance improvements."
  *   }
  *
@@ -67,7 +67,14 @@ if ($vendor_id > 0 && $connection_server) {
         // The changelog default is declared further down, so it is applied there instead of here.
     }
 }
-if ($apk_filename === "") { $apk_filename = "datagifting-{$latest_version_name}.apk"; }
+if ($apk_filename === "") {
+    // Brand-aware default, matching the "<brand>-<version>.apk" the app itself requests
+    // (AppUpdateManager.downloadAndInstall). A hardcoded brand here pointed every other brand
+    // at a file that cannot exist, and the file_exists() gate below then reported "up_to_date"
+    // for ever. Falls back to the unbranded "<version>.apk" if the brand is unknown.
+    $__brand_slug = function_exists("bc_app_brand_slug") ? bc_app_brand_slug($connection_server, $vendor_id) : "";
+    $apk_filename = ($__brand_slug !== "" ? $__brand_slug . "-" : "") . $latest_version_name . ".apk";
+}
 
 $host = function_exists("bc_safe_host") ? bc_safe_host() : ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $apk_url = "https://{$host}/apk/{$apk_filename}";

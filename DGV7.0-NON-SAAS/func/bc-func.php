@@ -167,7 +167,30 @@ function bc_cache_set($key, $value) {
     @file_put_contents($path, json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 }
 
-// STANDALONE: resolveVendorID() always returns 1 — single tenant installation
+if (!function_exists('bc_app_brand_slug')) {
+    /**
+     * Brand slug for this vendor, derived from sas_site_details.site_title.
+     *
+     * Used to build the default APK filename "<brand>-<version>.apk", which is the naming the
+     * app itself expects (see AppUpdateManager.downloadAndInstall). This default used to be a
+     * hardcoded "datagifting-" in every installation, so a JIKABIZ or MZEEVTU update check
+     * pointed at a file that could never exist - and because app-update.php only reports an
+     * update when the APK is actually on disk, those brands were silently told "up to date".
+     *
+     * Returns "" when the brand cannot be determined, so callers fall back to "<version>.apk".
+     */
+    function bc_app_brand_slug($db, $vendor_id) {
+        if (!$db || (int) $vendor_id <= 0) return "";
+        $row = null;
+        $q = mysqli_query($db, "SELECT site_title FROM sas_site_details WHERE vendor_id='" . (int) $vendor_id . "' LIMIT 1");
+        if ($q && mysqli_num_rows($q) > 0) { $row = mysqli_fetch_assoc($q); }
+        $title = trim((string) ($row['site_title'] ?? ''));
+        if ($title === '') return "";
+        return trim(strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', $title)), '-');
+    }
+}
+
+// STANDALONE: resolveVendorID() always returns 1 - single tenant installation
 if (function_exists('resolveVendorID')) return;
 function resolveVendorID($force_recompute = false) {
     return 1;
