@@ -4188,7 +4188,10 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
         $log("Target: USER ($username)");
         $u_esc = mysqli_real_escape_string($connection_server, $username);
 
-        $ref_match_sql = "(api_reference='$transaction_ref' OR reference='$transaction_ref')";
+        // Escape the gateway reference before it enters SQL: it comes from PayHub's response and
+        // was previously interpolated raw, so a quote in it would break the query outright.
+        $tx_ref_esc_match = mysqli_real_escape_string($connection_server, $transaction_ref);
+        $ref_match_sql = "(api_reference='$tx_ref_esc_match' OR reference='$tx_ref_esc_match')";
         if (!empty($meta['reference'])) {
             $m_ref_esc = mysqli_real_escape_string($connection_server, $meta['reference']);
             $ref_match_sql = "($ref_match_sql OR reference='$m_ref_esc' OR api_reference='$m_ref_esc')";
@@ -4202,16 +4205,28 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
         // processPayhubSuccess already handles this, but let's be explicit in the log
         $log("Matching via SQL: $ref_match_sql");
 
-        $q_existing = mysqli_query($connection_server, "SELECT id, reference, status FROM sas_transactions WHERE vendor_id='$vendor_id' AND $ref_match_sql LIMIT 1");
-        if ($tx = mysqli_fetch_assoc($q_existing)) {
+        // sas_transactions has NO `id` column - it is keyless (see the table definition in
+        // func/bc-tables.php, and the live schema). Selecting `id` made MySQL reject the statement
+        // with "Unknown column 'id'", mysqli_query() returned false, and the unguarded
+        // mysqli_fetch_assoc(false) raised a TypeError that white-screened the success page for
+        // every paying customer. Identify the row by `reference` instead: it is NOT NULL and it is
+        // the same key the INSERT and alterTransaction() already use.
+        $q_existing = mysqli_query($connection_server, "SELECT reference, status FROM sas_transactions WHERE vendor_id='$vendor_id' AND $ref_match_sql LIMIT 1");
+        if (!$q_existing) {
+            $log("SQL ERROR (user transaction lookup): " . mysqli_error($connection_server) . " | ref_match_sql: $ref_match_sql");
+        }
+        if ($q_existing && ($tx = mysqli_fetch_assoc($q_existing))) {
             if ($tx['status'] != 1) {
                 $user_q = mysqli_query($connection_server, "SELECT balance FROM sas_users WHERE vendor_id='$vendor_id' AND username='$u_esc' LIMIT 1");
-                $user_r = mysqli_fetch_assoc($user_q);
+                $user_r = $user_q ? mysqli_fetch_assoc($user_q) : null;
                 $bal_before = (float)($user_r['balance'] ?? 0);
                 $bal_after = $bal_before + $amount_deposited;
 
                 mysqli_query($connection_server, "UPDATE sas_users SET balance='$bal_after' WHERE vendor_id='$vendor_id' AND username='$u_esc'");
-                mysqli_query($connection_server, "UPDATE sas_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited', api_reference='$transaction_ref' WHERE id='".$tx['id']."'");
+                $tx_local_ref_esc = mysqli_real_escape_string($connection_server, $tx['reference']);
+                if (!mysqli_query($connection_server, "UPDATE sas_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited', api_reference='$tx_ref_esc_match' WHERE vendor_id='$vendor_id' AND reference='$tx_local_ref_esc'")) {
+                    $log("SQL ERROR (user credit update): " . mysqli_error($connection_server));
+                }
 
                 $log("User Credited (Existing record updated). New Bal: $bal_after");
                 syncPayhubVirtualAccounts($vendor_id, $customer_email, false, $username);
@@ -4231,7 +4246,10 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
         // Vendor Funding
         $log("Target: VENDOR ($vendor_id)");
         $q_vendor = mysqli_query($connection_server, "SELECT id, email, balance FROM sas_vendors WHERE id='$vendor_id' LIMIT 1");
-        if ($rv = mysqli_fetch_assoc($q_vendor)) {
+        if (!$q_vendor) {
+            $log("SQL ERROR (vendor lookup): " . mysqli_error($connection_server));
+        }
+        if ($q_vendor && ($rv = mysqli_fetch_assoc($q_vendor))) {
 
             // Check for service activation in metadata or transaction record
             $is_plisio_activation = (($meta['product_unique_id'] ?? '') == 'plisio_activation' || ($meta['target'] ?? '') == 'plisio_activation');
@@ -4250,23 +4268,30 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
             // product_unique_id must be SELECTed: the activation branches below read it from this
             // row, and reading a column that was never fetched yielded an undefined-key warning and
             // silently treated a plisio/payout activation as ordinary wallet funding.
-            $select_transaction_history = mysqli_query($connection_server,"SELECT id, reference, status, product_unique_id FROM sas_vendor_transactions WHERE vendor_id='$vendor_id' && $ref_match_sql LIMIT 1");
-            if ($vtx = mysqli_fetch_assoc($select_transaction_history)) {
+            // Same reason as the user branch above: sas_vendor_transactions is keyless too, so
+            // selecting `id` made this query fail and the unguarded fetch_assoc() fatal. Key on
+            // `reference`, which the UPDATEs below now use as well.
+            $select_transaction_history = mysqli_query($connection_server,"SELECT reference, status, product_unique_id FROM sas_vendor_transactions WHERE vendor_id='$vendor_id' && $ref_match_sql LIMIT 1");
+            if (!$select_transaction_history) {
+                $log("SQL ERROR (vendor transaction lookup): " . mysqli_error($connection_server));
+            }
+            if ($select_transaction_history && ($vtx = mysqli_fetch_assoc($select_transaction_history))) {
+                $vtx_ref_esc = mysqli_real_escape_string($connection_server, $vtx['reference']);
                 if ($vtx['status'] != 1) {
                     $bal_before = (float)($rv['balance'] ?? 0);
                     $bal_after = $bal_before + $amount_deposited;
 
                     if ($is_plisio_activation || $vtx['product_unique_id'] == 'plisio_activation') {
                         mysqli_query($connection_server, "UPDATE sas_vendors SET plisio_activated=1 WHERE id='$vendor_id'");
-                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_before', discounted_amount='$amount_deposited' WHERE id='".$vtx['id']."'");
+                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_before', discounted_amount='$amount_deposited' WHERE vendor_id='$vendor_id' AND reference='$vtx_ref_esc'");
                         $log("Vendor Plisio Activated (Existing record).");
                     } elseif ($is_payout_activation || $vtx['product_unique_id'] == 'payout_activation') {
                         mysqli_query($connection_server, "UPDATE sas_vendors SET payout_activated=1 WHERE id='$vendor_id'");
-                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_before', discounted_amount='$amount_deposited' WHERE id='".$vtx['id']."'");
+                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_before', discounted_amount='$amount_deposited' WHERE vendor_id='$vendor_id' AND reference='$vtx_ref_esc'");
                         $log("Vendor Payout Module Activated (Existing record).");
                     } else {
                         mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$bal_after' WHERE id='$vendor_id'");
-                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited' WHERE id='".$vtx['id']."'");
+                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited' WHERE vendor_id='$vendor_id' AND reference='$vtx_ref_esc'");
                         $log("Vendor Credited (Existing record updated). New Bal: $bal_after");
                     }
 

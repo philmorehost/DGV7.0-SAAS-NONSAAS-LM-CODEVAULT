@@ -2026,6 +2026,27 @@ if (!in_array('product_unique_id', $ai_tx_existing)) {
     mysqli_query($connection_server, "ALTER TABLE sas_transactions ADD COLUMN `product_unique_id` VARCHAR(225) NOT NULL DEFAULT '' AFTER product_id");
 }
 
+// ─── ID COLUMN MIGRATION: sas_transactions / sas_vendor_transactions ──
+// Both tables are created WITHOUT an `id` column (they are keyless), yet parts of the app address
+// rows by it: processPayhubSuccess, the ORDER BY id in the AI context builders, and the backup
+// transaction lookups. Where the column is missing those statements fail outright with
+// "Unknown column 'id'", and an unguarded mysqli_fetch_assoc() on the false result fatals the
+// page - that is what broke the PayHub success handler on a real payment. Add it once, appended
+// (no FIRST) so existing SELECT * column positions do not shift. Checked per request, so it stops
+// as soon as the column exists.
+foreach (["sas_transactions", "sas_vendor_transactions"] as $id_tx_table) {
+    $id_cols_q = mysqli_query($connection_server, "SHOW COLUMNS FROM `$id_tx_table`");
+    $id_col_exists = false;
+    if ($id_cols_q) {
+        while ($id_col = mysqli_fetch_assoc($id_cols_q)) {
+            if (strcasecmp($id_col['Field'], 'id') === 0) { $id_col_exists = true; break; }
+        }
+    }
+    if ($id_cols_q && !$id_col_exists) {
+        mysqli_query($connection_server, "ALTER TABLE `$id_tx_table` ADD COLUMN `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY");
+    }
+}
+
 // ─── AI GLOBAL OPTIONS: sas_super_admin_options ────────────
 // Insert only if key does not already exist
 $ai_global_options = [
