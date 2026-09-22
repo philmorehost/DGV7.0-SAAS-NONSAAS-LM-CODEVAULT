@@ -50,6 +50,21 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
             findNavController().safeNavigate(R.id.action_profile_to_nin)
         }
 
+        // Rewards: referral, coin conversion and the coin ledger. All three are backed by the
+        // same server code the website uses (web/api/referral.php, coin-conversion.php,
+        // points-history.php), so the numbers match across surfaces.
+        binding.btnReferral.setOnClickListener {
+            findNavController().safeNavigate(R.id.action_profile_to_referral)
+        }
+
+        binding.btnCoins.setOnClickListener {
+            findNavController().safeNavigate(R.id.action_profile_to_coins)
+        }
+
+        binding.btnPointsHistory.setOnClickListener {
+            findNavController().safeNavigate(R.id.action_profile_to_points_history)
+        }
+
         // Dark mode toggle
         binding.switchDarkMode.isChecked = prefs.getBoolean(Constants.KEY_DARK_MODE, false)
         binding.switchDarkMode.setOnCheckedChangeListener { _, isChecked ->

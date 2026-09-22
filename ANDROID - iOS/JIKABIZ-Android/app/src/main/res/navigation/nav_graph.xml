@@ -69,6 +69,12 @@
             app:destination="@id/nav_set_pin" />
         <action android:id="@+id/action_profile_to_kyc"
             app:destination="@id/nav_kyc" />
+        <action android:id="@+id/action_profile_to_referral"
+            app:destination="@id/nav_referral" />
+        <action android:id="@+id/action_profile_to_coins"
+            app:destination="@id/nav_coins" />
+        <action android:id="@+id/action_profile_to_points_history"
+            app:destination="@id/nav_points_history" />
         <action android:id="@+id/action_profile_to_nin"
             app:destination="@id/nav_nin_card" />
     </fragment>
@@ -175,5 +181,20 @@
         android:name="com.jikabiz.app.ui.profile.KYCFragment"
         android:label="KYC Verification"
         tools:layout="@layout/fragment_kyc" />
+
+    <fragment android:id="@+id/nav_referral"
+        android:name="com.jikabiz.app.ui.rewards.ReferralFragment"
+        android:label="Refer and Earn"
+        tools:layout="@layout/fragment_referral" />
+
+    <fragment android:id="@+id/nav_coins"
+        android:name="com.jikabiz.app.ui.rewards.CoinsFragment"
+        android:label="Convert Coins"
+        tools:layout="@layout/fragment_coins" />
+
+    <fragment android:id="@+id/nav_points_history"
+        android:name="com.jikabiz.app.ui.rewards.PointsHistoryFragment"
+        android:label="Points History"
+        tools:layout="@layout/fragment_points_history" />
 
 </navigation>

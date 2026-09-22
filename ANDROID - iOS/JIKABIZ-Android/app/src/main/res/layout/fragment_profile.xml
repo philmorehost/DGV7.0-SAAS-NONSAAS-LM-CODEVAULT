@@ -228,6 +228,56 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Rewards Card -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Rewards"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="12dp" />
+
+                    <Button
+                        android:id="@+id/btn_referral"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="Refer and Earn"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"
+                        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+                    <Button
+                        android:id="@+id/btn_coins"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="Convert Coins"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp"
+                        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+                    <Button
+                        android:id="@+id/btn_points_history"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="Points History"
+                        android:textSize="14sp"
+                        style="@style/Widget.Material3.Button.OutlinedButton" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- Support Card -->
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"

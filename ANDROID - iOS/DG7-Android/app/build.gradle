@@ -76,6 +76,10 @@ android {
     }
     buildFeatures {
         viewBinding true
+        // AGP 8 made BuildConfig opt-in. SplashActivity reads BuildConfig.VERSION_NAME so the
+        // splash version label tracks the installed APK; without this the build fails with
+        // "Unresolved reference: BuildConfig".
+        buildConfig true
     }
 
     lint {
