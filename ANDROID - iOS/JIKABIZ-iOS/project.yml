@@ -22,6 +22,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.jikabiz.app
         # Without this the springboard name falls back to the target name ("JIKABIZ-iOS").
         INFOPLIST_KEY_CFBundleDisplayName: JIKABIZ
+        # Points the app at JIKABIZ/Assets.xcassets/AppIcon.appiconset. Without it the icon set
+        # is copied into the bundle but never used, and the app ships with the blank default icon.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
