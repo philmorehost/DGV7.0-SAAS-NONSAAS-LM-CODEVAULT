@@ -211,4 +211,25 @@ interface VtuApiService {
         @Body body: Map<String, Any>
     ): retrofit2.Response<Map<String, Any>>
 
+
+    // ---- Referral & VTU Coins ----
+    // The code is the username and the share link is the same
+    // <host>/web/Register.php?referral=<username> the website copies, so counts and
+    // credits stay consistent whichever surface the user came through.
+    @POST("web/api/referral.php")
+    suspend fun getReferral(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
+
+    /** Coin ledger history (earned/redeemed), mirroring the website Points History page. */
+    @POST("web/api/points-history.php")
+    suspend fun getPointsHistory(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
+
+    /**
+     * VTU Coins -> wallet conversion.
+     *
+     * One method covers both modes because the endpoint switches on `action`:
+     *   no action            -> balance, rate, minimum and conversion history
+     *   action=submit+points -> submits a request (pending admin approval)
+     */
+    @POST("web/api/coin-conversion.php")
+    suspend fun coinConversion(@Body body: @JvmSuppressWildcards Map<String, Any>): Response<Map<String, Any>>
 }
