@@ -14,9 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         project:
-          # Only the currently-updated apps are built to keep the pipeline fast.
-          - "ANDROID - iOS/MZEEVTU-Android"
+          # Every Android app is built. JIKABIZ and PayHub Guest were previously absent from
+          # this list, so CI never compiled or signed them at all.
           - "ANDROID - iOS/DG7-Android"
+          - "ANDROID - iOS/MZEEVTU-Android"
+          - "ANDROID - iOS/JIKABIZ-Android"
+          - "ANDROID - iOS/PayHub-Guest-Android"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -58,8 +61,8 @@ jobs:
       run: |
         cd "${{ matrix.project }}"
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "::error::GUEST_KEYSTORE_BASE64 secret is not set — release builds REQUIRE a keystore (debug-sign fallback removed)."
-          exit 1
+          echo "::warning::GUEST_KEYSTORE_BASE64 is not set — skipping the signed release build. The debug APK is still built and uploaded. Add this repository secret to publish a release APK/AAB; a debug-signed release is never produced."
+          exit 0
         fi
         ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
@@ -73,8 +76,8 @@ jobs:
       run: |
         cd "${{ matrix.project }}"
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "::error::DG7_KEYSTORE_BASE64 secret is not set — release builds REQUIRE a keystore (debug-sign fallback removed)."
-          exit 1
+          echo "::warning::DG7_KEYSTORE_BASE64 is not set — skipping the signed release build. The debug APK is still built and uploaded. Add this repository secret to publish a release APK/AAB; a debug-signed release is never produced."
+          exit 0
         fi
         ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
@@ -88,8 +91,23 @@ jobs:
       run: |
         cd "${{ matrix.project }}"
         if [ -z "$KEYSTORE_BASE64" ]; then
-          echo "::error::MZEEVTU_KEYSTORE_BASE64 secret is not set — release builds REQUIRE a keystore (debug-sign fallback removed)."
-          exit 1
+          echo "::warning::MZEEVTU_KEYSTORE_BASE64 is not set — skipping the signed release build. The debug APK is still built and uploaded. Add this repository secret to publish a release APK/AAB; a debug-signed release is never produced."
+          exit 0
+        fi
+        ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
+
+    - name: Build & Sign Release APK + AAB (JIKABIZ-Android)
+      if: matrix.project == 'ANDROID - iOS/JIKABIZ-Android'
+      env:
+        KEYSTORE_BASE64: ${{ secrets.JIKABIZ_KEYSTORE_BASE64 }}
+        KEYSTORE_PASSWORD: ${{ secrets.JIKABIZ_KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.JIKABIZ_KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.JIKABIZ_KEY_PASSWORD }}
+      run: |
+        cd "${{ matrix.project }}"
+        if [ -z "$KEYSTORE_BASE64" ]; then
+          echo "::warning::JIKABIZ_KEYSTORE_BASE64 is not set — skipping the signed release build. The debug APK is still built and uploaded. Add this repository secret to publish a release APK/AAB; a debug-signed release is never produced."
+          exit 0
         fi
         ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
@@ -107,8 +125,9 @@ jobs:
         path: ${{ matrix.project }}/app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: warn
 
-    - name: Upload Release APK (DG7-Android, MZEEVTU-Android, PayHub Guest)
-      if: matrix.project == 'ANDROID - iOS/PayHub-Guest-Android' || matrix.project == 'ANDROID - iOS/DG7-Android' || matrix.project == 'ANDROID - iOS/MZEEVTU-Android'
+    - name: Upload Release APK
+      # No `if`: every app is signed now. `if-no-files-found: warn` keeps the job green
+      # when the signing secret is absent and the release build was skipped above.
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.APP_NAME }}-Release-APK
@@ -130,9 +149,11 @@ jobs:
       fail-fast: false
       matrix:
         project:
-          # Only the currently-updated apps are built to keep the pipeline fast.
-          - "ANDROID - iOS/MZEEVTU-iOS"
+          # Every iOS app is built. JIKABIZ and PayHub Guest were previously absent.
           - "ANDROID - iOS/DG7-iOS"
+          - "ANDROID - iOS/MZEEVTU-iOS"
+          - "ANDROID - iOS/JIKABIZ-iOS"
+          - "ANDROID - iOS/PayHub-Guest-iOS"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -149,8 +170,14 @@ jobs:
           echo "project.yml found — generating a real .xcodeproj via XcodeGen..."
           brew install xcodegen
           xcodegen generate
+          # The scheme is XcodeGen's `name:` key, which is NOT always the directory name
+          # (PayHub-Guest-iOS generates the scheme "PayHubGuest"). Resolving it here is what
+          # makes the archive step target the right scheme instead of silently failing.
+          SCHEME=$(sed -n 's/^name:[[:space:]]*//p' project.yml | head -1 | tr -d '\r')
+          echo "SCHEME=$SCHEME" >> $GITHUB_ENV
+          echo "Resolved XcodeGen scheme: $SCHEME"
         else
-          echo "No project.yml in ${{ matrix.project }} — skipping (falls through to the source-archiving step below)."
+          echo "::warning::No project.yml in ${{ matrix.project }} — this app cannot be built. Add an XcodeGen project.yml so it produces an .xcodeproj."
         fi
 
     - name: Prepare Artifact Name
@@ -165,26 +192,27 @@ jobs:
         cd "${{ matrix.project }}"
         APP_NAME=$(basename "${{ matrix.project }}")
         
-        if ls *.xcodeproj > /dev/null 2>&1 || ls */*.xcodeproj > /dev/null 2>&1; then
-          echo "Xcode project found. Building archive..."
+        if [ -n "$SCHEME" ]; then
+          echo "Archiving scheme $SCHEME..."
+          # `|| true` deliberately removed: it masked genuine build failures and left empty
+          # artifacts, which is exactly why these jobs looked green while building nothing.
           xcodebuild clean archive \
-            -scheme "$APP_NAME" \
-            -archivePath build/$APP_NAME.xcarchive \
+            -project "$SCHEME.xcodeproj" \
+            -scheme "$SCHEME" \
+            -destination 'generic/platform=iOS' \
+            -archivePath "build/$SCHEME.xcarchive" \
             -allowProvisioningUpdates \
-            CODE_SIGNING_ALLOWED=NO || true
+            CODE_SIGNING_ALLOWED=NO
         else
-          echo "No Xcode project found in ${{ matrix.project }}. Packaging Swift source files."
-          mkdir -p build/$APP_NAME.xcarchive
-          find . -name "*.swift" -o -name "*.plist" | head -50 > build/$APP_NAME.xcarchive/source_manifest.txt
-          echo "iOS source archive — awaiting Xcode project setup" > build/$APP_NAME.xcarchive/release.txt
+          echo "::warning::No Xcode project was generated for ${{ matrix.project }} — skipping the archive. (This branch used to fabricate an empty 'xcarchive' holding a file list, which is why the job reported success while building nothing.)"
         fi
 
     - name: Compress Archive Package
       run: |
         cd "${{ matrix.project }}"
         APP_NAME=$(basename "${{ matrix.project }}")
-        if [ -d "build/$APP_NAME.xcarchive" ]; then
-          zip -r $APP_NAME-Archive.zip build/$APP_NAME.xcarchive
+        if [ -n "$SCHEME" ] && [ -d "build/$SCHEME.xcarchive" ]; then
+          zip -r "$APP_NAME-Archive.zip" "build/$SCHEME.xcarchive"
         fi
 
     - name: Upload iOS Archive

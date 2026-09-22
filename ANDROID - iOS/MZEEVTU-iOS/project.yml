@@ -1,0 +1,48 @@
+# XcodeGen configuration for MZEEVTU-iOS.
+# Generates a real .xcodeproj so the app can be archived/signed.
+#
+# This file was MISSING, which is why the iOS CI job never actually built this app: without a
+# project.yml the workflow had no .xcodeproj to archive, so it just packaged a list of source
+# files and reported success.
+#
+# Bundle identifier: com.mzeevtu.apprelease (matches MZEEVTU-Android applicationId).
+# Build: xcodegen generate  (CI runs this automatically when project.yml exists)
+name: MZEEVTU-iOS
+
+options:
+  xcodeVersion: "15.0"
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+targets:
+  MZEEVTU-iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      # The app lives one level down (MZEEVTU-iOS/MZEEVTU-iOS); KYCView.swift sits beside it.
+      - MZEEVTU-iOS
+      - KYCView.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mzeevtu.apprelease
+        # Without this the springboard name falls back to the target name.
+        INFOPLIST_KEY_CFBundleDisplayName: MZEEVTU
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        # Kept in step with MZEEVTU-Android (versionName 1.0.9 / versionCode 10).
+        MARKETING_VERSION: "1.0.9"
+        CURRENT_PROJECT_VERSION: "10"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+    dependencies:
+      # KYCView.swift imports VoveSDK, so the package is required for this target to compile.
+      - package: VoveSDK
+        url: https://github.com/vove-id/vove-id-ios
+        requirement: upToNextMajor(from: "1.5.0")

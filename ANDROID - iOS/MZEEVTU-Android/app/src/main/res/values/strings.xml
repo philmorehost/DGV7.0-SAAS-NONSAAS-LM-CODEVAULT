@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MZEEVTU</string>
+    <!-- Splash tagline. The version label is NOT hardcoded here: SplashActivity reads it from
+         BuildConfig.VERSION_NAME so it can never drift from the installed APK. -->
+    <string name="app_tagline">Fast · Secure · Reliable</string>
+    <string name="app_version_format">v%1$s</string>
+    <string name="receipt_thanks">Thank you for using MZEEVTU</string>
     <string name="action_login">Login</string>
     <string name="action_register">Register</string>
     <string name="action_logout">Logout</string>

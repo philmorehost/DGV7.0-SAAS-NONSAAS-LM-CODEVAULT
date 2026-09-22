@@ -41,7 +41,7 @@
                     android:id="@+id/tv_receipt_app_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="MZEEVTU"
+                    android:text="@string/app_name"
                     android:textSize="13sp"
                     android:textColor="@color/text_secondary"
                     android:gravity="center"
@@ -241,7 +241,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Thank you for using MZEEVTU"
+                    android:text="@string/receipt_thanks"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary"
                     android:gravity="center" />

@@ -31,8 +31,10 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "1.0.2"
-        CURRENT_PROJECT_VERSION: "3"
+        # Kept in step with JIKABIZ-Android (versionName 1.0.3 / versionCode 4). They had
+        # drifted apart, so the same build was reporting two different versions per platform.
+        MARKETING_VERSION: "1.0.3"
+        CURRENT_PROJECT_VERSION: "4"
         CODE_SIGN_STYLE: Automatic
         ENABLE_USER_SCRIPT_SANDBOXING: YES
 

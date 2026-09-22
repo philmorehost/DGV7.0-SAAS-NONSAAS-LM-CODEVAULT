@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.animation.LinearInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.jikabiz.app.BuildConfig
 import com.jikabiz.app.R
 import com.jikabiz.app.api.RetrofitClient
 import com.jikabiz.app.databinding.ActivitySplashBinding
@@ -33,6 +34,10 @@ class SplashActivity : AppCompatActivity() {
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Read the version from the build rather than hardcoding it — the old literal
+        // "v1.0.0" never changed when versionName was bumped, so it was 3 releases stale.
+        binding.tvVersion.text = getString(R.string.app_version_format, BuildConfig.VERSION_NAME)
+
         // Spin logo once (360° in 900ms)
         ObjectAnimator.ofFloat(binding.ivLogo, "rotation", 0f, 360f).apply {
             duration = 900
@@ -48,7 +53,15 @@ class SplashActivity : AppCompatActivity() {
                     @Suppress("UNCHECKED_CAST")
                     val data = resp.body()?.get("data") as? Map<String, Any>
                     data?.let {
-                        prefs.saveString(com.jikabiz.app.util.Constants.KEY_SITE_TITLE, it["site_title"] as? String ?: "JIKABIZ")
+                        // Show the server's brand on the splash so it can be changed from the
+                        // admin panel without shipping a new APK. @string/app_name — the brand
+                        // compiled into this APK — is the fallback when the server sends none.
+                        val siteTitle = (it["site_title"] as? String)?.takeIf { t -> t.isNotBlank() }
+                        prefs.saveString(
+                            com.jikabiz.app.util.Constants.KEY_SITE_TITLE,
+                            siteTitle ?: getString(R.string.app_name)
+                        )
+                        if (siteTitle != null) binding.tvAppName.text = siteTitle
                         prefs.saveString(com.jikabiz.app.util.Constants.KEY_LOGO_URL, it["logo_url"] as? String ?: "")
                         prefs.saveString(com.jikabiz.app.util.Constants.KEY_PRIMARY_COLOR, it["primary_color"] as? String ?: "#0d6efd")
                         val support = it["support"] as? Map<*, *>
