@@ -1863,6 +1863,35 @@ function get_user_info($username_or_email, $column_name)
 }
 
 
+/**
+ * getSMTPUserForHeaders()
+ * Returns a valid smtp_user email address for use in From: headers.
+ * This ensures RFC 5322 compliance even in CLI/cron contexts where
+ * $_SERVER["HTTP_HOST"] is empty, which was causing Gmail 550 5.7.1 rejections.
+ *
+ * Ported from the SAAS edition: NON-SAAS called this from beeMailer() and
+ * sendVendorEmail() but never defined it, so any code path that sent mail -
+ * including saving the Account Settings security tab - died with
+ * "Call to undefined function getSMTPUserForHeaders()".
+ */
+function getSMTPUserForHeaders($connection_server) {
+    // Try vendor SMTP first
+    $vid = resolveVendorID();
+    if ($vid > 0) {
+        $q = mysqli_query($connection_server, "SELECT smtp_user FROM sas_vendors WHERE id='$vid' LIMIT 1");
+        if ($q && ($r = mysqli_fetch_assoc($q)) && !empty($r['smtp_user'])) {
+            return $r['smtp_user'];
+        }
+    }
+    // Fall back to super admin SMTP
+    $q = mysqli_query($connection_server, "SELECT smtp_user FROM sas_super_admin LIMIT 1");
+    if ($q && ($r = mysqli_fetch_assoc($q)) && !empty($r['smtp_user'])) {
+        return $r['smtp_user'];
+    }
+    // Last resort default (same as bc-mailer.php)
+    return 'notification@cheaperdata.com.ng';
+}
+
 function beeMailer($recipient_email, $email_subject, $email_body)
 {
 
