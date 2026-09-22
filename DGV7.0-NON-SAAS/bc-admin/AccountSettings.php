@@ -1744,29 +1744,6 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                     <input name="google-client-id" type="text" value="<?php echo $get_logged_admin_details['google_client_id']; ?>" class="form-control" placeholder="e.g. 12345678-abc.apps.googleusercontent.com" />
                                 </div>
 
-                                <?php $demo_state = bc_demo_state($connection_server); ?>
-                                <div class="card border border-warning border-opacity-50 rounded-4 shadow-none mb-4">
-                                    <div class="card-body p-4">
-                                        <h6 class="fw-bold mb-2"><i class="bi bi-toggle2-on me-2 text-warning"></i>Website Demo Mode</h6>
-                                        <p class="text-muted small">Demo mode snapshots the locked site settings, APIs, service controls, vendor settings and templates. Testers may change them temporarily; switching back to Production restores the snapshot.</p>
-                                        <?php if (!bc_demo_has_lock_key($connection_server)): ?>
-                                            <div class="alert alert-warning small">Set the security lock key before changing Demo/Production mode. This key is separate from your login password and is required to restore Production.</div>
-                                            <form method="post" class="row g-2">
-                                                <div class="col-md-5"><input type="password" name="demo_lock_key" class="form-control" minlength="10" placeholder="New security lock key" required></div>
-                                                <div class="col-md-5"><input type="password" name="demo_lock_key_confirm" class="form-control" minlength="10" placeholder="Confirm lock key" required></div>
-                                                <div class="col-md-2"><button name="set-demo-lock-key" class="btn btn-warning w-100 fw-bold">Save Key</button></div>
-                                            </form>
-                                        <?php else: ?>
-                                            <form method="post" class="row g-2 align-items-end">
-                                                <div class="col-md-3"><label class="form-label small fw-bold">CURRENT MODE</label><div class="form-control bg-light fw-bold text-uppercase"><?php echo htmlspecialchars($demo_state['mode']); ?></div></div>
-                                                <div class="col-md-3"><label class="form-label small fw-bold">CHANGE TO</label><select name="demo_mode" class="form-select"><option value="demo" <?php echo $demo_state['mode'] === 'demo' ? 'selected' : ''; ?>>Demo</option><option value="production" <?php echo $demo_state['mode'] === 'production' ? 'selected' : ''; ?>>Production</option></select></div>
-                                                <div class="col-md-4"><label class="form-label small fw-bold">SECURITY LOCK KEY</label><input type="password" name="demo_lock_key" class="form-control" placeholder="Enter lock key" required></div>
-                                                <div class="col-md-2"><button name="change-demo-mode" class="btn btn-warning w-100 fw-bold">Apply</button></div>
-                                            </form>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-
                                 <hr class="my-4">
                                 <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock me-2 text-danger"></i>Admin Security PIN</h6>
                                 <p class="small text-muted">Set a 4-digit PIN for sensitive admin actions like editing blog posts or crediting users.</p>
@@ -1828,6 +1805,39 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
 
                                 <button name="update-security-settings" class="btn btn-primary px-5 rounded-pill fw-bold">Update Security Policy</button>
                             </form>
+
+                            <!--
+                              Website Demo Mode sits OUTSIDE the security form on purpose.
+                              It used to be nested inside it, and a form element inside an open form element is
+                              invalid HTML: the browser ignores the inner start tag but still honours the inner
+                              closing tag, which closed the security form early. Everything below that point - the
+                              Admin PIN fields, the reset limit, the SMTP settings and the Update Security Policy
+                              button - ended up outside every form, so clicking the button did nothing at all.
+                              Keeping it separate also stops the lock-key inputs (which are required) from
+                              blocking the security form's own submit with client-side validation.
+                            -->
+                            <?php $demo_state = bc_demo_state($connection_server); ?>
+                            <div class="card border border-warning border-opacity-50 rounded-4 shadow-none mb-4">
+                                <div class="card-body p-4">
+                                    <h6 class="fw-bold mb-2"><i class="bi bi-toggle2-on me-2 text-warning"></i>Website Demo Mode</h6>
+                                    <p class="text-muted small">Demo mode snapshots the locked site settings, APIs, service controls, vendor settings and templates. Testers may change them temporarily; switching back to Production restores the snapshot.</p>
+                                    <?php if (!bc_demo_has_lock_key($connection_server)): ?>
+                                        <div class="alert alert-warning small">Set the security lock key before changing Demo/Production mode. This key is separate from your login password and is required to restore Production.</div>
+                                        <form method="post" class="row g-2">
+                                            <div class="col-md-5"><input type="password" name="demo_lock_key" class="form-control" minlength="10" placeholder="New security lock key" required></div>
+                                            <div class="col-md-5"><input type="password" name="demo_lock_key_confirm" class="form-control" minlength="10" placeholder="Confirm lock key" required></div>
+                                            <div class="col-md-2"><button name="set-demo-lock-key" class="btn btn-warning w-100 fw-bold">Save Key</button></div>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post" class="row g-2 align-items-end">
+                                            <div class="col-md-3"><label class="form-label small fw-bold">CURRENT MODE</label><div class="form-control bg-light fw-bold text-uppercase"><?php echo htmlspecialchars($demo_state['mode']); ?></div></div>
+                                            <div class="col-md-3"><label class="form-label small fw-bold">CHANGE TO</label><select name="demo_mode" class="form-select"><option value="demo" <?php echo $demo_state['mode'] === 'demo' ? 'selected' : ''; ?>>Demo</option><option value="production" <?php echo $demo_state['mode'] === 'production' ? 'selected' : ''; ?>>Production</option></select></div>
+                                            <div class="col-md-4"><label class="form-label small fw-bold">SECURITY LOCK KEY</label><input type="password" name="demo_lock_key" class="form-control" placeholder="Enter lock key" required></div>
+                                            <div class="col-md-2"><button name="change-demo-mode" class="btn btn-warning w-100 fw-bold">Apply</button></div>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
