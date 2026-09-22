@@ -12,6 +12,11 @@
         $email = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["email"]))));
         $phone = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["phone"]))));
         $pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["new-pass"])));
+        // Normalise the phone BEFORE validating it. Admins routinely paste "+2348012345678" or
+        // "0801 234 5678", and the old check demanded exactly 11 raw characters - so those were
+        // rejected as though the field were simply wrong. sanitize_phone_number() strips non-digits
+        // and rewrites 234... as 0..., and is the same helper the EPIN fulfilment path uses.
+        $phone = sanitize_phone_number($phone);
     	
         if(!empty($user) && !empty($first) && !empty($last) && !empty($quest) && is_numeric($quest) && !empty($answer) && !empty($address) && !empty($email) && !empty($phone) && !empty($pass)){
             $check_user_details = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_logged_admin_details["id"]."' && username='$user'");
@@ -42,19 +47,37 @@
                                 $_SESSION["product_purchase_response"] = "Error creating account: ".mysqli_error($connection_server);
                             }
                         }else{
-                            $_SESSION["product_purchase_response"] = "Phone number should be 11 digit long";
+                            $_SESSION["product_purchase_response"] = "Phone number must be 11 digits (e.g. 08012345678). Received: '" . $phone . "'.";
                         }
                     }else{
-                        $_SESSION["product_purchase_response"] = "Invalid Email";
+                        $_SESSION["product_purchase_response"] = "Invalid email address: '" . $email . "' is not a valid email.";
                     }
                 }else{
-                    $_SESSION["product_purchase_response"] = "Username Cannot Be Email";
+                    $_SESSION["product_purchase_response"] = "Username cannot be an email address. Use a short login name here (e.g. johndoe) and put the email in the Email Address field.";
                 }
             }else{
                 $_SESSION["product_purchase_response"] = "User Already Exists";
             }
         }else{
-            $_SESSION["product_purchase_response"] = "Please fill all required fields.";
+            // Name the fields that are actually missing. The previous single message - "Please fill
+            // all required fields." - was shown for nine different failures (including a security
+            // question that was not numeric), which made a mis-filled form look like it had simply
+            // not saved at all.
+            $missing_fields = array();
+            if (empty($user))    $missing_fields[] = "username";
+            if (empty($first))   $missing_fields[] = "first name";
+            if (empty($last))    $missing_fields[] = "last name";
+            if (empty($address)) $missing_fields[] = "home address";
+            if (empty($email))   $missing_fields[] = "email address";
+            if (empty($phone))   $missing_fields[] = "phone number";
+            if (empty($pass))    $missing_fields[] = "login password";
+            if (empty($answer))  $missing_fields[] = "security answer";
+            if (empty($quest))   $missing_fields[] = "security question";
+            if (empty($missing_fields)) {
+                // Everything was filled, so the only remaining test here is is_numeric($quest).
+                $missing_fields[] = "security question - choose one from the list";
+            }
+            $_SESSION["product_purchase_response"] = "Not saved - please check: " . implode(", ", $missing_fields) . ".";
         }
         header("Location: CreateUser.php");
         exit();
