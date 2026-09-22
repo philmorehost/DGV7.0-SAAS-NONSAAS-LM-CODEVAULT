@@ -3,17 +3,45 @@ header('Content-Type: application/json');
 include("app-config.php");
 
 try {
-    $headers = apache_request_headers();
-    $auth_header = $headers['Authorization'] ?? $headers['authorization'] ?? '';
-    $api_key = '';
+    // Read the API key from every place a DGV7 client may put it. Reading ONLY the Authorization
+    // header made this endpoint answer "Missing API Key" on any host where PHP cannot see that
+    // header - which is common on cPanel/LiteSpeed, and also happens whenever cURL follows a
+    // redirect to another host, because cURL drops custom headers in that case.
+    $auth_header = '';
 
-    if (preg_match('/Bearer\s+(.*)$/i', $auth_header, $matches)) {
-        $api_key = trim($matches[1]);
-    } else {
-        $api_key = $_GET['api_key'] ?? $_POST['api_key'] ?? '';
+    // apache_request_headers() only exists under some SAPIs - guard it instead of fataling.
+    if (function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        if (is_array($headers)) {
+            $auth_header = $headers['Authorization'] ?? ($headers['authorization'] ?? '');
+        }
+    }
+    if ($auth_header === '') {
+        $auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
     }
 
-    if (empty($api_key)) {
+    $api_key = '';
+    if (is_string($auth_header) && preg_match('/Bearer\s+(\S+)/i', $auth_header, $matches)) {
+        $api_key = trim($matches[1]);
+    }
+    if ($api_key === '') {
+        $api_key = trim((string)($_GET['api_key'] ?? ($_POST['api_key'] ?? '')));
+    }
+    if ($api_key === '') {
+        // The rest of the DGV7 ecosystem posts the key in the request body, so accept that shape.
+        $raw_body = file_get_contents('php://input');
+        if (is_string($raw_body) && $raw_body !== '') {
+            $body_json = json_decode($raw_body, true);
+            if (is_array($body_json) && !empty($body_json['api_key'])) {
+                $api_key = trim((string)$body_json['api_key']);
+            }
+        }
+    }
+    if ($api_key === '' && !empty($_SERVER['PHP_AUTH_PW'])) {
+        $api_key = trim((string)$_SERVER['PHP_AUTH_PW']);
+    }
+
+    if ($api_key === '') {
         throw new Error("Missing API Key");
     }
 

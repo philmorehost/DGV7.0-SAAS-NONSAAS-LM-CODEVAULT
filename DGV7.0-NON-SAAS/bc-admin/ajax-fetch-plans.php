@@ -405,18 +405,37 @@ try {
             // upstream providers — irrelevant for third-party gateways with no embedded plan array,
             // which is the expected/common case for the providers above and will legitimately fail here).
             $vid = $get_logged_admin_details['id'] ?? 1;
-            $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
-            $api_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND api_base_url='$gateway_esc' LIMIT 1");
+            // The stored api_base_url is admin/marketplace-typed and may carry a scheme, a "www."
+            // prefix or a trailing slash. Matching it by exact string silently found no row, left
+            // $api_key empty, and the client then sent "Authorization: Bearer " - which the DGV7
+            // provider correctly reported as "Missing API Key". Match on the normalised host, and
+            // require a non-empty key so this can never be sent blank again.
+            $gateway_host = strtolower(trim($gateway));
+            $gateway_host = preg_replace('#^https?://#i', '', $gateway_host);
+            $gateway_host = preg_replace('#^www\.#i', '', $gateway_host);
+            $gateway_host = rtrim($gateway_host, '/');
+            $gateway_esc  = mysqli_real_escape_string($connection_server, $gateway);
+            $gateway_like = mysqli_real_escape_string($connection_server, '%' . $gateway_host . '%');
+            $api_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND (api_base_url='$gateway_esc' OR api_base_url LIKE '$gateway_like') AND api_key IS NOT NULL AND api_key<>'' LIMIT 1");
             $api_key = '';
-            if($api_row = mysqli_fetch_assoc($api_q)){
-                $api_key = $api_row['api_key'];
+            if ($api_q && ($api_row = mysqli_fetch_assoc($api_q))) {
+                $api_key = trim($api_row['api_key']);
+            }
+            if ($api_key === '') {
+                // Never send an empty token - it is indistinguishable from a stripped header at the
+                // far end. Name the real problem instead.
+                throw new Error("No API key saved for $gateway. Add the DGV7 provider's API key under the API settings for this service, then try again.");
             }
 
             $fetch_base = strtolower(rtrim($gateway, '/'));
             if (!preg_match('/^https?:\/\//i', $fetch_base)) {
                 $fetch_base = "https://" . $fetch_base;
             }
-            $fetch_url = $fetch_base . "/api/app-backend/fetch-dgv7-plans.php?network=" . urlencode($network) . "&type=" . urlencode($type);
+            // The key is sent BOTH as a Bearer header and as a query parameter. Many cPanel/LiteSpeed
+            // hosts do not expose the Authorization header to PHP, and cURL drops custom headers when
+            // a redirect crosses to another host - either one surfaces at the provider as "Missing API
+            // Key" even though the key is valid. The query parameter survives both.
+            $fetch_url = $fetch_base . "/api/app-backend/fetch-dgv7-plans.php?network=" . urlencode($network) . "&type=" . urlencode($type) . "&api_key=" . urlencode($api_key);
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $fetch_url);
@@ -428,6 +447,7 @@ try {
             curl_setopt($ch, CURLOPT_TIMEOUT, 30);
             $response = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_err  = curl_error($ch);
             curl_close($ch);
 
             if ($http_code === 200 && $response) {
@@ -438,7 +458,7 @@ try {
                     throw new Error("Invalid format returned from DGV7 provider: " . ($data['message'] ?? 'Unknown error'));
                 }
             } else {
-                throw new Error("Failed to connect to DGV7 API at $gateway (HTTP $http_code). Ensure it is a valid DGV7 URL.");
+                throw new Error("Failed to connect to DGV7 API at $gateway (HTTP $http_code)" . ($curl_err ? ": ".$curl_err : ".") . " Ensure it is a valid DGV7 URL and that outbound HTTPS is allowed.");
             }
         }
     }
