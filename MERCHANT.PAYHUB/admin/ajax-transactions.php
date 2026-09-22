@@ -48,12 +48,17 @@ if (!empty($merchant_id)) {
     $params[] = $merchant_id;
 }
 
-// Integrity review: transactions that were credited at a different amount than requested,
-// or blocked outright. failure_reason is written only by the integrity guards
-// (amount_mismatch / mode_mismatch) and by the expiry cron (expired), so this is the
-// filter for "something was wrong here" as opposed to "nothing was ever paid".
+// Integrity review: transactions the guards actually stopped, plus any that settled for LESS
+// than was collected. failure_reason is written only by the integrity guards (amount_mismatch /
+// mode_mismatch) and by the expiry cron (expired).
+//
+// Overpayment is deliberately NOT included. A payer is normally charged MORE than the merchant
+// asked for, because the gateway adds its transaction fee on top - a NGN 101.00 collection
+// settles as NGN 102.54, which is Paystack's passed-on-fee arithmetic (101 / 0.985 = 102.54).
+// Those payments are accepted and credited, so listing them here made routine DGV7.0 traffic look
+// like fraud and buried the rows that genuinely needed review.
 if ($mismatch === '1') {
-    $query .= " AND ((t.gateway_amount IS NOT NULL AND t.gateway_amount <> t.amount) OR t.failure_reason IS NOT NULL)";
+    $query .= " AND (t.failure_reason IS NOT NULL OR (t.gateway_amount IS NOT NULL AND t.gateway_amount < t.amount))";
 }
 
 $query .= " ORDER BY t.created_at DESC LIMIT $limit OFFSET $offset";
@@ -80,7 +85,7 @@ try {
         $countParams[] = $merchant_id;
     }
     if ($mismatch === '1') {
-        $countQuery .= " AND ((t.gateway_amount IS NOT NULL AND t.gateway_amount <> t.amount) OR t.failure_reason IS NOT NULL)";
+        $countQuery .= " AND (t.failure_reason IS NOT NULL OR (t.gateway_amount IS NOT NULL AND t.gateway_amount < t.amount))";
     }
     $cStmt = $db->prepare($countQuery);
     $cStmt->execute($countParams);

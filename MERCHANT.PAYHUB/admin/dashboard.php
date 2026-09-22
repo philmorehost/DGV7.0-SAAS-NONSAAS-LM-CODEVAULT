@@ -258,10 +258,10 @@ include '../includes/dashboard-head.php';
                         </button>
                         <button @click="mismatchOnly = !mismatchOnly; resetPageAndFetch()"
                                 :class="mismatchOnly ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-500 border-slate-200 hover:text-red-600 hover:border-red-200'"
-                                title="Show only transactions where the gateway settled a different amount than requested"
+                                title="Show only transactions the integrity guards blocked, or that settled for less than was collected (accepted overpayments are not listed)"
                                 class="px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap">
                             <i data-lucide="shield-alert" class="w-4 h-4"></i>
-                            <span class="hidden sm:inline">Amount mismatch</span>
+                            <span class="hidden sm:inline">Blocked / underpaid</span>
                         </button>
                     </div>
                 </div>
@@ -289,7 +289,7 @@ include '../includes/dashboard-head.php';
                                     <td class="px-4 sm:px-8 py-4 text-sm font-bold text-slate-900" x-text="'₦' + parseFloat(tx.amount).toLocaleString(undefined, {minimumFractionDigits:2})"></td>
                                     <td class="hidden md:table-cell px-8 py-4">
                                         <span class="px-2 py-0.5 rounded-md font-mono text-xs font-bold"
-                                              :class="!tx.gateway_amount ? 'bg-slate-100 text-slate-400' : (parseFloat(tx.gateway_amount) === parseFloat(tx.amount) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-100 text-red-700')"
+                                              :class="!tx.gateway_amount ? 'bg-slate-100 text-slate-400' : (parseFloat(tx.gateway_amount) >= parseFloat(tx.amount) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-100 text-red-700')"
                                               x-text="tx.gateway_amount ? '₦' + parseFloat(tx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits:2}) : 'unverified'"></span>
                                     </td>
                                     <td class="px-4 sm:px-8 py-4">
@@ -367,16 +367,33 @@ include '../includes/dashboard-head.php';
                         </div>
                     </div>
                     <template x-if="selectedTx && (selectedTx.failure_reason || (selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) !== parseFloat(selectedTx.amount)))">
-                        <div class="mb-8 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
-                            <i data-lucide="shield-alert" class="w-5 h-5 text-red-600 shrink-0 mt-0.5"></i>
+                        <!--
+                          Three distinct outcomes used to be collapsed into one red "Amount mismatch
+                          detected" banner that told the operator fulfilment had been blocked - even for
+                          payments that were accepted and credited. A payer is normally charged MORE than
+                          the merchant asked for, because the gateway adds its transaction fee on top (a
+                          NGN 101.00 collection settles as NGN 102.54), so that difference is routine and
+                          must not read as fraud.
+                        -->
+                        <div class="mb-8 p-4 border rounded-2xl flex items-start gap-3"
+                             :class="(selectedTx.failure_reason || (selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) < parseFloat(selectedTx.amount))) ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'">
+                            <i data-lucide="shield-alert" class="w-5 h-5 shrink-0 mt-0.5"
+                               :class="(selectedTx.failure_reason || (selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) < parseFloat(selectedTx.amount))) ? 'text-red-600' : 'text-emerald-600'"></i>
                             <div>
-                                <p class="text-sm font-bold text-red-800" x-text="selectedTx.failure_reason ? 'Blocked by an integrity check' : 'Amount mismatch detected'"></p>
-                                <p class="text-xs text-red-700 mt-1" x-show="selectedTx.gateway_amount">
-                                    The gateway settled
+                                <p class="text-sm font-bold"
+                                   :class="(selectedTx.failure_reason || (selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) < parseFloat(selectedTx.amount))) ? 'text-red-800' : 'text-emerald-800'"
+                                   x-text="selectedTx.failure_reason ? 'Blocked by an integrity check' : (parseFloat(selectedTx.gateway_amount) < parseFloat(selectedTx.amount) ? 'Underpaid - not credited' : 'Gateway fee included - accepted')"></p>
+                                <p class="text-xs mt-1"
+                                   :class="(selectedTx.failure_reason || (selectedTx.gateway_amount && parseFloat(selectedTx.gateway_amount) < parseFloat(selectedTx.amount))) ? 'text-red-700' : 'text-emerald-700'"
+                                   x-show="selectedTx.gateway_amount">
+                                    The payer settled
                                     <strong x-text="'₦' + parseFloat(selectedTx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>
-                                    but this transaction was created for
-                                    <strong x-text="'₦' + parseFloat(selectedTx.amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>.
-                                    Fulfilment was blocked and the transaction was marked failed.
+                                    against a
+                                    <strong x-text="'₦' + parseFloat(selectedTx.amount).toLocaleString(undefined, {minimumFractionDigits: 2})"></strong>
+                                    collection.
+                                    <span x-show="!selectedTx.failure_reason && parseFloat(selectedTx.gateway_amount) > parseFloat(selectedTx.amount)">The difference is the gateway's transaction fee, which the payer was charged on top. The payment was accepted and credited normally.</span>
+                                    <span x-show="!selectedTx.failure_reason && parseFloat(selectedTx.gateway_amount) < parseFloat(selectedTx.amount)">The payer settled for LESS than the collection, so fulfilment was blocked and the transaction was marked failed.</span>
+                                    <span x-show="selectedTx.failure_reason">Fulfilment was blocked and the transaction was marked failed.</span>
                                 </p>
                                 <p class="text-xs text-red-700 mt-1" x-show="!selectedTx.gateway_amount && selectedTx.failure_reason">
                                     No credit was made and the merchant was not notified of a successful payment.
@@ -388,7 +405,7 @@ include '../includes/dashboard-head.php';
                         <div class="flex justify-between items-center">
                             <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Settled by Gateway</span>
                             <span class="text-sm font-bold"
-                                  :class="!selectedTx?.gateway_amount ? 'text-slate-400' : (parseFloat(selectedTx?.gateway_amount) === parseFloat(selectedTx?.amount) ? 'text-emerald-600' : 'text-red-600')"
+                                  :class="!selectedTx?.gateway_amount ? 'text-slate-400' : (parseFloat(selectedTx?.gateway_amount) >= parseFloat(selectedTx?.amount) ? 'text-emerald-600' : 'text-red-600')"
                                   x-text="selectedTx?.gateway_amount ? '₦' + parseFloat(selectedTx.gateway_amount).toLocaleString(undefined, {minimumFractionDigits: 2}) : 'Not recorded'"></span>
                         </div>
                         <div class="flex justify-between items-center" x-show="selectedTx?.failure_reason">
