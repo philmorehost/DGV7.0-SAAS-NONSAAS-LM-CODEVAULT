@@ -53,6 +53,32 @@ struct DashboardView: View {
                     }
                     .padding()
 
+                    // Rewards — referral, coin conversion and the coin ledger. All three are backed
+                    // by the same server code the website uses (web/api/referral.php,
+                    // coin-conversion.php, points-history.php), so the numbers match across surfaces.
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Rewards")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        NavigationLink(destination: ReferralView()) {
+                            RewardRow(icon: "person.2.fill",
+                                      title: "Refer and Earn",
+                                      subtitle: "Invite friends and earn coins")
+                        }
+                        NavigationLink(destination: CoinsView()) {
+                            RewardRow(icon: "bitcoinsign.circle.fill",
+                                      title: "Convert Coins",
+                                      subtitle: "Turn your VTU Coins into cash")
+                        }
+                        NavigationLink(destination: PointsHistoryView()) {
+                            RewardRow(icon: "clock.arrow.circlepath",
+                                      title: "Points History",
+                                      subtitle: "Every coin earned and redeemed")
+                        }
+                    }
+                    .padding(.horizontal)
+
                     Spacer()
                 }
             }
@@ -107,5 +133,39 @@ struct ServiceItem: View {
                 .fontWeight(.medium)
                 .foregroundColor(.primary)
         }
+    }
+}
+
+/// A full-width entry row for the Rewards section.
+struct RewardRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(.blue)
+                .frame(width: 44, height: 44)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(12)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(14)
     }
 }

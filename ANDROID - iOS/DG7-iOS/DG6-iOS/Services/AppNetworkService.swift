@@ -98,6 +98,49 @@ class AppNetworkService {
             }
         }.resume()
     }
+
+    /// POSTs to `web/api/<endpoint>` and hands back the raw JSON object.
+    ///
+    /// Why not the typed `request(...)`: the DGV7 endpoints build their replies straight from
+    /// mysqli_fetch_assoc(), which returns EVERY column as a String regardless of its SQL type. So
+    /// `points` arrives as "500" and `amount` as "1.00", and a typed Codable struct fails to decode
+    /// a perfectly valid response. These screens read a dictionary and coerce with RewardParsing.swift.
+    func requestObject(_ endpoint: String,
+                       params: [String: Any],
+                       completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard let url = URL(string: baseURL + "web/api/" + endpoint) else {
+            completion(.failure(NSError(domain: "Invalid URL", code: 0, userInfo: nil)))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        var finalParams = params
+        if let apiKey = self.apiKey {
+            finalParams["api_key"] = apiKey
+        }
+
+        var components = URLComponents()
+        components.queryItems = finalParams.map { URLQueryItem(name: $0.key, value: "\($0.value)") }
+        request.httpBody = components.query?.data(using: .utf8)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let error = error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+            guard let data = data,
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "Malformed response", code: 0, userInfo: nil)))
+                }
+                return
+            }
+            DispatchQueue.main.async { completion(.success(object)) }
+        }.resume()
+    }
 }
 
 struct APIResponse: Codable {
