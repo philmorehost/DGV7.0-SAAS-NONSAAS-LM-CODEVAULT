@@ -124,6 +124,21 @@
         $gateway_array_list = $payment_gateway_array;
         $gateway_key_warnings = array();
 
+        // webhook_secret is read by this page and by the webhook handlers, but no migration ever
+        // created the column and older installs do not have it. Listing it unconditionally made EVERY
+        // gateway save fail with "Unknown column 'webhook_secret' in 'SET'/'INSERT INTO'" - which is
+        // exactly what the admin saw for monnify, flutterwave, paystack, payvessel, payhub, plisio and
+        // beewave. Probe once per request and only include the column when the table really has it, so
+        // saving works on every install whether or not the ALTER in func/bc-tables.php has landed.
+        // The webhook handlers already fall back to each gateway's secret_key when no separate webhook
+        // secret is stored, so signature verification keeps working either way.
+        $bc_has_webhook_secret = false;
+        $bc_webhook_secret_skipped = false;
+        $bc_ws_probe = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_payment_gateways LIKE 'webhook_secret'");
+        if ($bc_ws_probe && mysqli_num_rows($bc_ws_probe) > 0) {
+            $bc_has_webhook_secret = true;
+        }
+
         if((count($gateway_name) > 0) && (count($public_key) > 0) && (count($secret_key) > 0) && (count($public_key) == count($secret_key))){
             foreach($gateway_name as $index => $name){
                 $each_gateway_name = mysqli_real_escape_string($connection_server, trim(strip_tags($gateway_name[$index])));
@@ -168,9 +183,15 @@
                         }
 
                         // Checked on purpose. This statement used to report success unconditionally,
-                        // so a schema mismatch (the missing webhook_secret column, for one) was invisible:
-                        // the page said "Updated Successfully" while nothing had been written.
-                        $bc_gateway_written = mysqli_query($connection_server, "UPDATE sas_payment_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', webhook_secret='$each_webhook_secret', percentage='$each_payment_percent', status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
+                        // so a schema mismatch was invisible: the page said "Updated Successfully"
+                        // while nothing had been written.
+                        $bc_gateway_set = "public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', percentage='$each_payment_percent', status='$each_gateway_status'";
+                        if ($bc_has_webhook_secret) {
+                            $bc_gateway_set = "public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', webhook_secret='$each_webhook_secret', percentage='$each_payment_percent', status='$each_gateway_status'";
+                        } elseif ($each_webhook_secret !== '') {
+                            $bc_webhook_secret_skipped = true;
+                        }
+                        $bc_gateway_written = mysqli_query($connection_server, "UPDATE sas_payment_gateways SET $bc_gateway_set WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
                         if (!$bc_gateway_written) {
                             $gateway_key_warnings[] = strtoupper($each_gateway_name) . " could NOT be saved: " . mysqli_error($connection_server);
                             $json_response_array = array("desc" => "Payment Gateway Information Could Not Be Updated");
@@ -188,7 +209,17 @@
                                 $gateway_key_warnings[] = strtoupper($each_gateway_name) . " was created but left DISABLED: no Secret Key was provided.";
                             }
                             // Same check on create: a failed INSERT must not be reported as success.
-                            $bc_gateway_created = mysqli_query($connection_server, "INSERT INTO sas_payment_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, webhook_secret, percentage, status) VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_webhook_secret', '$each_payment_percent', '$each_gateway_status')");
+                            // The column list is built to match what the table actually has - see the
+                            // webhook_secret probe at the top of this handler.
+                            $bc_insert_cols = "vendor_id, gateway_name, public_key, secret_key, encrypt_key, percentage, status";
+                            $bc_insert_vals = "'".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_payment_percent', '$each_gateway_status'";
+                            if ($bc_has_webhook_secret) {
+                                $bc_insert_cols = "vendor_id, gateway_name, public_key, secret_key, encrypt_key, webhook_secret, percentage, status";
+                                $bc_insert_vals = "'".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_webhook_secret', '$each_payment_percent', '$each_gateway_status'";
+                            } elseif ($each_webhook_secret !== '') {
+                                $bc_webhook_secret_skipped = true;
+                            }
+                            $bc_gateway_created = mysqli_query($connection_server, "INSERT INTO sas_payment_gateways ($bc_insert_cols) VALUES ($bc_insert_vals)");
                             if (!$bc_gateway_created) {
                                 $gateway_key_warnings[] = strtoupper($each_gateway_name) . " could NOT be saved: " . mysqli_error($connection_server);
                                 $json_response_array = array("desc" => "Payment Gateway Information Could Not Be Created");
@@ -245,6 +276,12 @@
                     }
                 }
             }
+        }
+
+        // Never drop input silently: if a webhook secret was typed but the column is missing, say so
+        // rather than saving the rest and leaving the admin to wonder where it went.
+        if ($bc_webhook_secret_skipped) {
+            $gateway_key_warnings[] = "A per-gateway WEBHOOK SECRET was entered but could not be stored: sas_payment_gateways has no webhook_secret column yet. Webhook signatures are being verified with each gateway's Secret Key instead, so payments still work. Upload func/bc-tables.php (which adds the column) and save again to keep it separate.";
         }
 
         $json_response_decode = json_decode($json_response_encode,true);
