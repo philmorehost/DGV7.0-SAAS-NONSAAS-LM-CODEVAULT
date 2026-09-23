@@ -35,6 +35,13 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
     private val binding get() = _binding!!
     private lateinit var prefs: PreferenceManager
 
+    // Held as fields so the Copy/Share handlers can be attached once, up front, and still read the
+    // latest values (see onViewCreated).
+    private var referralCode = ""
+    private var referralLink = ""
+    private var shareMessage = ""
+    private var loadProblem: String? = null
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentReferralBinding.bind(view)
@@ -44,6 +51,26 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
         binding.btnOpenCoins.setOnClickListener {
             findNavController().navigate(R.id.nav_coins)
         }
+
+        // Wired here rather than in render(), so the buttons always respond. Previously a failed
+        // request meant render() never ran, the listeners were never attached, and a tap did
+        // nothing at all - indistinguishable from a broken button, and it hid the real reason (404).
+        binding.btnCopyCode.setOnClickListener {
+            if (referralCode.isBlank()) explain("Your referral code is not available yet.")
+            else copy("Referral code", referralCode)
+        }
+        binding.btnShareLink.setOnClickListener {
+            if (referralLink.isBlank()) {
+                explain("Your referral link is not available yet.")
+            } else {
+                share(
+                    listOf(shareMessage, referralLink)
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n")
+                )
+            }
+        }
+
         load()
     }
 
@@ -58,6 +85,7 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
                 if (problem != null) {
                     activity?.runOnUiThread {
                         binding.progressBar.visibility = View.GONE
+                        loadProblem = problem
                         showError(problem)
                     }
                     return@launch
@@ -70,6 +98,7 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     binding.progressBar.visibility = View.GONE
+                    loadProblem = "Could not reach the server."
                     showError("Could not reach the server. Check your connection and try again.")
                 }
             }
@@ -86,12 +115,13 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
     }
 
     private fun render(d: Map<String, Any>) {
-        val code = (d["referral_code"] as? String).orEmpty()
-        val link = (d["referral_link"] as? String).orEmpty()
-        val message = (d["share_message"] as? String).orEmpty()
+        loadProblem = null
+        referralCode = (d["referral_code"] as? String).orEmpty()
+        referralLink = (d["referral_link"] as? String).orEmpty()
+        shareMessage = (d["share_message"] as? String).orEmpty()
 
-        binding.tvReferralCode.text = code.ifBlank { "—" }
-        binding.tvReferralLink.text = link.ifBlank { "—" }
+        binding.tvReferralCode.text = referralCode.ifBlank { "—" }
+        binding.tvReferralLink.text = referralLink.ifBlank { "—" }
         binding.tvBonus.text = String.format(Locale.US, "%,d Coins", num(d["referral_bonus"], 0.0).toInt())
         binding.tvTotalReferrals.text = num(d["total_referrals"], 0.0).toInt().toString()
         binding.tvQualifiedReferrals.text = num(d["qualified_referrals"], 0.0).toInt().toString()
@@ -103,12 +133,6 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
         // off, offering the button would lead to a dead screen.
         val coinsEnabled = d["coins_enabled"] as? Boolean ?: true
         binding.cardCoins.visibility = if (coinsEnabled) View.VISIBLE else View.GONE
-
-        binding.btnCopyCode.setOnClickListener { copy("Referral code", code) }
-        binding.btnShareLink.setOnClickListener {
-            val body = if (link.isBlank()) code else "$message\n$link".trim()
-            share(body)
-        }
 
         val users = d["referred_users"] as? List<Map<String, Any>> ?: emptyList()
         binding.tvReferredEmpty.visibility = if (users.isEmpty()) View.VISIBLE else View.GONE
@@ -130,6 +154,11 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
             }
             binding.containerReferred.addView(row)
         }
+    }
+
+    /** Explains why a button did nothing, preferring the real load failure over a generic note. */
+    private fun explain(fallback: String) {
+        Toast.makeText(requireContext(), loadProblem ?: fallback, Toast.LENGTH_LONG).show()
     }
 
     private fun copy(label: String, value: String) {
