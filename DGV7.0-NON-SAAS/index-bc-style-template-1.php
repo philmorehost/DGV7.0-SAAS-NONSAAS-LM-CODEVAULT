@@ -23,7 +23,7 @@ if (isset($vendor_account_details) && is_array($vendor_account_details)) {
             $custom_header    = $cachedStyle['custom_header_code'] ?? '';
             $custom_footer    = $cachedStyle['custom_footer_code'] ?? '';
         } else {
-            $stmt_site = mysqli_prepare($connection_server, "SELECT sd.site_title, sd.apk_download_url, sd.meta_keywords, sd.custom_header_code, sd.custom_footer_code, vst.header_image FROM sas_site_details sd LEFT JOIN sas_vendor_style_templates vst ON vst.vendor_id = sd.vendor_id WHERE sd.vendor_id = ? LIMIT 1");
+            $stmt_site = mysqli_prepare($connection_server, "SELECT sd.site_title, sd.apk_download_url, sd.meta_keywords, sd.custom_head_code, sd.custom_footer_code, vst.header_image FROM sas_site_details sd LEFT JOIN sas_vendor_style_templates vst ON vst.vendor_id = sd.vendor_id WHERE sd.vendor_id = ? LIMIT 1");
             if ($stmt_site) {
                 mysqli_stmt_bind_param($stmt_site, "i", $vendor_account_details["id"]);
                 mysqli_stmt_execute($stmt_site);
@@ -33,7 +33,7 @@ if (isset($vendor_account_details) && is_array($vendor_account_details)) {
                     $apk_download_url = $site_row['apk_download_url'] ?: $apk_download_url;
                     $header_image_url = $site_row['header_image'] ?: $header_image_url;
                     $meta_keywords    = $site_row['meta_keywords'] ?: '';
-                    $custom_header    = $site_row['custom_header_code'] ?: '';
+                    $custom_header    = $site_row['custom_head_code'] ?: '';
                     $custom_footer    = $site_row['custom_footer_code'] ?: '';
 
                     if (function_exists('bc_cache_set')) {

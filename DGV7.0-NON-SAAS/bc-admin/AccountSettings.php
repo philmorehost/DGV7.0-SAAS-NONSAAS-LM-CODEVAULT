@@ -1091,7 +1091,11 @@ if (isset($_POST["update-site-details"])) {
     $app_redirect_mode = mysqli_real_escape_string($connection_server, strtolower(trim($_POST["app-redirect-mode"] ?? "off")));
     if (!in_array($app_redirect_mode, ["off", "prompt", "force"], true)) $app_redirect_mode = "off";
     $meta_keywords      = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["meta-keywords"] ?? "")));
-    $custom_header_code = mysqli_real_escape_string($connection_server, $_POST["custom-header-code"] ?? "");
+    // The column is custom_head_code (see func/bc-tables.php and the live schema). It was written as
+    // custom_header_code here, which made MySQL reject the WHOLE statement - so the APK download URL
+    // and app redirect mode set in the same UPDATE never saved either, and the form came back empty.
+    // SAAS has always used the correct name.
+    $custom_head_code   = mysqli_real_escape_string($connection_server, $_POST["custom-header-code"] ?? "");
     $custom_footer_code = mysqli_real_escape_string($connection_server, $_POST["custom-footer-code"] ?? "");
     $robots_txt         = mysqli_real_escape_string($connection_server, $_POST["robots-txt"] ?? "");
 
@@ -1099,15 +1103,25 @@ if (isset($_POST["update-site-details"])) {
         $get_site_details = mysqli_query($connection_server, "SELECT * FROM sas_site_details WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
 
         if (mysqli_num_rows($get_site_details) == 1) {
-            mysqli_query($connection_server, "UPDATE sas_site_details SET site_title='$site_title', site_desc='$site_desc', apk_download_url='$apk_download_url', app_redirect_mode='$app_redirect_mode', meta_keywords='$meta_keywords', custom_header_code='$custom_header_code', custom_footer_code='$custom_footer_code', robots_txt='$robots_txt' WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
-            //Site Information Updated Successfully
-            $json_response_array = array("desc" => "Site Information Updated Successfully");
+            // Result checked on purpose: this reported success no matter what, so a wrong column name
+            // looked like a saving bug in the UI while nothing was actually written.
+            $site_updated = mysqli_query($connection_server, "UPDATE sas_site_details SET site_title='$site_title', site_desc='$site_desc', apk_download_url='$apk_download_url', app_redirect_mode='$app_redirect_mode', meta_keywords='$meta_keywords', custom_head_code='$custom_head_code', custom_footer_code='$custom_footer_code', robots_txt='$robots_txt' WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
+            if ($site_updated) {
+                //Site Information Updated Successfully
+                $json_response_array = array("desc" => "Site Information Updated Successfully");
+            } else {
+                $json_response_array = array("desc" => "Site Information Could Not Be Updated: " . mysqli_error($connection_server));
+            }
             $json_response_encode = json_encode($json_response_array, true);
         } else {
             if (mysqli_num_rows($get_site_details) == 0) {
-                mysqli_query($connection_server, "INSERT INTO sas_site_details (vendor_id, site_title, site_desc, apk_download_url, app_redirect_mode, meta_keywords, custom_header_code, custom_footer_code, robots_txt) VALUES ('" . $get_logged_admin_details["id"] . "', '$site_title', '$site_desc', '$apk_download_url', '$app_redirect_mode', '$meta_keywords', '$custom_header_code', '$custom_footer_code', '$robots_txt')");
-                //Site Information Created Successfully
-                $json_response_array = array("desc" => "Site Information Created Successfully");
+                $site_created = mysqli_query($connection_server, "INSERT INTO sas_site_details (vendor_id, site_title, site_desc, apk_download_url, app_redirect_mode, meta_keywords, custom_head_code, custom_footer_code, robots_txt) VALUES ('" . $get_logged_admin_details["id"] . "', '$site_title', '$site_desc', '$apk_download_url', '$app_redirect_mode', '$meta_keywords', '$custom_head_code', '$custom_footer_code', '$robots_txt')");
+                if ($site_created) {
+                    //Site Information Created Successfully
+                    $json_response_array = array("desc" => "Site Information Created Successfully");
+                } else {
+                    $json_response_array = array("desc" => "Site Information Could Not Be Created: " . mysqli_error($connection_server));
+                }
                 $json_response_encode = json_encode($json_response_array, true);
             } else {
                 if (mysqli_num_rows($get_site_details) > 1) {
@@ -1159,7 +1173,7 @@ $q_min_funding = mysqli_query($connection_server, "SELECT * FROM sas_user_minimu
 $get_user_minimum_funding_details = ($q_min_funding && mysqli_num_rows($q_min_funding) > 0) ? mysqli_fetch_array($q_min_funding) : ['min_amount' => 0];
 
 $q_site_details = mysqli_query($connection_server, "SELECT * FROM sas_site_details WHERE vendor_id='" . $get_logged_admin_details["id"] . "' LIMIT 1");
-$get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? mysqli_fetch_array($q_site_details) : ['site_title' => '', 'site_desc' => '', 'apk_download_url' => '', 'app_redirect_mode' => 'off', 'meta_keywords' => '', 'custom_header_code' => '', 'custom_footer_code' => '', 'robots_txt' => ''];
+$get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? mysqli_fetch_array($q_site_details) : ['site_title' => '', 'site_desc' => '', 'apk_download_url' => '', 'app_redirect_mode' => 'off', 'meta_keywords' => '', 'custom_head_code' => '', 'custom_footer_code' => '', 'robots_txt' => ''];
 
 
 ?>
@@ -1355,7 +1369,7 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-muted">GOOGLE ANALYTICS / CUSTOM HEADER CODE</label>
-                                    <textarea name="custom-header-code" class="form-control font-monospace" rows="4" placeholder="<!-- Place custom scripts or tracking pixels here to load before </head> -->"><?php echo htmlspecialchars($get_site_details['custom_header_code'] ?? ''); ?></textarea>
+                                    <textarea name="custom-header-code" class="form-control font-monospace" rows="4" placeholder="<!-- Place custom scripts or tracking pixels here to load before </head> -->"><?php echo htmlspecialchars($get_site_details['custom_head_code'] ?? ''); ?></textarea>
                                     <div class="form-text text-muted">Custom scripts (e.g. Google Analytics tracking code) injected in the landing page's head.</div>
                                 </div>
                                 <div class="mb-3">
