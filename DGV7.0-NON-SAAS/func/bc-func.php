@@ -3538,7 +3538,14 @@ function getWithdrawalGatewayDetails($gateway, $vid = null) {
 
     // 1. Check Vendor Isolated Withdrawal Table
     if ($vid > 0) {
-        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+        // ORDER BY matters here. This table was keyless for a while (no PRIMARY KEY on
+        // (vendor_id, gateway_name)), so every save appended a duplicate row instead of updating.
+        // A plain LIMIT 1 could then return an EMPTY-secret row, the guard below reads that as
+        // "no credentials", and the lookup silently falls through to vendor 0 and then to the
+        // funding keys - payouts fail with "Invalid Secret Key" while the admin's correctly saved
+        // keys sit unread in the table. Preferring a row that actually holds a secret, newest
+        // first, makes the pick deterministic.
+        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') ORDER BY (secret_key IS NULL OR secret_key = '') ASC, date DESC LIMIT 1");
         if ($q && $r = mysqli_fetch_assoc($q)) {
             if (!empty($r['secret_key'])) {
                 $details = $r;
@@ -3549,7 +3556,7 @@ function getWithdrawalGatewayDetails($gateway, $vid = null) {
 
     // 1b. Fallback to Super Admin Isolated Withdrawal Table
     if (!$details || empty($details['secret_key'])) {
-        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='0' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='0' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') ORDER BY (secret_key IS NULL OR secret_key = '') ASC, date DESC LIMIT 1");
         if ($q && $r = mysqli_fetch_assoc($q)) {
             if (!empty($r['secret_key'])) {
                 $details = $r;

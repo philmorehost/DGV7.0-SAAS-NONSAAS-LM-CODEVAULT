@@ -56,6 +56,7 @@
         $secret_key = $_POST["secret-key"];
         $encrypt_key = $_POST["encrypt-key"];
         $withdrawal_gateway_array = array("payhub", "paystack");
+        $withdrawal_gateway_warnings = array();
 
         if(count($gateway_name) > 0){
             foreach($gateway_name as $index => $name){
@@ -67,17 +68,47 @@
 
                 // Safety: Only update if secret key is provided, or if just changing status
                 if(in_array($each_gateway_name, $withdrawal_gateway_array)){
-                    if (!empty($each_secret_key)) {
+                    // Deliberately NOT "INSERT ... ON DUPLICATE KEY UPDATE". sas_bank_transfer_gateways
+                    // has no PRIMARY KEY and no UNIQUE index on (vendor_id, gateway_name), so MySQL can
+                    // never see a duplicate: every save silently INSERTed another row instead of
+                    // updating. The form then read back the OLDEST row, so the PayHub credentials looked
+                    // like they refused to save at all. An explicit SELECT-then-UPDATE/INSERT needs no
+                    // index - which is exactly what the sas_payment_gateways block further down has
+                    // always done, and why funding gateways saved while the payout ones did not.
+                    $withdrawal_vendor_id = $get_logged_admin_details["id"];
+                    // Prefer a row that actually holds a secret, then the newest: leftover duplicates
+                    // from the old save must never become the values we fall back to.
+                    $existing_wg_result = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='$withdrawal_vendor_id' && gateway_name='$each_gateway_name' ORDER BY (secret_key IS NULL OR secret_key = '') ASC, date DESC");
+                    $existing_wg_row = (mysqli_num_rows($existing_wg_result) > 0) ? mysqli_fetch_assoc($existing_wg_result) : null;
+
+                    // Never let a blank box erase a working key: a password manager clearing the masked
+                    // SECRET KEY field must not wipe the payout credentials.
+                    if ($each_public_key === '')  $each_public_key  = $existing_wg_row['public_key'] ?? '';
+                    if ($each_secret_key === '')  $each_secret_key  = $existing_wg_row['secret_key'] ?? '';
+                    if ($each_encrypt_key === '') $each_encrypt_key = $existing_wg_row['encrypt_key'] ?? '';
+
+                    // A payout gateway with no secret cannot move a single naira, so never let a save
+                    // switch it ON. Mirrors the rule the funding gateways below already enforce.
+                    if ($each_gateway_status == "1" && $each_secret_key === '') {
+                        $each_gateway_status = "2";
+                        $withdrawal_gateway_warnings[] = strtoupper($each_gateway_name) . " was NOT enabled because it has no Secret Key - paste the payout Secret Key and save again.";
+                    }
+
+                    if ($existing_wg_row === null) {
                         mysqli_query($connection_server, "INSERT INTO sas_bank_transfer_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, transfer_fee, status)
-                            VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '0', '$each_gateway_status')
-                            ON DUPLICATE KEY UPDATE public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', status='$each_gateway_status'");
+                            VALUES ('$withdrawal_vendor_id', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '0', '$each_gateway_status')");
                     } else {
-                        // Only update status if secret is empty (to avoid overwriting with blank)
-                        mysqli_query($connection_server, "UPDATE sas_bank_transfer_gateways SET status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' AND gateway_name='$each_gateway_name'");
+                        // No LIMIT on purpose: duplicates left behind by the old buggy save are corrected
+                        // too, so neither the form nor the payout API can pick up a stale row.
+                        mysqli_query($connection_server, "UPDATE sas_bank_transfer_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', status='$each_gateway_status' WHERE vendor_id='$withdrawal_vendor_id' && gateway_name='$each_gateway_name'");
                     }
                 }
             }
-            $_SESSION["product_purchase_response"] = "Withdrawal Gateway Information Updated Successfully";
+            $withdrawal_status_message = "Withdrawal Gateway Information Updated Successfully";
+            if (!empty($withdrawal_gateway_warnings)) {
+                $withdrawal_status_message .= " " . implode(" ", $withdrawal_gateway_warnings);
+            }
+            $_SESSION["product_purchase_response"] = $withdrawal_status_message;
         }
         header("Location: ".$_SERVER["REQUEST_URI"]);
         exit();
@@ -317,7 +348,9 @@
                                 <?php
                                 $withdrawal_gateways = ["payhub", "paystack"];
                                 foreach($withdrawal_gateways as $wg_name):
-                                    $q_wg = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$wg_name'");
+                                    // Same ordering as getWithdrawalGatewayDetails(), so the credentials shown
+                                    // here are the ones the payout API will actually use.
+                                    $q_wg = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$wg_name' ORDER BY (secret_key IS NULL OR secret_key = '') ASC, date DESC");
                                     $wg_data = mysqli_fetch_assoc($q_wg);
                                     $wg_active = ($wg_data && $wg_data['status'] == 1);
                                 ?>
@@ -446,20 +479,20 @@
                                         <?php // STANDALONE: Plisio lock screen removed — always show key input fields ?>
                                             <div class="mb-3" <?php if($gateway_name == 'plisio') echo 'style="display:none;"'; ?>>
                                                 <label class="form-label small fw-bold text-muted">PUBLIC KEY</label>
-                                                <input name="public-key[]" type="text" value="<?php echo $get_gateway_details["public_key"]; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name == 'plisio') ? 'Not Required' : 'Enter Public Key'; ?>" />
+                                                <input name="public-key[]" type="text" value="<?php echo $get_gateway_details["public_key"] ?? ''; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name == 'plisio') ? 'Not Required' : 'Enter Public Key'; ?>" />
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label small fw-bold text-muted">SECRET KEY</label>
-                                                <input name="secret-key[]" type="password" value="<?php echo $get_gateway_details["secret_key"]; ?>" class="form-control rounded-3" placeholder="Enter Secret Key" />
+                                                <input name="secret-key[]" type="password" value="<?php echo $get_gateway_details["secret_key"] ?? ''; ?>" class="form-control rounded-3" placeholder="Enter Secret Key" />
                                             </div>
                                             <div class="row g-3 mb-3">
                                                 <div class="col-6" <?php if($gateway_name == 'plisio') echo 'style="display:none;"'; ?>>
                                                     <label class="form-label small fw-bold text-muted"><?php echo ($gateway_name === 'monnify') ? 'CONTRACT CODE' : 'ENCRYPT KEY'; ?></label>
-                                                    <input name="encrypt-key[]" type="text" value="<?php echo $get_gateway_details["encrypt_key"]; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name === 'monnify') ? 'Enter Contract Code' : ($gateway_name == 'plisio' ? 'Not Required' : 'Optional'); ?>" />
+                                                    <input name="encrypt-key[]" type="text" value="<?php echo $get_gateway_details["encrypt_key"] ?? ''; ?>" class="form-control rounded-3" placeholder="<?php echo ($gateway_name === 'monnify') ? 'Enter Contract Code' : ($gateway_name == 'plisio' ? 'Not Required' : 'Optional'); ?>" />
                                                 </div>
                                                 <div class="<?php echo ($gateway_name == 'plisio') ? 'col-12' : 'col-6'; ?>">
                                                     <label class="form-label small fw-bold text-muted">FEE (%)</label>
-                                                    <input name="payment-percent[]" type="number" step="0.001" value="<?php echo $get_gateway_details["percentage"]; ?>" class="form-control rounded-3" placeholder="0.000" />
+                                                    <input name="payment-percent[]" type="number" step="0.001" value="<?php echo $get_gateway_details["percentage"] ?? '0'; ?>" class="form-control rounded-3" placeholder="0.000" />
                                                 </div>
                                             </div>
                                         <div class="mb-3">

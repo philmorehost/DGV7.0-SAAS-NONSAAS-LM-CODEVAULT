@@ -3706,7 +3706,14 @@ function getWithdrawalGatewayDetails($gateway, $vid = null) {
     // withdrawal is blocked — closing the loophole where an unactivated vendor's customers could
     // be paid out via the platform's or another vendor's API.
     if ($vid > 0) {
-        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+        // ORDER BY matters here. This table was keyless for a while (no PRIMARY KEY on
+        // (vendor_id, gateway_name)), so every save appended a duplicate row instead of updating.
+        // A plain LIMIT 1 could then return an EMPTY-secret row, the guard below reads that as
+        // "no credentials", and the lookup silently falls through to vendor 0 and then to the
+        // funding keys - payouts fail with "Invalid Secret Key" while the admin's correctly saved
+        // keys sit unread in the table. Preferring a row that actually holds a secret, newest
+        // first, makes the pick deterministic.
+        $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') ORDER BY (secret_key IS NULL OR secret_key = '') ASC, date DESC LIMIT 1");
         if ($q && $r = mysqli_fetch_assoc($q)) {
             if (!empty($r['secret_key'])) {
                 $r['source_table'] = 'sas_bank_transfer_gateways';
@@ -3717,7 +3724,9 @@ function getWithdrawalGatewayDetails($gateway, $vid = null) {
     }
 
     // Platform / super-admin context (vid <= 0): the platform's own withdrawal gateway config.
-    $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='0' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') LIMIT 1");
+    // Same reasoning as above: prefer a row that actually holds a secret, rather than letting a
+    // keyless duplicate win the LIMIT 1 and shadow the credentials the admin saved.
+    $q = mysqli_query($connection_server, "SELECT * FROM sas_bank_transfer_gateways WHERE vendor_id='0' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') ORDER BY (secret_key IS NULL OR secret_key = '') ASC, date DESC LIMIT 1");
     if ($q && $r = mysqli_fetch_assoc($q)) {
         if (!empty($r['secret_key'])) {
             $r['source_table'] = 'sas_bank_transfer_gateways_sa';
