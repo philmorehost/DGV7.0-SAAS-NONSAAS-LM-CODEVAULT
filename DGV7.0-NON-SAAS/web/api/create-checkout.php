@@ -35,7 +35,10 @@ if (mysqli_num_rows($check_user) == 1) {
          // unchanged until approval — record the current balance for both.
          $balance_before = (float)($user['balance'] ?? 0);
          $balance_after  = $balance_before;
-         mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$balance_before', '$balance_after', 'Mobile Wallet funding via ATM/Transfer', 'APP', '2')");
+         // api_website is NOT NULL with no default either: without it MySQL rejects the INSERT and the
+         // app is told "Field 'api_website' doesn't have a default value" instead of opening a checkout.
+         $api_website = mysqli_real_escape_string($connection_server, $_SERVER["HTTP_HOST"] ?? 'APP');
+         mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$balance_before', '$balance_after', 'Mobile Wallet funding via ATM/Transfer', 'APP', '$api_website', '2')");
     }
 
     echo json_encode(['status' => 'success', 'message' => 'Checkout initialized']);

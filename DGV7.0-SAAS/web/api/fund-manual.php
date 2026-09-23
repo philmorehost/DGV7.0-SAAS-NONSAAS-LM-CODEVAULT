@@ -29,6 +29,11 @@ if (mysqli_num_rows($check_user) == 1) {
     $amount = (float)($input["amount"] ?? 0);
     $gateway = mysqli_real_escape_string($connection_server, $input["gateway"] ?? 'Manual Bank Deposit');
     $reference = "MAN_" . time() . rand(100, 999);
+    // sas_transactions.api_website is NOT NULL with no default. Every other writer fills it with the
+    // host the request came through (see the chargeOtherUser() call below, and the existing rows in
+    // the table). Omitting it made MySQL reject the INSERT outright, so the app showed
+    // "Field 'api_website' doesn't have a default value" instead of filing the request.
+    $api_website = mysqli_real_escape_string($connection_server, $_SERVER["HTTP_HOST"] ?? 'APP');
 
     if ($amount < 1) {
         echo json_encode(["status" => "error", "message" => "Invalid amount"]);
@@ -46,8 +51,8 @@ if (mysqli_num_rows($check_user) == 1) {
     $balance_before = (float)($user['balance'] ?? 0);
     $balance_after  = $balance_before;
 
-    $q = "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, status)
-          VALUES ('$vendor_id', 'manual_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$balance_before', '$balance_after', 'Manual Funding Request: $gateway', 'APP', '2')";
+    $q = "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status)
+          VALUES ('$vendor_id', 'manual_funding', 'Wallet Funding', '$reference', '$username', '$amount', '$amount', '$balance_before', '$balance_after', 'Manual Funding Request: $gateway', 'APP', '$api_website', '2')";
 
     if (mysqli_query($connection_server, $q)) {
         $response = [
