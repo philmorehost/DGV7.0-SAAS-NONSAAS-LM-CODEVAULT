@@ -1088,6 +1088,12 @@ if (isset($_POST["update-site-details"])) {
     $site_title         = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["site-title"])));
     $site_desc          = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["site-desc"])));
     $apk_download_url   = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["apk-download-url"] ?? "")));
+    // Accept "play.google.com/..." as well as a full URL. The field used to be type="url", which made
+    // the BROWSER refuse to submit the form at all whenever the scheme was missing - the Save button
+    // then appeared to do nothing. It is type="text" now and a missing scheme is added here instead.
+    if ($apk_download_url !== '' && !preg_match('#^[a-z][a-z0-9+.-]*://#i', $apk_download_url)) {
+        $apk_download_url = 'https://' . ltrim($apk_download_url, '/');
+    }
     $app_redirect_mode = mysqli_real_escape_string($connection_server, strtolower(trim($_POST["app-redirect-mode"] ?? "off")));
     if (!in_array($app_redirect_mode, ["off", "prompt", "force"], true)) $app_redirect_mode = "off";
     $meta_keywords      = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["meta-keywords"] ?? "")));
@@ -1102,9 +1108,14 @@ if (isset($_POST["update-site-details"])) {
     if (!empty($site_title) && !empty($site_desc)) {
         $get_site_details = mysqli_query($connection_server, "SELECT * FROM sas_site_details WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
 
-        if (mysqli_num_rows($get_site_details) == 1) {
-            // Result checked on purpose: this reported success no matter what, so a wrong column name
-            // looked like a saving bug in the UI while nothing was actually written.
+        // sas_site_details is KEYLESS (no PRIMARY KEY, no UNIQUE KEY), so more than one row can exist
+        // for the same vendor. This block used to require EXACTLY one row and did NOTHING on anything
+        // else except report "Duplicated Details, Contact Admin" - so once a duplicate appeared, the
+        // settings could never be saved again and the form just kept showing the old values. Updating
+        // every matching row needs no index and repairs the duplicates in passing.
+        if (mysqli_num_rows($get_site_details) > 0) {
+            // Result checked on purpose: this used to report success no matter what, so a wrong column
+            // name looked like a saving bug in the UI while nothing was actually written.
             $site_updated = mysqli_query($connection_server, "UPDATE sas_site_details SET site_title='$site_title', site_desc='$site_desc', apk_download_url='$apk_download_url', app_redirect_mode='$app_redirect_mode', meta_keywords='$meta_keywords', custom_head_code='$custom_head_code', custom_footer_code='$custom_footer_code', robots_txt='$robots_txt' WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
             if ($site_updated) {
                 //Site Information Updated Successfully
@@ -1112,25 +1123,16 @@ if (isset($_POST["update-site-details"])) {
             } else {
                 $json_response_array = array("desc" => "Site Information Could Not Be Updated: " . mysqli_error($connection_server));
             }
-            $json_response_encode = json_encode($json_response_array, true);
         } else {
-            if (mysqli_num_rows($get_site_details) == 0) {
-                $site_created = mysqli_query($connection_server, "INSERT INTO sas_site_details (vendor_id, site_title, site_desc, apk_download_url, app_redirect_mode, meta_keywords, custom_head_code, custom_footer_code, robots_txt) VALUES ('" . $get_logged_admin_details["id"] . "', '$site_title', '$site_desc', '$apk_download_url', '$app_redirect_mode', '$meta_keywords', '$custom_head_code', '$custom_footer_code', '$robots_txt')");
-                if ($site_created) {
-                    //Site Information Created Successfully
-                    $json_response_array = array("desc" => "Site Information Created Successfully");
-                } else {
-                    $json_response_array = array("desc" => "Site Information Could Not Be Created: " . mysqli_error($connection_server));
-                }
-                $json_response_encode = json_encode($json_response_array, true);
+            $site_created = mysqli_query($connection_server, "INSERT INTO sas_site_details (vendor_id, site_title, site_desc, apk_download_url, app_redirect_mode, meta_keywords, custom_head_code, custom_footer_code, robots_txt) VALUES ('" . $get_logged_admin_details["id"] . "', '$site_title', '$site_desc', '$apk_download_url', '$app_redirect_mode', '$meta_keywords', '$custom_head_code', '$custom_footer_code', '$robots_txt')");
+            if ($site_created) {
+                //Site Information Created Successfully
+                $json_response_array = array("desc" => "Site Information Created Successfully");
             } else {
-                if (mysqli_num_rows($get_site_details) > 1) {
-                    //Duplicated Details, Contact Admin
-                    $json_response_array = array("desc" => "Duplicated Details, Contact Admin");
-                    $json_response_encode = json_encode($json_response_array, true);
-                }
+                $json_response_array = array("desc" => "Site Information Could Not Be Created: " . mysqli_error($connection_server));
             }
         }
+        $json_response_encode = json_encode($json_response_array, true);
         
         // Auto-compile sitemap and robots.txt physical files
         @include_once dirname(__DIR__) . '/func/seo-generator.php';
@@ -1384,8 +1386,8 @@ $get_site_details = ($q_site_details && mysqli_num_rows($q_site_details) > 0) ? 
                                 </div>
                                 <div class="mb-4">
                                     <label class="form-label small fw-bold text-muted" for="apk-download-url-input">ANDROID APP DOWNLOAD URL</label>
-                                    <input id="apk-download-url-input" name="apk-download-url" type="url" value="<?php echo htmlspecialchars($get_site_details['apk_download_url'] ?? ''); ?>" class="form-control" placeholder="https://example.com/app.apk or Google Play link" />
-                                    <div class="form-text text-muted">Leave blank to hide the Download App button on the landing page.</div>
+                                    <input id="apk-download-url-input" name="apk-download-url" type="text" inputmode="url" value="<?php echo htmlspecialchars($get_site_details['apk_download_url'] ?? ''); ?>" class="form-control" placeholder="https://example.com/app.apk or play.google.com/store/apps/details?id=..." />
+                                    <div class="form-text text-muted">Leave blank to hide the Download App button on the landing page. "https://" is added automatically if you leave it out.</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-muted" for="app-redirect-mode-input">APP REDIRECT MODE</label>
