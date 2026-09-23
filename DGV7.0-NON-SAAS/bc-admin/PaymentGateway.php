@@ -167,9 +167,17 @@
                             $gateway_key_warnings[] = strtoupper($each_gateway_name) . " was NOT enabled because it has no Secret Key - paste the gateway Secret Key and save again.";
                         }
 
-                        mysqli_query($connection_server, "UPDATE sas_payment_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', webhook_secret='$each_webhook_secret', percentage='$each_payment_percent', status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
-                        //Payment Gateway Information Updated Successfully
-                        $json_response_array = array("desc" => "Payment Gateway Information Updated Successfully");
+                        // Checked on purpose. This statement used to report success unconditionally,
+                        // so a schema mismatch (the missing webhook_secret column, for one) was invisible:
+                        // the page said "Updated Successfully" while nothing had been written.
+                        $bc_gateway_written = mysqli_query($connection_server, "UPDATE sas_payment_gateways SET public_key='$each_public_key', secret_key='$each_secret_key', encrypt_key='$each_encrypt_key', webhook_secret='$each_webhook_secret', percentage='$each_payment_percent', status='$each_gateway_status' WHERE vendor_id='".$get_logged_admin_details["id"]."' && gateway_name='$each_gateway_name'");
+                        if (!$bc_gateway_written) {
+                            $gateway_key_warnings[] = strtoupper($each_gateway_name) . " could NOT be saved: " . mysqli_error($connection_server);
+                            $json_response_array = array("desc" => "Payment Gateway Information Could Not Be Updated");
+                        } else {
+                            //Payment Gateway Information Updated Successfully
+                            $json_response_array = array("desc" => "Payment Gateway Information Updated Successfully");
+                        }
                         $json_response_encode = json_encode($json_response_array,true);
                     }else{
                         if(mysqli_num_rows($get_payment_gateway_details) == 0){
@@ -179,9 +187,15 @@
                                 $each_gateway_status = "2";
                                 $gateway_key_warnings[] = strtoupper($each_gateway_name) . " was created but left DISABLED: no Secret Key was provided.";
                             }
-                            mysqli_query($connection_server, "INSERT INTO sas_payment_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, webhook_secret, percentage, status) VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_webhook_secret', '$each_payment_percent', '$each_gateway_status')");
-                            //Payment Gateway Information Created Successfully
-                            $json_response_array = array("desc" => "Payment Gateway Information Created Successfully");
+                            // Same check on create: a failed INSERT must not be reported as success.
+                            $bc_gateway_created = mysqli_query($connection_server, "INSERT INTO sas_payment_gateways (vendor_id, gateway_name, public_key, secret_key, encrypt_key, webhook_secret, percentage, status) VALUES ('".$get_logged_admin_details["id"]."', '$each_gateway_name', '$each_public_key', '$each_secret_key', '$each_encrypt_key', '$each_webhook_secret', '$each_payment_percent', '$each_gateway_status')");
+                            if (!$bc_gateway_created) {
+                                $gateway_key_warnings[] = strtoupper($each_gateway_name) . " could NOT be saved: " . mysqli_error($connection_server);
+                                $json_response_array = array("desc" => "Payment Gateway Information Could Not Be Created");
+                            } else {
+                                //Payment Gateway Information Created Successfully
+                                $json_response_array = array("desc" => "Payment Gateway Information Created Successfully");
+                            }
                             $json_response_encode = json_encode($json_response_array,true);
                         }else{
                             if(mysqli_num_rows($get_payment_gateway_details) > 1){

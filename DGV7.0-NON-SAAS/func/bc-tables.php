@@ -781,6 +781,20 @@ if ($create_payment_gateway_table) {
     }
 }
 
+// Add webhook_secret if it is missing. Both the admin screen (bc-admin/PaymentGateway.php) and the
+// webhook handlers (web/api/monnify-webhook.php, paystack-webhook.php, beewave-webhook.php) read
+// sas_payment_gateways.webhook_secret, and the save lists it in its INSERT/UPDATE columns - but no
+// migration ever created the column on this table. Where it is absent that statement fails with
+// "Unknown column 'webhook_secret' in 'field list'", the result is never checked, and the page still
+// reports "Updated Successfully" while nothing was written. The gateway is left with no row at all,
+// so the form re-renders every key field empty and the credentials look impossible to save.
+// Deliberately NOT gated on $create_payment_gateway_table: that flag is false when the CREATE fails
+// for an already-existing table, which is exactly the situation that needs this migration.
+$bc_webhook_secret_column = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_payment_gateways LIKE 'webhook_secret'");
+if ($bc_webhook_secret_column && mysqli_num_rows($bc_webhook_secret_column) == 0) {
+    mysqli_query($connection_server, "ALTER TABLE sas_payment_gateways ADD COLUMN webhook_secret VARCHAR(500) NULL DEFAULT NULL AFTER encrypt_key");
+}
+
 //Create Bank Transfer Gateway Table
 $create_bank_transfer_gateway_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_bank_transfer_gateways (vendor_id INT UNSIGNED NOT NULL, gateway_name VARCHAR(225) NOT NULL, public_key VARCHAR(500) NOT NULL, secret_key VARCHAR(500) NOT NULL, encrypt_key VARCHAR(500) NOT NULL, transfer_fee VARCHAR(225) NOT NULL, status INT UNSIGNED NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (vendor_id, gateway_name))");
 
