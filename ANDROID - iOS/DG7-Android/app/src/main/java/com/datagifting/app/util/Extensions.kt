@@ -52,3 +52,27 @@ fun NavController.safeNavigate(directions: NavDirections) {
         navigate(directions)
     } catch (_: IllegalArgumentException) {}
 }
+
+/**
+ * A human-readable reason the endpoint's reply is unusable, or null when it is safe to render.
+ *
+ * This exists because the failure is otherwise invisible. If an endpoint file has not been deployed,
+ * the request 404s, the body is null, and every field on the screen renders blank — which looks like
+ * a broken screen rather than a missing server file. That is exactly how it was misdiagnosed once:
+ * the referral code showed as "—" and the Copy/Share buttons stayed disabled.
+ */
+fun endpointError(httpOk: Boolean, httpCode: Int, body: Map<String, Any>?): String? {
+    if (!httpOk) {
+        return if (httpCode == 404) {
+            "This feature is not available on the server yet (HTTP 404). " +
+                "The endpoint may not have been uploaded."
+        } else {
+            "The server returned an error (HTTP $httpCode). Please try again shortly."
+        }
+    }
+    val status = (body?.get("status") as? String)?.lowercase()
+    if (status != "success") {
+        return (body?.get("message") as? String) ?: "The server did not return any data."
+    }
+    return null
+}

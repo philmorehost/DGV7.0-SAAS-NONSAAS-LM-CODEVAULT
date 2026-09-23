@@ -11,6 +11,7 @@ import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentPointsHistoryBinding
 import com.mzeevtu.util.PreferenceManager
+import com.mzeevtu.util.endpointError
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -46,12 +47,22 @@ class PointsHistoryFragment : Fragment(R.layout.fragment_points_history) {
     private fun load(reset: Boolean) {
         if (reset) { offset = 0; entries.clear() }
         binding.progressBar.visibility = View.VISIBLE
+        binding.tvError.visibility = View.GONE
 
         lifecycleScope.launch {
             try {
                 val resp = RetrofitClient.getService().getPointsHistory(
                     mapOf("api_key" to prefs.getApiKey(), "limit" to pageSize, "offset" to offset)
                 )
+                val problem = endpointError(resp.isSuccessful, resp.code(), resp.body())
+                if (problem != null) {
+                    activity?.runOnUiThread {
+                        binding.progressBar.visibility = View.GONE
+                        binding.swipeRefresh.isRefreshing = false
+                        showError(problem)
+                    }
+                    return@launch
+                }
                 val data = asMap(resp.body()?.get("data"))
                 val page = data["entries"] as? List<Map<String, Any>> ?: emptyList()
                 entries.addAll(page)
@@ -82,10 +93,19 @@ class PointsHistoryFragment : Fragment(R.layout.fragment_points_history) {
                 activity?.runOnUiThread {
                     binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
-                    Toast.makeText(requireContext(), "Unable to load points history.", Toast.LENGTH_SHORT).show()
+                    showError("Could not reach the server. Check your connection and try again.")
                 }
             }
         }
+    }
+
+    /**
+     * Failures are shown explicitly. Rendering blank fields on a failed request looked like a broken
+     * screen when the real cause was an endpoint that had not been deployed.
+     */
+    private fun showError(message: String) {
+        binding.tvError.text = message
+        binding.tvError.visibility = View.VISIBLE
     }
 
     private fun render() {

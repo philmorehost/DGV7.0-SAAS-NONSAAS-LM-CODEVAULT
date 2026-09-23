@@ -10,6 +10,7 @@ import com.mzeevtu.R
 import com.mzeevtu.api.RetrofitClient
 import com.mzeevtu.databinding.FragmentCoinsBinding
 import com.mzeevtu.util.PreferenceManager
+import com.mzeevtu.util.endpointError
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -51,10 +52,19 @@ class CoinsFragment : Fragment(R.layout.fragment_coins) {
 
     private fun load() {
         binding.progressBar.visibility = View.VISIBLE
+        binding.tvError.visibility = View.GONE
         lifecycleScope.launch {
             try {
                 val resp = RetrofitClient.getService()
                     .coinConversion(mapOf("api_key" to prefs.getApiKey()))
+                val problem = endpointError(resp.isSuccessful, resp.code(), resp.body())
+                if (problem != null) {
+                    activity?.runOnUiThread {
+                        binding.progressBar.visibility = View.GONE
+                        showError(problem)
+                    }
+                    return@launch
+                }
                 val data = asMap(resp.body()?.get("data"))
                 rate = num(data["conversion_rate"], 0.0)
                 minPoints = num(data["min_points_conversion"], 0.0).toInt()
@@ -69,10 +79,19 @@ class CoinsFragment : Fragment(R.layout.fragment_coins) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     binding.progressBar.visibility = View.GONE
-                    Toast.makeText(requireContext(), "Unable to load coin settings.", Toast.LENGTH_SHORT).show()
+                    showError("Could not reach the server. Check your connection and try again.")
                 }
             }
         }
+    }
+
+    /**
+     * Failures are shown explicitly. Rendering blank fields on a failed request looked like a broken
+     * screen when the real cause was an endpoint that had not been deployed.
+     */
+    private fun showError(message: String) {
+        binding.tvError.text = message
+        binding.tvError.visibility = View.VISIBLE
     }
 
     private fun renderHeader() {

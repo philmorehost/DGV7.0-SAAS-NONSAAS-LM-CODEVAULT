@@ -15,6 +15,7 @@ import com.datagifting.app.R
 import com.datagifting.app.api.RetrofitClient
 import com.datagifting.app.databinding.FragmentReferralBinding
 import com.datagifting.app.util.PreferenceManager
+import com.datagifting.app.util.endpointError
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -48,10 +49,19 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
 
     private fun load() {
         binding.progressBar.visibility = View.VISIBLE
+        binding.tvError.visibility = View.GONE
         lifecycleScope.launch {
             try {
                 val resp = RetrofitClient.getService()
                     .getReferral(mapOf("api_key" to prefs.getApiKey()))
+                val problem = endpointError(resp.isSuccessful, resp.code(), resp.body())
+                if (problem != null) {
+                    activity?.runOnUiThread {
+                        binding.progressBar.visibility = View.GONE
+                        showError(problem)
+                    }
+                    return@launch
+                }
                 val data = asMap(resp.body()?.get("data"))
                 activity?.runOnUiThread {
                     binding.progressBar.visibility = View.GONE
@@ -60,10 +70,19 @@ class ReferralFragment : Fragment(R.layout.fragment_referral) {
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     binding.progressBar.visibility = View.GONE
-                    Toast.makeText(requireContext(), "Unable to load your referral details.", Toast.LENGTH_SHORT).show()
+                    showError("Could not reach the server. Check your connection and try again.")
                 }
             }
         }
+    }
+
+    /**
+     * Failures are shown explicitly. Rendering blank fields on a failed request looked like a broken
+     * screen when the real cause was an endpoint that had not been deployed.
+     */
+    private fun showError(message: String) {
+        binding.tvError.text = message
+        binding.tvError.visibility = View.VISIBLE
     }
 
     private fun render(d: Map<String, Any>) {
