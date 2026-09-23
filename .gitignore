@@ -31,3 +31,7 @@ DGV7.0-SAAS/asset-backup/
 /*-firebase-adminsdk-*.json
 /*adminsdk*.json
 
+# Collected release build outputs (APK + AAB). Pure binaries — around 278 MB for three apps — and
+# reproducible with `assembleRelease bundleRelease`, so they are never something to commit.
+/release-artifacts/
+
