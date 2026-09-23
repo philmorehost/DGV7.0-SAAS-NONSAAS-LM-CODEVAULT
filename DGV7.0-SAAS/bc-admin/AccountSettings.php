@@ -63,98 +63,150 @@ if (isset($_POST['set-mail-batch-size'])) {
     exit;
 }
 
+if (!function_exists('bc_upload_problem')) {
+    /**
+     * Returns null when an upload looks usable, otherwise a message saying why it is not.
+     *
+     * The PHP-level error code has to be checked as well as the field values. When a file exceeds
+     * upload_max_filesize, PHP reports error 1 with size 0 - which the old field-only checks treated as
+     * a valid 0-byte image, so the handler proceeded to move_uploaded_file() with an empty tmp_name,
+     * ignored the failure, and still reported "Created Successfully". The logo then never appeared.
+     */
+    function bc_upload_problem($error, $name, $size, $ext, $allowed, $label) {
+        switch ((int) $error) {
+            case UPLOAD_ERR_OK:
+                break;
+            case UPLOAD_ERR_NO_FILE:
+                return "File Field Empty";
+            case UPLOAD_ERR_INI_SIZE:
+            case UPLOAD_ERR_FORM_SIZE:
+                return "File Too Larger Than " . ini_get('upload_max_filesize') . " (server upload limit) - please upload a smaller image";
+            case UPLOAD_ERR_PARTIAL:
+                return "The " . $label . " upload was interrupted - please try again";
+            case UPLOAD_ERR_NO_TMP_DIR:
+            case UPLOAD_ERR_CANT_WRITE:
+                return "The server could not store the uploaded " . $label . " (temp folder missing or not writable) - contact your host";
+            case UPLOAD_ERR_EXTENSION:
+                return "A PHP extension blocked the " . $label . " upload";
+            default:
+                return "The " . $label . " upload failed (code " . (int) $error . ")";
+        }
+        if (empty($name) || $size <= 0) {
+            return "File Field Empty";
+        }
+        if ($size > 2097152) {
+            return "File Too Larger Than 2MB";
+        }
+        if (!in_array($ext, $allowed)) {
+            return "Error: Image Extension must be (" . implode(", ", $allowed) . ")";
+        }
+        return null;
+    }
+}
+
 if (isset($_POST["change-logo"])) {
     bc_demo_guard_edit($connection_server);
-    $logo_name = $_FILES["logo"]["name"];
-    $logo_tmp_name = $_FILES["logo"]["tmp_name"];
-    $logo_size = $_FILES["logo"]["size"];
-    $logo_ext = strtolower(pathinfo($logo_name)["extension"]);
+    // $_FILES can be missing altogether (form without enctype, or a POST larger than post_max_size,
+    // in which case PHP delivers empty $_POST and $_FILES). Never index into it unguarded.
+    $logo_file     = $_FILES["logo"] ?? null;
+    $logo_name     = $logo_file["name"] ?? "";
+    $logo_tmp_name = $logo_file["tmp_name"] ?? "";
+    $logo_size     = (int) ($logo_file["size"] ?? 0);
+    $logo_error    = (int) ($logo_file["error"] ?? UPLOAD_ERR_NO_FILE);
+    $logo_ext      = strtolower(pathinfo($logo_name)["extension"] ?? "");
     $acceptable_ext_array = array("png", "jpg");
     $website_edited_name = str_replace([".", ":"], "-", $_SERVER["HTTP_HOST"]);
+    $logo_target = "../uploaded-image/" . $website_edited_name . "_logo.png";
 
-    if (!empty($logo_name) && ($logo_size <= "2097152") && in_array($logo_ext, $acceptable_ext_array)) {
-        if (file_exists("../uploaded-image/" . $website_edited_name . "_logo.png") == true) {
-            unlink("../uploaded-image/" . $website_edited_name . "_logo.png");
-            move_uploaded_file($logo_tmp_name, "../uploaded-image/" . $website_edited_name . "_logo.png");
-            //Website Logo Updated Successfully
-            $json_response_array = array("desc" => "Website Logo Updated Successfully");
-            $json_response_encode = json_encode($json_response_array, true);
+    $logo_problem = bc_upload_problem($logo_error, $logo_name, $logo_size, $logo_ext, $acceptable_ext_array, "logo");
+
+    if ($logo_problem === null) {
+        // Create the folder on demand: if uploaded-image/ does not exist, move_uploaded_file() fails
+        // and the old code still reported "Created Successfully", so the logo silently never appeared.
+        if (!is_dir("../uploaded-image")) {
+            @mkdir("../uploaded-image", 0755, true);
+        }
+        if (file_exists($logo_target)) {
+            @unlink($logo_target);
+        }
+        if (move_uploaded_file($logo_tmp_name, $logo_target)) {
+            clearstatcache(true, $logo_target);
+            $json_response_array = array("desc" => "Website Logo Saved Successfully");
         } else {
-            move_uploaded_file($logo_tmp_name, "../uploaded-image/" . $website_edited_name . "_logo.png");
-            //Website Logo Created Successfully
-            $json_response_array = array("desc" => "Website Logo Created Successfully");
-            $json_response_encode = json_encode($json_response_array, true);
+            // Never claim success on a failed write - say what actually went wrong.
+            $json_response_array = array("desc" => "Website Logo could NOT be saved: the file could not be moved into uploaded-image/. Check that the folder exists and is writable.");
         }
     } else {
-        if (empty($logo_name)) {
-            //File Field Empty
-            $json_response_array = array("desc" => "File Field Empty");
-            $json_response_encode = json_encode($json_response_array, true);
-        } else {
-            if (($logo_size > "2097152")) {
-                //File Too Larger Than 2MB
-                $json_response_array = array("desc" => "File Too Larger Than 2MB");
-                $json_response_encode = json_encode($json_response_array, true);
-            } else {
-                if (!in_array($logo_ext, $acceptable_ext_array)) {
-                    //Error: Image Extension must be ()
-                    $json_response_array = array("desc" => "Error: Image Extension must be (" . implode(", ", $acceptable_ext_array) . ")");
-                    $json_response_encode = json_encode($json_response_array, true);
-                }
-            }
-        }
+        $json_response_array = array("desc" => $logo_problem);
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
 
 if (isset($_POST["change-pwa-icon"])) {
     bc_demo_guard_edit($connection_server);
-    $icon_name = $_FILES["pwa_icon"]["name"];
-    $icon_tmp_name = $_FILES["pwa_icon"]["tmp_name"];
-    $icon_size = $_FILES["pwa_icon"]["size"];
-    $icon_ext = strtolower(pathinfo($icon_name)["extension"]);
+    $icon_file     = $_FILES["pwa_icon"] ?? null;
+    $icon_name     = $icon_file["name"] ?? "";
+    $icon_tmp_name = $icon_file["tmp_name"] ?? "";
+    $icon_size     = (int) ($icon_file["size"] ?? 0);
+    $icon_error    = (int) ($icon_file["error"] ?? UPLOAD_ERR_NO_FILE);
+    $icon_ext      = strtolower(pathinfo($icon_name)["extension"] ?? "");
     $acceptable_ext_array = array("png", "jpg");
     $website_edited_name = str_replace([".", ":"], "-", $_SERVER["HTTP_HOST"]);
 
-    if (!empty($icon_name) && ($icon_size <= "2097152") && in_array($icon_ext, $acceptable_ext_array)) {
+    $icon_problem = bc_upload_problem($icon_error, $icon_name, $icon_size, $icon_ext, $acceptable_ext_array, "PWA icon");
+
+    if ($icon_problem === null) {
+        if (!is_dir("../uploaded-image")) {
+            @mkdir("../uploaded-image", 0755, true);
+        }
         $target_file = "../uploaded-image/" . $website_edited_name . "_pwa_icon.png";
         if (file_exists($target_file)) {
-            unlink($target_file);
+            @unlink($target_file);
         }
-        move_uploaded_file($icon_tmp_name, $target_file);
-        $json_response_array = array("desc" => "PWA Icon Updated Successfully");
+        // Result checked: a failed move used to be reported as "Updated Successfully".
+        $json_response_array = array("desc" => move_uploaded_file($icon_tmp_name, $target_file)
+            ? "PWA Icon Updated Successfully"
+            : "PWA Icon could NOT be saved: the file could not be moved into uploaded-image/. Check that the folder exists and is writable.");
     } else {
-        $json_response_array = array("desc" => "Error: Check File Size (<2MB) and Extension (png, jpg)");
+        $json_response_array = array("desc" => $icon_problem);
     }
-    $_SESSION["product_purchase_response"] = $json_response_array["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
 
 if (isset($_POST["change-pwa-splash"])) {
     bc_demo_guard_edit($connection_server);
-    $splash_name = $_FILES["pwa_splash"]["name"];
-    $splash_tmp_name = $_FILES["pwa_splash"]["tmp_name"];
-    $splash_size = $_FILES["pwa_splash"]["size"];
-    $splash_ext = strtolower(pathinfo($splash_name)["extension"]);
+    $splash_file     = $_FILES["pwa_splash"] ?? null;
+    $splash_name     = $splash_file["name"] ?? "";
+    $splash_tmp_name = $splash_file["tmp_name"] ?? "";
+    $splash_size     = (int) ($splash_file["size"] ?? 0);
+    $splash_error    = (int) ($splash_file["error"] ?? UPLOAD_ERR_NO_FILE);
+    $splash_ext      = strtolower(pathinfo($splash_name)["extension"] ?? "");
     $acceptable_ext_array = array("png", "jpg");
     $website_edited_name = str_replace([".", ":"], "-", $_SERVER["HTTP_HOST"]);
 
-    if (!empty($splash_name) && ($splash_size <= "2097152") && in_array($splash_ext, $acceptable_ext_array)) {
+    $splash_problem = bc_upload_problem($splash_error, $splash_name, $splash_size, $splash_ext, $acceptable_ext_array, "PWA splashscreen");
+
+    if ($splash_problem === null) {
+        if (!is_dir("../uploaded-image")) {
+            @mkdir("../uploaded-image", 0755, true);
+        }
         $target_file = "../uploaded-image/" . $website_edited_name . "_pwa_splash.png";
         if (file_exists($target_file)) {
-            unlink($target_file);
+            @unlink($target_file);
         }
-        move_uploaded_file($splash_tmp_name, $target_file);
-        $json_response_array = array("desc" => "PWA Splashscreen Updated Successfully");
+        // Result checked: a failed move used to be reported as "Updated Successfully".
+        $json_response_array = array("desc" => move_uploaded_file($splash_tmp_name, $target_file)
+            ? "PWA Splashscreen Updated Successfully"
+            : "PWA Splashscreen could NOT be saved: the file could not be moved into uploaded-image/. Check that the folder exists and is writable.");
     } else {
-        $json_response_array = array("desc" => "Error: Check File Size (<2MB) and Extension (png, jpg)");
+        $json_response_array = array("desc" => $splash_problem);
     }
-    $_SESSION["product_purchase_response"] = $json_response_array["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -176,11 +228,14 @@ if (isset($_POST["update-theme"])) {
     if (!empty($template) && in_array($template, $style_templates)) {
         $select_vendor_style_templates_details = mysqli_query($connection_server, "SELECT * FROM sas_vendor_style_templates WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
         if (mysqli_num_rows($select_vendor_style_templates_details) == 0) {
-            mysqli_query($connection_server, "INSERT INTO sas_vendor_style_templates (vendor_id, template_name, primary_color) VALUES ('" . $get_logged_admin_details["id"] . "', '$template', '$primary_color')");
-            $json_response_array = array("desc" => "Theme & Color Created Successfully");
+            // The write is checked here: this branch sets only $json_response_array, and the handler
+            // used to rely on $json_response_encode, which it never assigned - so the success message
+            // came back empty with a "Trying to access array offset on null" warning.
+            $theme_saved = mysqli_query($connection_server, "INSERT INTO sas_vendor_style_templates (vendor_id, template_name, primary_color) VALUES ('" . $get_logged_admin_details["id"] . "', '$template', '$primary_color')");
+            $json_response_array = array("desc" => $theme_saved ? "Theme & Color Created Successfully" : "Theme & Color Could Not Be Created: " . mysqli_error($connection_server));
         } else {
-            mysqli_query($connection_server, "UPDATE sas_vendor_style_templates SET template_name='$template', primary_color='$primary_color' WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
-            $json_response_array = array("desc" => "Theme & Color Updated Successfully");
+            $theme_saved = mysqli_query($connection_server, "UPDATE sas_vendor_style_templates SET template_name='$template', primary_color='$primary_color' WHERE vendor_id='" . $get_logged_admin_details["id"] . "'");
+            $json_response_array = array("desc" => $theme_saved ? "Theme & Color Updated Successfully" : "Theme & Color Could Not Be Updated: " . mysqli_error($connection_server));
         }
     } else {
         if (empty($color_scheme)) {
@@ -196,8 +251,7 @@ if (isset($_POST["update-theme"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -259,8 +313,7 @@ if (isset($_POST["update-profile"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -357,8 +410,7 @@ if (isset($_POST["update-verification"])) {
         $json_response_encode = json_encode($json_response_array, true);
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit();
 }
@@ -442,8 +494,7 @@ if (isset($_POST["change-password"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -534,8 +585,7 @@ if (isset($_POST["update-bank-details"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -604,8 +654,7 @@ if (isset($_POST["refresh-purchase-id"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -689,8 +738,7 @@ if (isset($_POST["whitelist-purchase-id"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -740,8 +788,7 @@ if (isset($_POST["update-user-minimum-funding-details"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -822,8 +869,7 @@ if (isset($_POST["update-payment-order-details"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -939,8 +985,7 @@ if (isset($_POST["update-upgrade-details"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -999,8 +1044,7 @@ if (isset($_POST["update-referral-details"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit;
 }
@@ -1123,8 +1167,7 @@ if (isset($_POST["update-site-details"])) {
         }
     }
 
-    $json_response_decode = json_decode($json_response_encode, true);
-    $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+    $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Settings saved";
     header("Location: " . $_SERVER["REQUEST_URI"]);
     exit();
 }
