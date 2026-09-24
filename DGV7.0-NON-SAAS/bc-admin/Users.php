@@ -1,6 +1,77 @@
 <?php session_start();
     include("../func/bc-admin-config.php");
 
+    /**
+     * Identify one of THIS vendor's users the way the Users table rows are identified: by
+     * primary key when the browser sends it, otherwise by username.
+     *
+     * The account-status buttons used to lean on alterUser(), which re-derives the vendor from
+     * the request host (resolveVendorID()) and then refuses to write unless
+     * "SELECT ... WHERE vendor_id=<host vendor> && username=<name>" returns EXACTLY one row.
+     * When the host does not resolve to the admin's vendor, or the browser had to re-encode a
+     * username (whitespace, '+', a quote), that returns "failed" on every click - so Block and
+     * Delete behaved like dead buttons while no error was ever shown.
+     *
+     * @return array|false  the sas_users row, or false when this vendor has no such user
+     */
+    function bc_admin_find_user($user_id, $raw_username)
+    {
+        global $connection_server, $get_logged_admin_details;
+
+        $vendor_id = (int) ($get_logged_admin_details["id"] ?? 0);
+        if ($vendor_id <= 0) {
+            return false;
+        }
+
+        $user_id = (int) $user_id;
+        if ($user_id > 0) {
+            $match = "id='$user_id'";
+        } else {
+            $username = mysqli_real_escape_string($connection_server, trim(strip_tags((string) $raw_username)));
+            if ($username === "") {
+                return false;
+            }
+            $match = "username='$username'";
+        }
+
+        $query = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$vendor_id' && $match LIMIT 1");
+        if (!$query || mysqli_num_rows($query) === 0) {
+            return false;
+        }
+        return mysqli_fetch_array($query);
+    }
+
+    /**
+     * Write one whitelisted column on one of this vendor's users, scoped by primary key.
+     * Returns true on success; on failure $error carries mysqli_error() so the admin sees the
+     * real reason instead of a generic "cannot be deleted".
+     */
+    function bc_admin_set_user_column($user_id, $column, $value, &$error)
+    {
+        global $connection_server, $get_logged_admin_details;
+
+        $error = "";
+        if (!in_array($column, array("status", "api_status"), true)) {
+            $error = "Unsupported field";
+            return false;
+        }
+
+        $vendor_id = (int) ($get_logged_admin_details["id"] ?? 0);
+        $user_id = (int) $user_id;
+        if ($vendor_id <= 0 || $user_id <= 0) {
+            $error = "User not found for this vendor";
+            return false;
+        }
+
+        $value = (int) $value;
+        $update = mysqli_query($connection_server, "UPDATE sas_users SET $column='$value' WHERE vendor_id='$vendor_id' && id='$user_id'");
+        if (!$update) {
+            $error = mysqli_error($connection_server);
+            return false;
+        }
+        return true;
+    }
+
     if(isset($_POST["import-users"])){
         if(isset($_FILES['user-csv']) && $_FILES['user-csv']['error'] == 0){
             $file_tmp = $_FILES['user-csv']['tmp_name'];
@@ -107,85 +178,73 @@
     
     if(isset($_GET["account-status"])){
         $status = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-status"])));
-        $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-username"])));
+        $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-username"] ?? "")));
+        $account_user_id = isset($_GET["account-user-id"]) ? (int) $_GET["account-user-id"] : 0;
         $statusArray = array(1, 2, 3);
+        $statusVerbArray = array(1 => "activated", 2 => "deactivated", 3 => "deleted");
+        $json_response_array = array("desc" => "Unexpected error");
         if(is_numeric($status)){
             if(in_array($status, $statusArray)){
-            	$send_mail_to_user = false;
-            	$get_user_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_logged_admin_details["id"]."' && username='$account_user' LIMIT 1"));
-            	
-                if($status == 1){
-                    $alter_user_account_details = alterUser($account_user, "status", $status);
-                    if($alter_user_account_details == "success"){
-                    	$send_mail_to_user = true;
-                        $json_response_array = array("desc" => ucwords($account_user." account activated successfully"));
-                        $json_response_encode = json_encode($json_response_array,true);
+                $send_mail_to_user = false;
+                // Resolve the row the same way the table listed it - by id when the browser sends
+                // it, otherwise by username - inside THIS vendor. Never via alterUser(), which
+                // re-derives the vendor from the request host and needs exactly one matching row.
+                $get_user_details = bc_admin_find_user($account_user_id, $_GET["account-username"] ?? "");
+                if(!$get_user_details){
+                    $json_response_array = array("desc" => "User not found for this vendor");
+                }else{
+                    $account_user = $get_user_details["username"];
+                    $account_update_error = "";
+                    if(bc_admin_set_user_column($get_user_details["id"], "status", $status, $account_update_error)){
+                        $send_mail_to_user = true;
+                        $json_response_array = array("desc" => ucwords($account_user." account ".$statusVerbArray[$status]." successfully"));
                     }else{
-                        $json_response_array = array("desc" => ucwords($get_payment_order["username"]." account cannot be activated"));
-                        $json_response_encode = json_encode($json_response_array,true);
+                        $json_response_array = array("desc" => ucwords($account_user." account cannot be ".$statusVerbArray[$status]).($account_update_error !== "" ? " - ".$account_update_error : ""));
                     }
-                }
-                
-                if($status == 2){
-                    $alter_user_account_details = alterUser($account_user, "status", $status);
-                    if($alter_user_account_details == "success"){
-                    	$send_mail_to_user = true;
-                        $json_response_array = array("desc" => ucwords($account_user." account deactivated successfully"));
-                        $json_response_encode = json_encode($json_response_array,true);
-                    }else{
-                        $json_response_array = array("desc" => ucwords($get_payment_order["username"]." account cannot be deactivated"));
-                        $json_response_encode = json_encode($json_response_array,true);
-                    }
-                }
 
-                if($status == 3){
-                    $alter_user_account_details = alterUser($account_user, "status", $status);
-                    if($alter_user_account_details == "success"){
-                    	$send_mail_to_user = true;
-                        $json_response_array = array("desc" => ucwords($account_user." account deleted successfully"));
-                        $json_response_encode = json_encode($json_response_array,true);
-                    }else{
-                        $json_response_array = array("desc" => ucwords($get_payment_order["username"]." account cannot be deleted"));
-                        $json_response_encode = json_encode($json_response_array,true);
+                    if($send_mail_to_user == true){
+                        // Email Beginning
+                        $log_template_encoded_text_array = array("{firstname}" => $get_user_details["firstname"], "{lastname}" => $get_user_details["lastname"], "{account_status}" => accountStatus($status));
+                        $raw_log_template_subject = getUserEmailTemplate('user-account-status','subject');
+                        $raw_log_template_body = getUserEmailTemplate('user-account-status','body');
+                        foreach($log_template_encoded_text_array as $array_key => $array_val){
+                            $raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
+                            $raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
+                        }
+                        sendVendorEmail($get_user_details["email"], $raw_log_template_subject, $raw_log_template_body);
+                        // Email End
                     }
-                }
-                
-                if($send_mail_to_user == true){
-                	// Email Beginning
-                	$log_template_encoded_text_array = array("{firstname}" => $get_user_details["firstname"], "{lastname}" => $get_user_details["lastname"], "{account_status}" => accountStatus($status));
-                	$raw_log_template_subject = getUserEmailTemplate('user-account-status','subject');
-                	$raw_log_template_body = getUserEmailTemplate('user-account-status','body');
-                	foreach($log_template_encoded_text_array as $array_key => $array_val){
-                		$raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
-                		$raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
-                	}
-                	sendVendorEmail($get_user_details["email"], $raw_log_template_subject, $raw_log_template_body);
-                	// Email End
                 }
             }else{
                 //Invalid Status Code
                 $json_response_array = array("desc" => "Invalid Status Code");
-                $json_response_encode = json_encode($json_response_array,true);
             }
         }else{
             //Non-numeric string
             $json_response_array = array("desc" => "Non-numeric string");
-            $json_response_encode = json_encode($json_response_array,true);
         }
-        $json_response_decode = json_decode($json_response_encode,true);
-        $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+        $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Unexpected error";
         header("Location: /bc-admin/Users.php");
         exit;
     }
 
     if(isset($_POST["permanent-delete-user"])){
-        $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["account-username"])));
-        $delete_user = mysqli_query($connection_server, "DELETE FROM sas_users WHERE vendor_id='".$get_logged_admin_details["id"]."' && username='$account_user' && status='3'");
+        $account_user_id = isset($_POST["account-user-id"]) ? (int) $_POST["account-user-id"] : 0;
+        $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["account-username"] ?? "")));
+        $get_user_details = bc_admin_find_user($account_user_id, $_POST["account-username"] ?? "");
 
-        if($delete_user){
-            $_SESSION["product_purchase_response"] = ucwords($account_user." account permanently deleted successfully");
+        // Permanent delete is the SECOND step, so the row has to still be in the Deleted state.
+        if($get_user_details && (int) $get_user_details["status"] === 3){
+            $delete_user = mysqli_query($connection_server, "DELETE FROM sas_users WHERE vendor_id='".$get_logged_admin_details["id"]."' && id='".(int) $get_user_details["id"]."'");
+            // mysqli_query() reports TRUE even when nothing matched, so the affected-row count is
+            // the only thing that distinguishes a real delete from a silent no-op.
+            if($delete_user && mysqli_affected_rows($connection_server) > 0){
+                $_SESSION["product_purchase_response"] = ucwords($get_user_details["username"]." account permanently deleted successfully");
+            } else {
+                $_SESSION["product_purchase_response"] = "Error: Could not permanently delete ".$get_user_details["username"];
+            }
         } else {
-            $_SESSION["product_purchase_response"] = "Error: Could not permanently delete ".$account_user;
+            $_SESSION["product_purchase_response"] = "Error: Could not permanently delete ".($account_user !== "" ? $account_user : "user");
         }
         header("Location: /bc-admin/Users.php");
         exit();
@@ -193,63 +252,50 @@
 
     if(isset($_GET["account-api-status"])){
         $status = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-api-status"])));
-        $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-username"])));
+        $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-username"] ?? "")));
+        $account_user_id = isset($_GET["account-user-id"]) ? (int) $_GET["account-user-id"] : 0;
         $statusArray = array(1, 2);
         $statusArrayValue = array(1 => "Activated", 2 => "Deactivated");
-        
+        $json_response_array = array("desc" => "Unexpected error");
+
         if(is_numeric($status)){
             if(in_array($status, $statusArray)){
-            	$send_mail_to_user = false;
-            	$get_user_details = mysqli_fetch_array(mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='".$get_logged_admin_details["id"]."' && username='$account_user' LIMIT 1"));
-            	
-                if($status == 1){
-                    $alter_user_account_details = alterUser($account_user, "api_status", $status);
-                    if($alter_user_account_details == "success"){
-                    	$send_mail_to_user = true;
-                        $json_response_array = array("desc" => ucwords($account_user." account status activated successfully"));
-                        $json_response_encode = json_encode($json_response_array,true);
+                $send_mail_to_user = false;
+                $get_user_details = bc_admin_find_user($account_user_id, $_GET["account-username"] ?? "");
+                if(!$get_user_details){
+                    $json_response_array = array("desc" => "User not found for this vendor");
+                }else{
+                    $account_user = $get_user_details["username"];
+                    $account_update_error = "";
+                    if(bc_admin_set_user_column($get_user_details["id"], "api_status", $status, $account_update_error)){
+                        $send_mail_to_user = true;
+                        $json_response_array = array("desc" => ucwords($account_user." account status ".strtolower($statusArrayValue[$status])." successfully"));
                     }else{
-                        $json_response_array = array("desc" => ucwords($get_payment_order["username"]." account status cannot be activated"));
-                        $json_response_encode = json_encode($json_response_array,true);
+                        $json_response_array = array("desc" => ucwords($account_user." account status cannot be ".strtolower($statusArrayValue[$status])).($account_update_error !== "" ? " - ".$account_update_error : ""));
                     }
-                }
-                
-                if($status == 2){
-                    $alter_user_account_details = alterUser($account_user, "api_status", $status);
-                    if($alter_user_account_details == "success"){
-                    	$send_mail_to_user = true;
-                        $json_response_array = array("desc" => ucwords($account_user." account status deactivated successfully"));
-                        $json_response_encode = json_encode($json_response_array,true);
-                    }else{
-                        $json_response_array = array("desc" => ucwords($get_payment_order["username"]." account status cannot be deactivated"));
-                        $json_response_encode = json_encode($json_response_array,true);
+
+                    if($send_mail_to_user == true){
+                        // Email Beginning
+                        $log_template_encoded_text_array = array("{firstname}" => $get_user_details["firstname"], "{lastname}" => $get_user_details["lastname"], "{api_status}" => $statusArrayValue[$status]);
+                        $raw_log_template_subject = getUserEmailTemplate('user-api-status','subject');
+                        $raw_log_template_body = getUserEmailTemplate('user-api-status','body');
+                        foreach($log_template_encoded_text_array as $array_key => $array_val){
+                            $raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
+                            $raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
+                        }
+                        sendVendorEmail($get_user_details["email"], $raw_log_template_subject, $raw_log_template_body);
+                        // Email End
                     }
-                }
-                
-                if($send_mail_to_user == true){
-                	// Email Beginning
-                	$log_template_encoded_text_array = array("{firstname}" => $get_user_details["firstname"], "{lastname}" => $get_user_details["lastname"], "{api_status}" => $statusArrayValue[$status]);
-                	$raw_log_template_subject = getUserEmailTemplate('user-api-status','subject');
-                	$raw_log_template_body = getUserEmailTemplate('user-api-status','body');
-                	foreach($log_template_encoded_text_array as $array_key => $array_val){
-                		$raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
-                		$raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
-                	}
-                	sendVendorEmail($get_user_details["email"], $raw_log_template_subject, $raw_log_template_body);
-                	// Email End
                 }
             }else{
                 //Invalid Status Code
                 $json_response_array = array("desc" => "Invalid Status Code");
-                $json_response_encode = json_encode($json_response_array,true);
             }
         }else{
             //Non-numeric string
             $json_response_array = array("desc" => "Non-numeric string");
-            $json_response_encode = json_encode($json_response_array,true);
         }
-        $json_response_decode = json_decode($json_response_encode,true);
-        $_SESSION["product_purchase_response"] = $json_response_decode["desc"];
+        $_SESSION["product_purchase_response"] = $json_response_array["desc"] ?? "Unexpected error";
         header("Location: /bc-admin/Users.php");
         exit;
     }
@@ -548,31 +594,31 @@
 
             let statusActions = '';
             if (u.status == '1') {
-                statusActions = `<button class="btn btn-sm btn-light border text-danger" onclick="updateUserAccountStatus('2','${u.username}')" title="Block User"><i class="bi bi-ban"></i></button>
-                                 <button class="btn btn-sm btn-light border text-success" onclick="updateUserAccountStatus('3','${u.username}')" title="Delete User"><i class="bi bi-trash"></i></button>`;
+                statusActions = `<button class="btn btn-sm btn-light border text-danger" onclick="updateUserAccountStatus('2','${jsStr(u.username)}','${jsStr(u.id)}')" title="Block User"><i class="bi bi-ban"></i></button>
+                                 <button class="btn btn-sm btn-light border text-success" onclick="updateUserAccountStatus('3','${jsStr(u.username)}','${jsStr(u.id)}')" title="Delete User"><i class="bi bi-trash"></i></button>`;
             } else if (u.status == '2') {
-                statusActions = `<button class="btn btn-sm btn-light border text-primary" onclick="updateUserAccountStatus('1','${u.username}')" title="Activate User"><i class="bi bi-check-circle"></i></button>
-                                 <button class="btn btn-sm btn-light border text-success" onclick="updateUserAccountStatus('3','${u.username}')" title="Delete User"><i class="bi bi-trash"></i></button>`;
+                statusActions = `<button class="btn btn-sm btn-light border text-primary" onclick="updateUserAccountStatus('1','${jsStr(u.username)}','${jsStr(u.id)}')" title="Activate User"><i class="bi bi-check-circle"></i></button>
+                                 <button class="btn btn-sm btn-light border text-success" onclick="updateUserAccountStatus('3','${jsStr(u.username)}','${jsStr(u.id)}')" title="Delete User"><i class="bi bi-trash"></i></button>`;
             } else {
-                statusActions = `<button class="btn btn-sm btn-light border text-primary" onclick="updateUserAccountStatus('1','${u.username}')" title="Activate User"><i class="bi bi-check-circle"></i></button>
-                                 <button class="btn btn-sm btn-light border text-danger" onclick="permanentlyDeleteUser('${u.username}')" title="Permanently Delete"><i class="bi bi-trash-fill"></i></button>`;
+                statusActions = `<button class="btn btn-sm btn-light border text-primary" onclick="updateUserAccountStatus('1','${jsStr(u.username)}','${jsStr(u.id)}')" title="Activate User"><i class="bi bi-check-circle"></i></button>
+                                 <button class="btn btn-sm btn-light border text-danger" onclick="permanentlyDeleteUser('${jsStr(u.username)}','${jsStr(u.id)}')" title="Permanently Delete"><i class="bi bi-trash-fill"></i></button>`;
             }
 
             const apiBadge = (u.api_status == '1')
-                ? `<span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-1" style="cursor:pointer" onclick="updateUserAccountAPIStatus('2','${u.username}')">API Enabled <i class="bi bi-toggle-on ms-1"></i></span>`
-                : `<span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2 py-1" style="cursor:pointer" onclick="updateUserAccountAPIStatus('1','${u.username}')">API Disabled <i class="bi bi-toggle-off ms-1"></i></span>`;
+                ? `<span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-1" style="cursor:pointer" onclick="updateUserAccountAPIStatus('2','${jsStr(u.username)}','${jsStr(u.id)}')">API Enabled <i class="bi bi-toggle-on ms-1"></i></span>`
+                : `<span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2 py-1" style="cursor:pointer" onclick="updateUserAccountAPIStatus('1','${jsStr(u.username)}','${jsStr(u.id)}')">API Disabled <i class="bi bi-toggle-off ms-1"></i></span>`;
 
             html += `
                 <tr>
                     <td class="ps-4 fw-bold">${sn}</td>
                     <td>
                         <div class="fw-bold text-dark">${u.fullname}</div>
-                        <div class="small text-muted">@${u.username} <button class="btn p-0 text-primary small" onclick="customJsRedirect('/bc-admin/UserEdit.php?userID=${u.id}', 'Edit @${u.username}?')"><i class="bi bi-pencil-square ms-1"></i></button></div>
+                        <div class="small text-muted">@${u.username} <button class="btn p-0 text-primary small" onclick="customJsRedirect('/bc-admin/UserEdit.php?userID=${u.id}', 'Edit @${jsStr(u.username)}?')"><i class="bi bi-pencil-square ms-1"></i></button></div>
                         <div class="small text-muted text-break" style="max-width: 150px;">${u.email}</div>
                         <div class="small text-muted"><i class="bi bi-telephone me-1"></i>${u.phone_number}</div>
                     </td>
                     <td>
-                        <div class="small fw-bold">${u.level_name} <button class="btn p-0 text-primary small" onclick="customJsRedirect('/bc-admin/UserUpgrade.php?userID=${u.id}', 'Upgrade @${u.username}?')"><i class="bi bi-arrow-down-up ms-1"></i></button></div>
+                        <div class="small fw-bold">${u.level_name} <button class="btn p-0 text-primary small" onclick="customJsRedirect('/bc-admin/UserUpgrade.php?userID=${u.id}', 'Upgrade @${jsStr(u.username)}?')"><i class="bi bi-arrow-down-up ms-1"></i></button></div>
                         <div class="small text-muted">Ref: ${u.referral_username}</div>
                         <div class="small text-muted text-truncate" style="max-width: 150px;" title="${u.home_address}"><i class="bi bi-geo-alt me-1"></i>${u.home_address}</div>
                     </td>
@@ -583,7 +629,7 @@
                     <td>
                         <div class="mb-2">${apiBadge}</div>
                         <div class="small text-muted">Ans: <span class="fw-bold text-dark">${u.security_answer || 'N/A'}</span></div>
-                        <div class="small text-muted">Key: <span class="fw-bold text-dark">${u.api_key.substring(0,8)}...</span> <i class="bi bi-copy text-primary a-cursor" onclick="copyText('API Key copied','${u.api_key}')"></i></div>
+                        <div class="small text-muted">Key: <span class="fw-bold text-dark">${jsStr(u.api_key).substring(0,8)}...</span> <i class="bi bi-copy text-primary a-cursor" onclick="copyText('API Key copied','${jsStr(u.api_key)}')"></i></div>
                     </td>
                     <td>
                         <div class="small"><span class="text-muted">Reg:</span> ${u.reg_date_formatted}</div>
@@ -592,7 +638,7 @@
                     <td>
                         <div class="d-flex gap-2 justify-content-end pe-3 mb-2">
                             ${statusActions}
-                            <button class="btn btn-sm btn-light border text-primary" onclick="loginUserAccount('${u.id}', '${u.username}')" title="Login as User"><i class="bi bi-box-arrow-in-right"></i></button>
+                            <button class="btn btn-sm btn-light border text-primary" onclick="loginUserAccount('${jsStr(u.id)}', '${jsStr(u.username)}')" title="Login as User"><i class="bi bi-box-arrow-in-right"></i></button>
                         </div>
                         <div class="d-flex gap-2 justify-content-end pe-3">
                             <a href="Transactions.php?searchq=${u.username}" class="btn btn-sm btn-outline-info" title="View Transactions"><i class="bi bi-list-task"></i></a>
@@ -638,7 +684,20 @@
         document.getElementById("stat-deleted-users").textContent = s.deleted;
     }
 
-    function updateUserAccountStatus(status, username) {
+    // Escape a value for use inside a single-quoted JS string in an inline onclick attribute.
+    // A backslash or quote (some sas_users rows literally contain them) otherwise ends the
+    // string early and the button stops working with a silent SyntaxError.
+    function jsStr(value) {
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function updateUserAccountStatus(status, username, id) {
         let action = '';
         if(status == 1) action = 'Activate';
         else if(status == 2) action = 'Block';
@@ -652,12 +711,12 @@
             confirmButtonText: 'Yes, proceed'
         }).then((result) => {
             if (result.isConfirmed) {
-                window.location.href = `Users.php?account-status=${status}&account-username=${username}`;
+                window.location.href = `Users.php?account-status=${encodeURIComponent(status)}&account-user-id=${encodeURIComponent(id)}&account-username=${encodeURIComponent(username)}`;
             }
         });
     }
 
-    function updateUserAccountAPIStatus(status, username) {
+    function updateUserAccountAPIStatus(status, username, id) {
         let action = (status == 1) ? 'Enable' : 'Disable';
         Swal.fire({
             title: action + ' API?',
@@ -667,7 +726,7 @@
             confirmButtonText: 'Yes, proceed'
         }).then((result) => {
             if (result.isConfirmed) {
-                window.location.href = `Users.php?account-api-status=${status}&account-username=${username}`;
+                window.location.href = `Users.php?account-api-status=${encodeURIComponent(status)}&account-user-id=${encodeURIComponent(id)}&account-username=${encodeURIComponent(username)}`;
             }
         });
     }
@@ -681,12 +740,12 @@
             confirmButtonText: 'Yes, login'
         }).then((result) => {
             if (result.isConfirmed) {
-                window.location.href = `Users.php?account-log=${id}`;
+                window.location.href = `Users.php?account-log=${encodeURIComponent(id)}`;
             }
         });
     }
 
-    function permanentlyDeleteUser(username) {
+    function permanentlyDeleteUser(username, id) {
         Swal.fire({
             title: 'Are you sure?',
             text: "This will permanently delete the account for @" + username + ". This action cannot be undone!",
@@ -706,12 +765,18 @@
                 hiddenInput.name = 'permanent-delete-user';
                 hiddenInput.value = '1';
 
+                const userIdInput = document.createElement('input');
+                userIdInput.type = 'hidden';
+                userIdInput.name = 'account-user-id';
+                userIdInput.value = id;
+
                 const usernameInput = document.createElement('input');
                 usernameInput.type = 'hidden';
                 usernameInput.name = 'account-username';
                 usernameInput.value = username;
 
                 form.appendChild(hiddenInput);
+                form.appendChild(userIdInput);
                 form.appendChild(usernameInput);
                 document.body.appendChild(form);
                 form.submit();

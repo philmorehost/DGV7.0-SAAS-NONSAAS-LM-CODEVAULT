@@ -1485,7 +1485,11 @@ function alterUser($userID, $column_name, $column_value)
 	if (!empty($userID) && !empty($column_name) && !empty($column_value)) {
 		$vendor_id_func = resolveVendorID();
 		$get_logged_user_det = mysqli_query($connection_server, "SELECT * FROM sas_users WHERE vendor_id='$vendor_id_func' && username='$userID'");
-		if (mysqli_num_rows($get_logged_user_det) == 1) {
+		// "== 1" made the whole write a silent no-op the moment a vendor held two rows with the
+		// same login name (sas_users has no UNIQUE(vendor_id, username), and the admin CSV
+		// importer inserts usernames blindly). Every caller just saw "failed". Update whatever
+		// matches instead - they are the same account.
+		if (mysqli_num_rows($get_logged_user_det) >= 1) {
 			while ($user_details = mysqli_fetch_assoc($get_logged_user_det)) {
 				$vendor_id = $user_details["vendor_id"];
 				$username_id = $user_details["username"];
