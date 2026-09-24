@@ -250,6 +250,85 @@
         exit();
     }
 
+    if(isset($_POST["bulk-user-action"])){
+        $bulk_action = isset($_POST["bulk-user-action"]) ? trim(strip_tags($_POST["bulk-user-action"])) : "";
+        // Closed set of actions; the request never names a column or a value directly.
+        $bulk_actions = array(
+            "activate"         => array("column" => "status", "value" => 1, "label" => "activated"),
+            "block"            => array("column" => "status", "value" => 2, "label" => "blocked"),
+            "delete"           => array("column" => "status", "value" => 3, "label" => "deleted"),
+            "permanent-delete" => array("column" => "", "value" => "", "label" => "permanently deleted"),
+        );
+
+        // Only ids, deduplicated, and only this vendor's rows are ever touched.
+        $bulk_ids = array();
+        if (isset($_POST["bulk-user-ids"]) && is_array($_POST["bulk-user-ids"])) {
+            foreach ($_POST["bulk-user-ids"] as $raw_bulk_id) {
+                $clean_bulk_id = (int) $raw_bulk_id;
+                if ($clean_bulk_id > 0) {
+                    $bulk_ids[$clean_bulk_id] = $clean_bulk_id;
+                }
+            }
+        }
+        $bulk_ids = array_values($bulk_ids);
+
+        if (!isset($bulk_actions[$bulk_action])) {
+            $_SESSION["product_purchase_response"] = "Please choose an action to apply.";
+        } elseif (count($bulk_ids) === 0) {
+            $_SESSION["product_purchase_response"] = "No accounts were selected.";
+        } elseif (count($bulk_ids) > 500) {
+            $_SESSION["product_purchase_response"] = "Too many accounts selected at once (".count($bulk_ids)."). Please select 500 or fewer.";
+        } else {
+            $action_details = $bulk_actions[$bulk_action];
+            $bulk_vendor_id = (int) $get_logged_admin_details["id"];
+            $bulk_id_list = implode(",", $bulk_ids);
+            $bulk_selection = mysqli_query($connection_server, "SELECT id, status FROM sas_users WHERE vendor_id='$bulk_vendor_id' && id IN ($bulk_id_list)");
+
+            $bulk_applied = 0;
+            $bulk_failed = 0;
+            $bulk_skipped = 0;
+            if ($bulk_selection) {
+                while ($bulk_row = mysqli_fetch_assoc($bulk_selection)) {
+                    $bulk_row_id = (int) $bulk_row["id"];
+                    if ($bulk_action === "permanent-delete") {
+                        // Same two-step rule as the single-row button: only an account already in
+                        // the Deleted state can be removed for good.
+                        if ((int) $bulk_row["status"] !== 3) {
+                            $bulk_skipped++;
+                            continue;
+                        }
+                        $bulk_delete = mysqli_query($connection_server, "DELETE FROM sas_users WHERE vendor_id='$bulk_vendor_id' && id='$bulk_row_id'");
+                        if ($bulk_delete && mysqli_affected_rows($connection_server) > 0) {
+                            $bulk_applied++;
+                        } else {
+                            $bulk_failed++;
+                        }
+                    } else {
+                        $bulk_error = "";
+                        if (bc_admin_set_user_column($bulk_row_id, $action_details["column"], $action_details["value"], $bulk_error)) {
+                            $bulk_applied++;
+                        } else {
+                            $bulk_failed++;
+                        }
+                    }
+                }
+            }
+
+            // Note: unlike the single-row status buttons this sends no email per user - one SMTP
+            // round trip per account would make a large selection time out mid-request.
+            $bulk_message = $bulk_applied . " of " . count($bulk_ids) . " selected account(s) " . $action_details["label"] . ".";
+            if ($bulk_skipped > 0) {
+                $bulk_message .= " " . $bulk_skipped . " skipped because they are not in the Deleted state.";
+            }
+            if ($bulk_failed > 0) {
+                $bulk_message .= " " . $bulk_failed . " could not be updated.";
+            }
+            $_SESSION["product_purchase_response"] = $bulk_message;
+        }
+        header("Location: /bc-admin/Users.php");
+        exit();
+    }
+
     if(isset($_GET["account-api-status"])){
         $status = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-api-status"])));
         $account_user = mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["account-username"] ?? "")));
@@ -309,6 +388,10 @@
                     $get_user_info = mysqli_fetch_array($get_logged_user_query);
                     $_SESSION["user_session"] = $get_user_info["username"];
                     $_SESSION["admin_to_user_redirect"] = true;
+                    // SAAS already set these two; NON-SAAS did not, so the tail below decoded an
+                    // undefined variable - a warning, "headers already sent", and no redirect.
+                    $json_response_array = array("desc" => "Redirecting to user dashboard...");
+                    $json_response_encode = json_encode($json_response_array, true);
                 }else{
                     if(mysqli_num_rows($get_logged_user_query) < 1){
                         $json_response_array = array("desc" => "Error: User not Exists");
@@ -464,8 +547,8 @@
                     </div>
                 </div>
 
-                <div class="row g-3 mb-4">
-                    <div class="col-md-7">
+                <div class="row g-3">
+                    <div class="col-md-6">
                         <div class="input-group">
                             <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
                             <input id="user-search-input" type="text" placeholder="Search by Email, Username, Phone, Name..." class="form-control border-start-0" />
@@ -479,8 +562,38 @@
                             <option value="all">All Accounts</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
-                        <button type="button" onclick="fetchUsers(1)" class="btn btn-primary w-100">Apply Filter</button>
+                    <div class="col-md-3">
+                        <input id="user-name-filter" type="text" placeholder="Filter by name (A-Z)" class="form-control" />
+                    </div>
+                </div>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white">Wallet</span>
+                            <input id="user-wallet-min" type="number" min="0" step="0.01" placeholder="From" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white">Wallet</span>
+                            <input id="user-wallet-max" type="number" min="0" step="0.01" placeholder="To" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="user-sort-filter" class="form-select">
+                            <option value="newest">Sort: Newest first</option>
+                            <option value="oldest">Sort: Oldest first</option>
+                            <option value="name_az">Sort: Name A-Z</option>
+                            <option value="name_za">Sort: Name Z-A</option>
+                            <option value="username_az">Sort: Username A-Z</option>
+                            <option value="username_za">Sort: Username Z-A</option>
+                            <option value="wallet_high">Sort: Wallet 9-0 (high to low)</option>
+                            <option value="wallet_low">Sort: Wallet 0-9 (low to high)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
+                        <button type="button" onclick="fetchUsers(1)" class="btn btn-primary flex-fill">Apply Filter</button>
+                        <button type="button" onclick="resetUserFilters()" class="btn btn-outline-secondary" title="Clear all filters"><i class="bi bi-arrow-counterclockwise"></i></button>
                     </div>
                 </div>
 
@@ -517,17 +630,32 @@
                 <h6 class="fw-bold mb-0 text-primary" id="user-table-header">Users List</h6>
                 <div id="pagination-top"></div>
             </div>
+            <div id="bulk-action-bar" class="d-none align-items-center justify-content-between gap-2 px-4 py-2 border-bottom bg-primary bg-opacity-10">
+                <div class="small fw-bold text-primary"><span id="bulk-selected-count">0</span> account(s) selected</div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="bulk-action-select" class="form-select form-select-sm" style="width: 230px;">
+                        <option value="">Choose an action...</option>
+                        <option value="activate">Activate accounts</option>
+                        <option value="block">Block accounts</option>
+                        <option value="delete">Delete accounts</option>
+                        <option value="permanent-delete">Permanently delete</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="applyBulkAction()">Apply to selected</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearUserSelection()">Clear</button>
+                </div>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
                     <thead class="bg-light">
                       <tr>
+                          <th class="ps-3" style="width: 36px;"><input class="form-check-input" type="checkbox" id="user-select-all" title="Select every account on this page" /></th>
                           <th class="ps-4">S/N</th><th>User Info</th><th>Account Details</th><th>Financials</th><th>Security & API</th><th>Dates</th><th class="pe-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody id="user-table-body">
                         <!-- Content loaded via AJAX -->
-                        <tr><td colspan="7" class="text-center py-5"><div class="spinner-border text-primary"></div></td></tr>
+                        <tr><td colspan="8" class="text-center py-5"><div class="spinner-border text-primary"></div></td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -544,28 +672,70 @@
     <?php include("../func/bc-admin-footer.php"); ?>
 
     <script>
+    // Accounts ticked for a bulk action. Kept across pages of the same filter so a larger batch
+    // can be assembled, and dropped whenever the filter itself changes.
+    let selectedUserIds = new Set();
+
     document.addEventListener("DOMContentLoaded", function() {
         fetchUsers(1);
 
-        // Live search with debounce
-        let searchTimeout = null;
-        document.getElementById("user-search-input").addEventListener("input", function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
+        // Any free-text filter re-queries after a pause.
+        let filterTimeout = null;
+        const onFilterTyped = function() {
+            clearTimeout(filterTimeout);
+            filterTimeout = setTimeout(() => {
+                clearUserSelection();
                 fetchUsers(1);
             }, 500);
+        };
+        ["user-search-input", "user-name-filter", "user-wallet-min", "user-wallet-max"].forEach((id) => {
+            document.getElementById(id).addEventListener("input", onFilterTyped);
+        });
+
+        ["user-status-filter", "user-sort-filter"].forEach((id) => {
+            document.getElementById(id).addEventListener("change", function() {
+                clearUserSelection();
+                fetchUsers(1);
+            });
+        });
+
+        document.getElementById("user-select-all").addEventListener("change", function() {
+            toggleSelectAll(this.checked);
         });
     });
 
+    // Every filter the table sends to ajax-users.php. The status and sort values come from closed
+    // <select> sets, and the server whitelists them again.
+    function currentUserFilters() {
+        return {
+            searchq: document.getElementById("user-search-input").value.trim(),
+            name: document.getElementById("user-name-filter").value.trim(),
+            status: document.getElementById("user-status-filter").value,
+            wallet_min: document.getElementById("user-wallet-min").value.trim(),
+            wallet_max: document.getElementById("user-wallet-max").value.trim(),
+            sort: document.getElementById("user-sort-filter").value
+        };
+    }
+
+    function resetUserFilters() {
+        document.getElementById("user-search-input").value = "";
+        document.getElementById("user-name-filter").value = "";
+        document.getElementById("user-wallet-min").value = "";
+        document.getElementById("user-wallet-max").value = "";
+        document.getElementById("user-status-filter").value = "1";
+        document.getElementById("user-sort-filter").value = "newest";
+        clearUserSelection();
+        fetchUsers(1);
+    }
+
     function fetchUsers(page) {
-        const search = document.getElementById("user-search-input").value;
-        const status = document.getElementById("user-status-filter").value;
+        const query = new URLSearchParams(Object.assign({ page: page }, currentUserFilters()));
         const body = document.getElementById("user-table-body");
 
         // Show loading state
-        body.innerHTML = `<tr><td colspan="7" class="text-center py-5"><div class="spinner-border text-primary"></div></td></tr>`;
+        body.innerHTML = `<tr><td colspan="8" class="text-center py-5"><div class="spinner-border text-primary"></div></td></tr>`;
 
-        fetch(`ajax-users.php?page=${page}&searchq=${encodeURIComponent(search)}&status=${status}`)
+        fetch(`ajax-users.php?${query.toString()}`)
             .then(r => r.json())
             .then(res => {
                 if (res.status === 'success') {
@@ -573,18 +743,19 @@
                     renderPagination(res.pagination);
                     updateStats(res.stats);
                 } else {
-                    body.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger">${res.message}</td></tr>`;
+                    body.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">${res.message}</td></tr>`;
                 }
             })
             .catch(e => {
-                body.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-danger">Network Error</td></tr>`;
+                body.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">Network Error</td></tr>`;
             });
     }
 
     function renderTable(users, currentPage) {
         const body = document.getElementById("user-table-body");
         if (users.length === 0) {
-            body.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">No users found matching criteria.</td></tr>`;
+            body.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">No users found matching criteria.</td></tr>`;
+            updateBulkActionBar();
             return;
         }
 
@@ -610,6 +781,9 @@
 
             html += `
                 <tr>
+                    <td class="ps-3">
+                        <input class="form-check-input user-row-check" type="checkbox" data-user-id="${jsStr(u.id)}"${selectedUserIds.has(String(u.id)) ? ' checked' : ''} onchange="toggleUserSelection(this)" />
+                    </td>
                     <td class="ps-4 fw-bold">${sn}</td>
                     <td>
                         <div class="fw-bold text-dark">${u.fullname}</div>
@@ -648,6 +822,7 @@
                 </tr>`;
         });
         body.innerHTML = html;
+        updateBulkActionBar();
     }
 
     function renderPagination(p) {
@@ -682,6 +857,112 @@
         document.getElementById("stat-active-users").textContent = s.active;
         document.getElementById("stat-blocked-users").textContent = s.blocked;
         document.getElementById("stat-deleted-users").textContent = s.deleted;
+    }
+
+    function toggleUserSelection(checkbox) {
+        const userId = String(checkbox.getAttribute("data-user-id"));
+        if (checkbox.checked) {
+            selectedUserIds.add(userId);
+        } else {
+            selectedUserIds.delete(userId);
+        }
+        updateBulkActionBar();
+    }
+
+    function toggleSelectAll(checked) {
+        document.querySelectorAll(".user-row-check").forEach(function(box) {
+            box.checked = checked;
+            const userId = String(box.getAttribute("data-user-id"));
+            if (checked) {
+                selectedUserIds.add(userId);
+            } else {
+                selectedUserIds.delete(userId);
+            }
+        });
+        updateBulkActionBar();
+    }
+
+    function clearUserSelection() {
+        selectedUserIds.clear();
+        document.querySelectorAll(".user-row-check").forEach(function(box) {
+            box.checked = false;
+        });
+        updateBulkActionBar();
+    }
+
+    function updateBulkActionBar() {
+        const bar = document.getElementById("bulk-action-bar");
+        const count = selectedUserIds.size;
+        document.getElementById("bulk-selected-count").textContent = count;
+        if (count > 0) {
+            bar.classList.remove("d-none");
+            bar.classList.add("d-flex");
+        } else {
+            bar.classList.add("d-none");
+            bar.classList.remove("d-flex");
+        }
+
+        // The header box reflects the rows on screen only - selection can span pages.
+        const boxes = Array.from(document.querySelectorAll(".user-row-check"));
+        const selectAll = document.getElementById("user-select-all");
+        const allOnPageChecked = boxes.length > 0 && boxes.every(b => b.checked);
+        selectAll.checked = allOnPageChecked;
+        selectAll.indeterminate = !allOnPageChecked && boxes.some(b => b.checked);
+    }
+
+    function applyBulkAction() {
+        const action = document.getElementById("bulk-action-select").value;
+        if (!action) {
+            Swal.fire("No action chosen", "Pick an action to apply to the selected accounts.", "info");
+            return;
+        }
+        if (selectedUserIds.size === 0) {
+            Swal.fire("Nothing selected", "Tick at least one account first.", "info");
+            return;
+        }
+
+        const actionLabels = {
+            "activate": "Activate",
+            "block": "Block",
+            "delete": "Delete",
+            "permanent-delete": "Permanently delete"
+        };
+        const isDestructive = (action === "permanent-delete");
+
+        Swal.fire({
+            title: actionLabels[action] + " " + selectedUserIds.size + " account(s)?",
+            text: isDestructive
+                ? "Deleted accounts are removed from the database for good. This cannot be undone!"
+                : "This will " + actionLabels[action].toLowerCase() + " every selected account.",
+            icon: isDestructive ? "warning" : "question",
+            showCancelButton: true,
+            confirmButtonColor: isDestructive ? "#d33" : "#3085d6",
+            confirmButtonText: "Yes, proceed"
+        }).then((result) => {
+            if (!result.isConfirmed) {
+                return;
+            }
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = "Users.php";
+
+            const actionInput = document.createElement("input");
+            actionInput.type = "hidden";
+            actionInput.name = "bulk-user-action";
+            actionInput.value = action;
+            form.appendChild(actionInput);
+
+            selectedUserIds.forEach(function(userId) {
+                const idInput = document.createElement("input");
+                idInput.type = "hidden";
+                idInput.name = "bulk-user-ids[]";
+                idInput.value = userId;
+                form.appendChild(idInput);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+        });
     }
 
     // Escape a value for use inside a single-quoted JS string in an inline onclick attribute.
