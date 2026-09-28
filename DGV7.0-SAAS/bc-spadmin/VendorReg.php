@@ -5,6 +5,13 @@
     include("../func/bc-email-templates.php");
     include_once("../func/bc-func.php");
     include("../func/whmcs-func.php");
+    // The password-hashing helpers (bc_hash_password / bc_verify_password / bc_password_is_legacy)
+    // live in bc-security.php, which only the full configs load (bc-config, bc-admin-config,
+    // bc-spadmin-config). This page deliberately bootstraps with the "basic configs" so it can run
+    // before a super admin signs in, so nothing above defines them -> load it explicitly here.
+    // Same pattern as web/api/kyc.php and api/app-backend/ai-handler.php. Without this, placing an
+    // order died with "Call to undefined function bc_hash_password()" on line ~86.
+    include_once("../func/bc-security.php");
 
     // Fetch domain settings
     $nameservers = '';
