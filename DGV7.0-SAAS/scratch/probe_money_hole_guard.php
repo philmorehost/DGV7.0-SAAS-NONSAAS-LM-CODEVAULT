@@ -17,7 +17,7 @@
  *   - chargeOtherUser() rejects a negative amount WITHOUT touching the database
  *   - the swap/withdraw branches in web/CryptoHub.php and web/api/crypto.php reject <= 0
  *
- * It then re-runs the SAME assertions against the pre-fix revision read out of git HEAD as a
+ * It then re-runs the SAME assertions against a PINNED pre-fix revision read out of git as a
  * NEGATIVE CONTROL: a gate nobody has seen fail is a gate nobody should trust. If the control
  * cannot reproduce the bug the run is reported as meaningless and exits non-zero.
  *
@@ -234,6 +234,13 @@ if ($opts['root'] !== null) {
 }
 
 // ---- parent: working tree first, then the pinned pre-fix revision as a control
+//
+// >>> $preFixRev MUST BE THE COMMIT IMMEDIATELY BEFORE THE FIX. <<<
+// A control read out of HEAD stops being a control the moment the fix is committed, because
+// HEAD *becomes* the fixed file: the run then still fails, but for the wrong reason and with no
+// signal left in it. Re-pin with:  git rev-parse --short <fix-commit>^
+$preFixRev = 'aa0406c';   // parent of 3bfb018 ("fix(security): close the crypto money hole...")
+
 $repoRoot   = dirname(dirname(__DIR__));
 $editionDirName = 'DGV7.0-' . ($opts['edition'] === 'NON-SAAS' ? 'NON-SAAS' : 'SAAS');
 $editionDir = $repoRoot . DIRECTORY_SEPARATOR . $editionDirName;
@@ -242,7 +249,7 @@ echo "================ LIVE working tree: $editionDirName ================\n";
 $cmd = escapeshellarg(PHP_BINARY) . ' -n ' . escapeshellarg(__FILE__) . ' --root=' . escapeshellarg($editionDir) . ' --edition=' . escapeshellarg($opts['edition']);
 passthru($cmd, $liveRc);
 
-echo "\n================ NEGATIVE CONTROL: pre-fix revision from git HEAD ================\n";
+echo "\n================ NEGATIVE CONTROL: pre-fix revision $preFixRev ================\n";
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mh_prefix_' . $editionDirName . '_' . getmypid();
 @mkdir($tmp . '/func', 0777, true);
 @mkdir($tmp . '/web/api', 0777, true);
@@ -250,10 +257,10 @@ $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mh_prefix_' . $editionDirName
 $rel = array('func/bc-crypto-func.php', 'func/bc-func.php', 'web/CryptoHub.php', 'web/api/crypto.php');
 $extracted = 0;
 foreach ($rel as $r) {
-    $spec = 'HEAD:' . $editionDirName . '/' . $r;
+    $spec = $preFixRev . ':' . $editionDirName . '/' . $r;
     $content = shell_exec('git -C ' . escapeshellarg($repoRoot) . ' show ' . escapeshellarg($spec) . ' 2>&1');
     if ($content === null || strpos($content, 'fatal:') === 0 || strpos($content, "path '") === 0) {
-        echo "SKIP control: cannot read $spec from HEAD\n";
+        echo "SKIP control: cannot read $spec\n";
         continue;
     }
     file_put_contents($tmp . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $r), $content);
@@ -261,8 +268,27 @@ foreach ($rel as $r) {
 }
 
 if ($extracted !== count($rel)) {
-    echo "\nNEGATIVE CONTROL ABORTED: only $extracted/" . count($rel) . " pre-fix files extracted.\n";
+    echo "\nNEGATIVE CONTROL ABORTED: only $extracted/" . count($rel) . " pre-fix files extracted from $preFixRev.\n";
     echo "The gate is unverified - do not treat a green live run as meaningful.\n";
+    exit(3);
+}
+
+// Prove the fixture really is the pre-fix revision. Without this the control can silently
+// degenerate into comparing the fix against itself and calling that proof.
+$fixMarker = 'Reject negatives before sanitising';   // only the FIXED file contains this
+$bugTell   = 'str_shuffle("0123456789")';            // only the PRE-FIX file contains this
+$fixtureOk = true;
+foreach ($rel as $r) {
+    $body = (string)@file_get_contents($tmp . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $r));
+    if (strpos($body, $fixMarker) !== false) $fixtureOk = false;
+}
+if (strpos((string)@file_get_contents($tmp . '/func/bc-func.php'), $bugTell) === false) $fixtureOk = false;
+
+if (!$fixtureOk) {
+    echo "\nNEGATIVE CONTROL ABORTED: $preFixRev is NOT the pre-fix revision.\n";
+    echo "  expected it to lack: $fixMarker\n";
+    echo "  expected it to still contain: $bugTell\n";
+    echo "Re-pin \$preFixRev to the commit immediately before the fix. The gate is unverified.\n";
     exit(3);
 }
 
