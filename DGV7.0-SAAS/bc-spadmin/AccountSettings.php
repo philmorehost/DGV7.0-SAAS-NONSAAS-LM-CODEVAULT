@@ -355,6 +355,11 @@
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_vendor_pin', '$force_pin') ON DUPLICATE KEY UPDATE option_value='$force_pin'");
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('spadmin_trans_email_enabled', '$force_email') ON DUPLICATE KEY UPDATE option_value='$force_email'");
 
+        // Require an emailed one-time code at every vendor (bc-admin) login. A per-vendor preference
+        // (sas_vendors.login_otp_enabled) overrides this default; vendors that never chose inherit it.
+        $force_login_otp = isset($_POST["force_bcadmin_login_otp"]) ? '1' : '0';
+        mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('force_bcadmin_login_otp', '$force_login_otp') ON DUPLICATE KEY UPDATE option_value='$force_login_otp'");
+
         // Daily password-reset limit (per account, default 1)
         $reset_daily_limit = max(1, (int)($_POST["password_reset_daily_limit"] ?? 1));
         mysqli_query($connection_server, "INSERT INTO sas_super_admin_options (option_name, option_value) VALUES ('password_reset_daily_limit', '$reset_daily_limit') ON DUPLICATE KEY UPDATE option_value='$reset_daily_limit'");
@@ -1121,6 +1126,9 @@
 
                                 $opt_email = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='spadmin_trans_email_enabled'");
                                 $spadmin_trans_email = mysqli_fetch_assoc($opt_email)['option_value'] ?? '1';
+
+                                $opt_login_otp = mysqli_query($connection_server, "SELECT option_value FROM sas_super_admin_options WHERE option_name='force_bcadmin_login_otp'");
+                                $force_bcadmin_login_otp = mysqli_fetch_assoc($opt_login_otp)['option_value'] ?? '0';
                                 ?>
                                 <div class="bg-primary bg-opacity-10 p-4 rounded-4 border border-primary border-opacity-25 mb-4">
                                     <div class="form-check form-switch d-flex align-items-center justify-content-between ps-0 mb-3">
@@ -1137,28 +1145,12 @@
                                         </div>
                                         <input type="checkbox" name="force_spadmin_trans_email" class="form-check-input ms-0" id="forceSpadminEmail" style="width: 3.5rem; height: 1.75rem;" <?php echo ($spadmin_trans_email == '1') ? 'checked' : ''; ?>>
                                     </div>
-                                </div>
-
-                                <?php $demo_state = bc_demo_state($connection_server); ?>
-                                <div class="card border border-warning border-opacity-50 rounded-4 shadow-none mb-4">
-                                    <div class="card-body p-4">
-                                        <h6 class="fw-bold mb-2"><i class="bi bi-toggle2-on me-2 text-warning"></i>Website Demo Mode</h6>
-                                        <p class="text-muted small">Demo mode snapshots the locked site settings, APIs, service controls, vendor settings and templates. Testers may change them temporarily; switching back to Production restores the snapshot.</p>
-                                        <?php if (!bc_demo_has_lock_key($connection_server)): ?>
-                                            <div class="alert alert-warning small">Set the security lock key before changing Demo/Production mode. This key is separate from your login password and is required to restore Production.</div>
-                                            <form method="post" class="row g-2">
-                                                <div class="col-md-5"><input type="password" name="demo_lock_key" class="form-control" minlength="10" placeholder="New security lock key" required></div>
-                                                <div class="col-md-5"><input type="password" name="demo_lock_key_confirm" class="form-control" minlength="10" placeholder="Confirm lock key" required></div>
-                                                <div class="col-md-2"><button name="set-demo-lock-key" class="btn btn-warning w-100 fw-bold">Save Key</button></div>
-                                            </form>
-                                        <?php else: ?>
-                                            <form method="post" class="row g-2 align-items-end">
-                                                <div class="col-md-3"><label class="form-label small fw-bold">CURRENT MODE</label><div class="form-control bg-light fw-bold text-uppercase"><?php echo htmlspecialchars($demo_state['mode']); ?></div></div>
-                                                <div class="col-md-3"><label class="form-label small fw-bold">CHANGE TO</label><select name="demo_mode" class="form-select"><option value="demo" <?php echo $demo_state['mode'] === 'demo' ? 'selected' : ''; ?>>Demo</option><option value="production" <?php echo $demo_state['mode'] === 'production' ? 'selected' : ''; ?>>Production</option></select></div>
-                                                <div class="col-md-4"><label class="form-label small fw-bold">SECURITY LOCK KEY</label><input type="password" name="demo_lock_key" class="form-control" placeholder="Enter lock key" required></div>
-                                                <div class="col-md-2"><button name="change-demo-mode" class="btn btn-warning w-100 fw-bold">Apply</button></div>
-                                            </form>
-                                        <?php endif; ?>
+                                    <div class="form-check form-switch d-flex align-items-center justify-content-between ps-0 mt-3">
+                                        <div>
+                                            <label class="form-check-label fw-bold h6 mb-1 text-dark-primary" for="forceLoginOtp">Require Login OTP for Vendors (bc-admin)</label>
+                                            <p class="text-dark-primary small mb-0" style="opacity: 0.8;">When enabled, every vendor admin must enter a one-time code emailed to their address each time they sign in to bc-admin. A vendor can switch it off for their own account only; that does not affect other vendors.</p>
+                                        </div>
+                                        <input type="checkbox" name="force_bcadmin_login_otp" class="form-check-input ms-0" id="forceLoginOtp" style="width: 3.5rem; height: 1.75rem;" <?php echo ($force_bcadmin_login_otp == '1') ? 'checked' : ''; ?>>
                                     </div>
                                 </div>
 
@@ -1231,6 +1223,32 @@
 
                                 <button name="update-security" class="btn btn-primary px-5 rounded-pill fw-bold py-2 shadow-sm">Apply Security Policy</button>
                             </form>
+
+                            <!-- Demo Mode card deliberately lives OUTSIDE the security policy form element above:
+                                 it owns its own forms, and a nested form element's closing tag would close
+                                 the outer form early and orphan the Apply Security Policy button. -->
+                            <?php $demo_state = bc_demo_state($connection_server); ?>
+                            <div class="card border border-warning border-opacity-50 rounded-4 shadow-none mb-4 mt-4">
+                                <div class="card-body p-4">
+                                    <h6 class="fw-bold mb-2"><i class="bi bi-toggle2-on me-2 text-warning"></i>Website Demo Mode</h6>
+                                    <p class="text-muted small">Demo mode snapshots the locked site settings, APIs, service controls, vendor settings and templates. Testers may change them temporarily; switching back to Production restores the snapshot.</p>
+                                    <?php if (!bc_demo_has_lock_key($connection_server)): ?>
+                                        <div class="alert alert-warning small">Set the security lock key before changing Demo/Production mode. This key is separate from your login password and is required to restore Production.</div>
+                                        <form method="post" class="row g-2">
+                                            <div class="col-md-5"><input type="password" name="demo_lock_key" class="form-control" minlength="10" placeholder="New security lock key" required></div>
+                                            <div class="col-md-5"><input type="password" name="demo_lock_key_confirm" class="form-control" minlength="10" placeholder="Confirm lock key" required></div>
+                                            <div class="col-md-2"><button name="set-demo-lock-key" class="btn btn-warning w-100 fw-bold">Save Key</button></div>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post" class="row g-2 align-items-end">
+                                            <div class="col-md-3"><label class="form-label small fw-bold">CURRENT MODE</label><div class="form-control bg-light fw-bold text-uppercase"><?php echo htmlspecialchars($demo_state['mode']); ?></div></div>
+                                            <div class="col-md-3"><label class="form-label small fw-bold">CHANGE TO</label><select name="demo_mode" class="form-select"><option value="demo" <?php echo $demo_state['mode'] === 'demo' ? 'selected' : ''; ?>>Demo</option><option value="production" <?php echo $demo_state['mode'] === 'production' ? 'selected' : ''; ?>>Production</option></select></div>
+                                            <div class="col-md-4"><label class="form-label small fw-bold">SECURITY LOCK KEY</label><input type="password" name="demo_lock_key" class="form-control" placeholder="Enter lock key" required></div>
+                                            <div class="col-md-2"><button name="change-demo-mode" class="btn btn-warning w-100 fw-bold">Apply</button></div>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

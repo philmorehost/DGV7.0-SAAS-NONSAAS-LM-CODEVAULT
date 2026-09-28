@@ -766,6 +766,15 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 {
 	global $connection_server;
 
+	// SECURITY: the sanitiser below strips EVERY non-numeric character, including the minus sign.
+	// A caller passing a negative amount therefore became a POSITIVE credit (-982,500,000 was
+	// credited as +982,500,000). Reject negatives before sanitising so the bug cannot be expressed
+	// as money again, whatever the caller does upstream.
+	foreach (array('amount' => $amount, 'discounted_amount' => $discounted_amount) as $__field => $__value) {
+		if (is_string($__value) && strpos($__value, '-') !== false) return "failed";
+		if ((is_int($__value) || is_float($__value)) && $__value < 0) return "failed";
+	}
+
 	$user_id = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($user_id))));
 	$type = mysqli_real_escape_string($connection_server, trim(strip_tags($type)));
 	$product_unique_id = mysqli_real_escape_string($connection_server, trim(strip_tags($product_unique_id)));
@@ -5464,7 +5473,27 @@ function verifyGoogleToken($id_token) {
 }
 
 function generateOTP($length = 6) {
-    return substr(str_shuffle("0123456789"), 0, $length);
+    // random_int() is cryptographically secure; str_shuffle() uses a predictable PRNG and
+    // must never be used to mint a credential that gates a login or a withdrawal.
+    $length = max(4, (int)$length);
+    $otp = '';
+    for ($i = 0; $i < $length; $i++) {
+        $otp .= (string)random_int(0, 9);
+    }
+    return $otp;
+}
+
+/**
+ * Should this vendor (bc-admin) be required to prove an emailed one-time code at login?
+ * A per-vendor preference (sas_vendors.login_otp_enabled) wins when explicitly set;
+ * NULL / '' inherits the global default (force_bcadmin_login_otp).
+ */
+function bc_admin_login_otp_required($vendor) {
+    $pref = is_array($vendor) ? ($vendor['login_otp_enabled'] ?? null) : $vendor;
+    if ($pref !== null && $pref !== '') {
+        return ((string)$pref === '1');
+    }
+    return ((string)getSuperAdminOption('force_bcadmin_login_otp', '0') === '1');
 }
 
 function seedVendorBlog($vendor_id) {

@@ -174,17 +174,31 @@ function updateUserCryptoBalance($vendor_id, $username, $currency, $amount, $ope
     if (!$connection_server) return false;
 
     $vid = (int)$vendor_id;
-    $u = mysqli_real_escape_string($connection_server, $username);
-    $curr = mysqli_real_escape_string($connection_server, strtoupper($currency));
+    $u = mysqli_real_escape_string($connection_server, (string)$username);
+    $curr = mysqli_real_escape_string($connection_server, strtoupper((string)$currency));
     $amt = (float)$amount;
+
+    // SECURITY: this is the ONLY writer of crypto balances. A non-positive or non-finite amount
+    // used to reverse the meaning of the operation (a "debit" of -10 credited +10), which is how
+    // a balance can be minted from nothing. Refuse it here as well as at every call site.
+    if ($u === '' || $curr === '' || !is_finite($amt) || $amt <= 0) {
+        error_log("[" . date('Y-m-d H:i:s') . "] updateUserCryptoBalance refused amount " . var_export($amount, true) . " for '" . $username . "'/" . $currency . " ($operation)");
+        return false;
+    }
+    if ($operation !== 'credit' && $operation !== 'debit') {
+        return false;
+    }
+
+    // Plain decimal - sprintf never emits exponent notation, which MySQL would reject.
+    $sql_amt = sprintf('%.18F', $amt);
 
     // Ensure wallet exists
     mysqli_query($connection_server, "INSERT IGNORE INTO sas_user_crypto_wallets (vendor_id, username, currency_code) VALUES ('$vid', '$u', '$curr')");
 
     if ($operation == 'credit') {
-        $sql = "UPDATE sas_user_crypto_wallets SET balance = balance + $amt, ledger_balance = ledger_balance + $amt WHERE vendor_id='$vid' AND username='$u' AND currency_code='$curr'";
+        $sql = "UPDATE sas_user_crypto_wallets SET balance = balance + $sql_amt, ledger_balance = ledger_balance + $sql_amt WHERE vendor_id='$vid' AND username='$u' AND currency_code='$curr'";
     } else {
-        $sql = "UPDATE sas_user_crypto_wallets SET balance = balance - $amt, ledger_balance = ledger_balance - $amt WHERE vendor_id='$vid' AND username='$u' AND currency_code='$curr'";
+        $sql = "UPDATE sas_user_crypto_wallets SET balance = balance - $sql_amt, ledger_balance = ledger_balance - $sql_amt WHERE vendor_id='$vid' AND username='$u' AND currency_code='$curr'";
     }
 
     $res = mysqli_query($connection_server, $sql);

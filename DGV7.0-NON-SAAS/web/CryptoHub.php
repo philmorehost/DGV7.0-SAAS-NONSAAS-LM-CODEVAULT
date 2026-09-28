@@ -65,9 +65,18 @@ if (isset($_POST['action']) && $_POST['action'] == 'create_invoice') {
 
 // Handle Swap
 if (isset($_POST['action']) && $_POST['action'] == 'swap') {
-    $from = strtoupper(mysqli_real_escape_string($connection_server, $_POST['from']));
-    $to = strtoupper(mysqli_real_escape_string($connection_server, $_POST['to']));
-    $amount = (float)$_POST['amount'];
+    $from = strtoupper(mysqli_real_escape_string($connection_server, (string)($_POST['from'] ?? '')));
+    $to = strtoupper(mysqli_real_escape_string($connection_server, (string)($_POST['to'] ?? '')));
+    $amount = (float)($_POST['amount'] ?? 0);
+
+    // SECURITY: the amount MUST be a positive, finite number. A negative amount passes the
+    // `balance < $amount` test (0 < -10 is false) and then turns the debit below into a CREDIT,
+    // minting crypto out of nothing - which is exactly how a fake balance was created and then
+    // swapped to Naira.
+    if (!is_numeric($_POST['amount'] ?? null) || !is_finite($amount) || $amount <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Enter a valid amount greater than zero']);
+        exit();
+    }
 
     if ($from == $to) {
         echo json_encode(['status' => 'error', 'message' => 'Cannot swap same currency']);
@@ -219,11 +228,17 @@ if (isset($_POST['action']) && $_POST['action'] == 'manual_sync') {
 
 // Handle Withdrawal (External Crypto)
 if (isset($_POST['action']) && $_POST['action'] == 'withdraw') {
-    $currency = mysqli_real_escape_string($connection_server, $_POST['currency']);
-    $amount = (float)$_POST['amount'];
-    $address = mysqli_real_escape_string($connection_server, $_POST['address']);
-    $pin = $_POST['pin'];
+    $currency = mysqli_real_escape_string($connection_server, (string)($_POST['currency'] ?? ''));
+    $amount = (float)($_POST['amount'] ?? 0);
+    $address = mysqli_real_escape_string($connection_server, (string)($_POST['address'] ?? ''));
+    $pin = $_POST['pin'] ?? '';
     $otp = $_POST['otp'] ?? '';
+
+    // SECURITY: a negative amount passes `balance < $amount` and flips the debit into a credit.
+    if (!is_numeric($_POST['amount'] ?? null) || !is_finite($amount) || $amount <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Enter a valid amount greater than zero']);
+        exit();
+    }
 
     // Verify PIN
     if (!verifyUserPIN($pin, $get_logged_user_details)) {

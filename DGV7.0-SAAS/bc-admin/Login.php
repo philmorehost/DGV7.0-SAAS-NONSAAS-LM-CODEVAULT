@@ -13,6 +13,63 @@
         exit();
 	}
 
+    // Finish a two-step login: verify the emailed code, then start the admin session.
+    if(isset($_POST["verify-login-otp"])){
+        $pending = $_SESSION['bc_admin_login_otp'] ?? null;
+        $code = preg_replace('/\D+/', '', (string)($_POST["otp_code"] ?? ''));
+        $fail = '';
+        if (!is_array($pending) || empty($pending['email']) || empty($pending['code_hash'])) {
+            $fail = "Your sign-in attempt expired. Please enter your email and password again.";
+        } elseif (($pending['expires'] ?? 0) < time()) {
+            $fail = "That code has expired. Please sign in again.";
+        } elseif (($pending['tries'] ?? 0) >= 5) {
+            $fail = "Too many incorrect codes. Please sign in again.";
+        } elseif (!password_verify($code, $pending['code_hash'])) {
+            $_SESSION['bc_admin_login_otp']['tries'] = (int)($pending['tries'] ?? 0) + 1;
+            $fail = "Incorrect code. Please check your email and try again.";
+        }
+        if ($fail !== '') {
+            if (!is_array($pending) || ($pending['tries'] ?? 0) >= 5 || ($pending['expires'] ?? 0) < time()) {
+                unset($_SESSION['bc_admin_login_otp']);
+            }
+            $_SESSION["product_purchase_response"] = $fail;
+            header("Location: ".$_SERVER["REQUEST_URI"]);
+            exit();
+        }
+        $pending_email = mysqli_real_escape_string($connection_server, $pending['email']);
+        $q_admin = mysqli_query($connection_server, "SELECT * FROM sas_vendors WHERE id='".(int)$pending['vendor_id']."' && email='$pending_email' LIMIT 1");
+        $admin_detail = $q_admin ? mysqli_fetch_assoc($q_admin) : null;
+        if (!$admin_detail || $admin_detail["status"] != 1) {
+            unset($_SESSION['bc_admin_login_otp']);
+            $_SESSION["product_purchase_response"] = "Account Locked, Contact Admin";
+            header("Location: ".$_SERVER["REQUEST_URI"]);
+            exit();
+        }
+        unset($_SESSION['bc_admin_login_otp']);
+        recordLoginAttempt($admin_detail["email"], $_SERVER['REMOTE_ADDR'], 1, (int)$admin_detail["id"]);
+        $_SESSION["admin_session"] = strtolower($admin_detail["email"]);
+        // Email Beginning
+        $log_template_encoded_text_array = array("{firstname}" => $admin_detail["firstname"], "{lastname}" => $admin_detail["lastname"], "{email}" => $admin_detail["email"], "{ip_address}" => $_SERVER["REMOTE_ADDR"]);
+        $raw_log_template_subject = getSuperAdminEmailTemplate('vendor-log','subject');
+        $raw_log_template_body = getSuperAdminEmailTemplate('vendor-log','body');
+        foreach($log_template_encoded_text_array as $array_key => $array_val){
+            $raw_log_template_subject = str_replace($array_key, $array_val, $raw_log_template_subject);
+            $raw_log_template_body = str_replace($array_key, $array_val, $raw_log_template_body);
+        }
+        sendVendorEmail($admin_detail["email"], $raw_log_template_subject, $raw_log_template_body);
+        // Email End
+        $_SESSION["product_purchase_response"] = "Welcome Back, ".ucwords($admin_detail["firstname"]);
+        header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit();
+    }
+
+    if(isset($_POST["cancel-login-otp"])){
+        unset($_SESSION['bc_admin_login_otp']);
+        $_SESSION["product_purchase_response"] = "Sign-in cancelled.";
+        header("Location: ".$_SERVER["REQUEST_URI"]);
+        exit();
+    }
+
     if(isset($_POST["login"])){
     	$email = mysqli_real_escape_string($connection_server, trim(strip_tags(strtolower($_POST["email"]))));
     	$pass = mysqli_real_escape_string($connection_server, trim(strip_tags($_POST["pass"])));
@@ -49,6 +106,28 @@
 						if($admin_detail["status"] == 1){
                             recordLoginAttempt($email, $ip, 1, $vendor_id);
 
+                            // Second factor: when login OTP is required for this vendor, do NOT start the
+                            // session yet. Email a one-time code and hand over to the verification step.
+                            // (A vendor may switch this off for their own account; see AccountSettings.)
+                            if (bc_admin_login_otp_required($admin_detail)) {
+                                $login_otp = generateOTP();
+                                $_SESSION['bc_admin_login_otp'] = array(
+                                    'email' => strtolower($admin_detail["email"]),
+                                    'vendor_id' => (int)$admin_detail["id"],
+                                    'code_hash' => password_hash($login_otp, PASSWORD_DEFAULT),
+                                    'expires' => time() + 600,
+                                    'tries' => 0,
+                                    'sent' => time(),
+                                );
+                                sendVendorEmail(
+                                    $admin_detail["email"],
+                                    "Your login security code",
+                                    "<p>Your one-time login code is <b style=\"font-size:20px;letter-spacing:3px;\">" . $login_otp . "</b></p><p>It expires in 10 minutes. If you did not try to sign in, change your password immediately.</p>"
+                                );
+                                $_SESSION["product_purchase_response"] = "Security code sent to " . $admin_detail["email"] . ". Enter the 6-digit code to finish signing in.";
+                                header("Location: ".$_SERVER["REQUEST_URI"]);
+                                exit();
+                            }
 
 							$_SESSION["admin_session"] = strtolower($admin_detail["email"]);
 							// Email Beginning
@@ -163,6 +242,25 @@
                         <h4 class="fw-bold text-dark">Admin Login</h4>
                     </div>
 
+                    <?php if (!empty($_SESSION['bc_admin_login_otp']['email'])): ?>
+                    <h2 class="fw-bold text-dark mb-1">Two-Step Verification</h2>
+                    <p class="text-muted mb-4">Enter the 6-digit code we emailed to <b><?php echo htmlspecialchars($_SESSION['bc_admin_login_otp']['email']); ?></b>. It expires in 10 minutes.</p>
+
+                    <form method="post" action="">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-uppercase text-muted">Login Code</label>
+                            <input name="otp_code" type="text" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" class="form-control form-control-lg bg-light text-center fw-bold" style="letter-spacing: 8px; font-size: 22px;" placeholder="******" required autofocus>
+                        </div>
+
+                        <button name="verify-login-otp" type="submit" class="btn btn-primary btn-lg w-100 shadow-sm rounded-3 mb-3 py-3 fw-bold">
+                            VERIFY &amp; CONTINUE
+                        </button>
+
+                        <button name="cancel-login-otp" type="submit" formnovalidate class="btn btn-link w-100 text-muted text-decoration-none">Back to sign in</button>
+
+                        <div class="text-center small text-muted mt-2">Didn't get it? Check your spam folder, or sign in again to send a new code.</div>
+                    </form>
+                    <?php else: ?>
                     <h2 class="fw-bold text-dark mb-1 d-none d-lg-block">Welcome Back</h2>
                     <p class="text-muted mb-4 d-none d-lg-block">Enter your admin credentials to continue</p>
 
@@ -198,6 +296,7 @@
                             <a href="/" class="fw-bold text-decoration-none">Back to Website</a>
                         </div>
                     </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

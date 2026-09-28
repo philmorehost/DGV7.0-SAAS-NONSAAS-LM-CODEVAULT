@@ -16,7 +16,7 @@
 // leaves no marker and the next request runs the file again - everything here is written to be
 // repeatable, which is what makes that safe.
 // To force a full run regardless (installer, debugging): $GLOBALS['bc_tables_force_run'] = true;
-if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.19-4');
+if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.28-1');
 
 if ($connection_server && empty($GLOBALS['bc_tables_force_run'])) {
     // Two cheap statements instead of hundreds: an options lookup and one data-dictionary probe.
@@ -86,7 +86,9 @@ if ($create_vendor_table) {
         "ussd_channel_mode" => "VARCHAR(20) DEFAULT 'Both'",
         "ussd_access" => "TINYINT(1) NOT NULL DEFAULT 0",
         "support_whatsapp" => "VARCHAR(20) DEFAULT ''",
-        "kyc_status" => "INT DEFAULT 0"
+        "kyc_status" => "INT DEFAULT 0",
+        // NULL = inherit the global default; 1 = login OTP forced on for this vendor; 0 = off.
+        "login_otp_enabled" => "TINYINT(1) NULL DEFAULT NULL"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_vendors");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];

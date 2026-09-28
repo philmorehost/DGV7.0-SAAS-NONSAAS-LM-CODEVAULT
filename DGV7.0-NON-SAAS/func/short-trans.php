@@ -1,6 +1,6 @@
 <?php
     if(isset($_GET["requery"]) && !empty($_GET["requery"])){
-        $select_user_requeried_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' && username='".$get_logged_user_details["username"]."' && reference='".trim(strip_tags($_GET["requery"]))."'");
+        $select_user_requeried_transaction_details = mysqli_query($connection_server, "SELECT * FROM sas_transactions WHERE vendor_id='".$get_logged_user_details["vendor_id"]."' && username='".$get_logged_user_details["username"]."' && reference='".mysqli_real_escape_string($connection_server, trim(strip_tags($_GET["requery"] ?? ''))) ."'");
         if(mysqli_num_rows($select_user_requeried_transaction_details) == 1){
             $purchase_method = "web";
             include("../web/func/requery-transaction.php");

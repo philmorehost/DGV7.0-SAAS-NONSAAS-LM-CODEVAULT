@@ -185,10 +185,16 @@ elseif ($action === 'swap') {
 }
 
 elseif ($action === 'withdraw') {
-    $currency = mysqli_real_escape_string($connection_server, $input['currency'] ?? '');
+    $currency = mysqli_real_escape_string($connection_server, (string)($input['currency'] ?? ''));
     $amount = (float)($input['amount'] ?? 0);
-    $address = mysqli_real_escape_string($connection_server, $input['address'] ?? '');
+    $address = mysqli_real_escape_string($connection_server, (string)($input['address'] ?? ''));
     $pin = $input['pin'] ?? '';
+
+    // SECURITY: a negative amount passes the balance test and flips the debit into a credit.
+    if (!is_numeric($input['amount'] ?? null) || !is_finite($amount) || $amount <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Enter a valid amount greater than zero']);
+        exit;
+    }
 
     // See the note in the 'swap' branch: a person (mobile app) must prove the PIN, an external
     // api_key integration must not be blocked by a PIN its customers cannot supply.
