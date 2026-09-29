@@ -26,6 +26,22 @@ if (isset($_POST["update-settings"])) {
     } else {
         $_SESSION["product_purchase_response"] = "Error updating settings: " . mysqli_error($connection_server);
     }
+
+    // ─── Failed-transaction guard settings ───────────────────────────────────────
+    // Saved with a separate statement so the prepared brute-force statement above keeps its exact
+    // shape, and guarded by a column check so this cannot break on an install that has not yet run
+    // the migration that adds these columns.
+    $tx_enabled = isset($_POST["tx_guard_enabled"]) ? 1 : 0;
+    $tx_notify  = isset($_POST["tx_guard_notify_admin"]) ? 1 : 0;
+    $tx_auto    = isset($_POST["tx_guard_auto_unlock"]) ? 1 : 0;
+    $tx_max     = max(1, (int)($_POST["tx_guard_max_failures"] ?? 5));
+    $tx_window  = max(1, (int)($_POST["tx_guard_window_hours"] ?? 24));
+    $tx_scope   = (($_POST["tx_guard_scope"] ?? 'all') === 'per-service') ? 'per-service' : 'all';
+    $tx_cols_ok = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_bruteforce_settings LIKE 'tx_guard_enabled'");
+    if ($tx_cols_ok && mysqli_num_rows($tx_cols_ok) > 0) {
+        mysqli_query($connection_server, "UPDATE sas_bruteforce_settings SET tx_guard_enabled='$tx_enabled', tx_guard_max_failures='$tx_max', tx_guard_window_hours='$tx_window', tx_guard_scope='$tx_scope', tx_guard_notify_admin='$tx_notify', tx_guard_auto_unlock='$tx_auto' WHERE vendor_id='$vendor_id'");
+    }
+
     header("Location: BruteForceSecurity.php");
     exit();
 }
@@ -50,6 +66,12 @@ if (isset($_POST["unblock-account"])) {
 
     // Mark unblock requests as approved
     mysqli_query($connection_server, "UPDATE sas_unblock_requests SET status='approved' WHERE username='$user' AND vendor_id='".$get_logged_admin_details["id"]."' AND status='pending'");
+
+    // GFTAL: also lift any failed-transaction lock. Pass the RAW posted username - $user is already
+    // mysqli-escaped above, and escaping it a second time would corrupt names containing a quote.
+    if (function_exists('bc_tx_unlock_user')) {
+        bc_tx_unlock_user((int)$get_logged_admin_details["id"], trim((string)($_POST["acc_to_unblock"] ?? '')), (int)$get_logged_admin_details["id"], 'admin-unblock');
+    }
 
     // Check if there was an IP associated with this account block
     $ip_q = mysqli_query($connection_server, "SELECT ip_address FROM sas_login_attempts WHERE username='$user' AND vendor_id='".$get_logged_admin_details["id"]."' ORDER BY timestamp DESC LIMIT 1");
@@ -84,6 +106,8 @@ mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_unblock_request
 )");
 
 $settings = getBruteForceSettings($get_logged_admin_details["id"]);
+// Users currently locked out of transacting by the failed-transaction guard.
+$tx_locked_users = function_exists('bc_tx_locked_users') ? bc_tx_locked_users((int)$get_logged_admin_details["id"]) : [];
 $countries = [
     "AF" => "Afghanistan", "AL" => "Albania", "DZ" => "Algeria", "AS" => "American Samoa", "AD" => "Andorra", "AO" => "Angola", "AI" => "Anguilla", "AQ" => "Antarctica", "AG" => "Antigua and Barbuda", "AR" => "Argentina", "AM" => "Armenia", "AW" => "Aruba", "AU" => "Australia", "AT" => "Austria", "AZ" => "Azerbaijan",
     "BS" => "Bahamas", "BH" => "Bahrain", "BD" => "Bangladesh", "BB" => "Barbados", "BY" => "Belarus", "BE" => "Belgium", "BZ" => "Belize", "BJ" => "Benin", "BM" => "Bermuda", "BT" => "Bhutan", "BO" => "Bolivia", "BA" => "Bosnia and Herzegovina", "BW" => "Botswana", "BR" => "Brazil", "IO" => "British Indian Ocean Territory", "BN" => "Brunei Darussalam", "BG" => "Bulgaria", "BF" => "Burkina Faso", "BI" => "Burundi",
@@ -175,8 +199,75 @@ $countries = [
                                     <label class="form-check-label fw-bold small" for="notifyAdmin">Send brute force notifications</label>
                                 </div>
                             </div>
+                            <hr class="my-4">
+                            <h6 class="fw-bold mb-1"><i class="bi bi-shield-exclamation me-2 text-danger"></i>Failed Transaction Guard</h6>
+                            <p class="small text-muted">Locks a user out of <b>new transactions only</b> after repeated failures they caused themselves. Provider-side failures (out of stock, upstream down) are never counted, the count resets on any success, and signing in is never blocked.</p>
+                            <div class="bg-light p-3 rounded-4 mb-4">
+                                <div class="form-check form-switch mb-2">
+                                    <input type="checkbox" name="tx_guard_enabled" class="form-check-input" id="txGuardEnabled" <?php echo !empty($settings['tx_guard_enabled']) ? 'checked' : ''; ?>>
+                                    <label class="form-check-label fw-bold small" for="txGuardEnabled">Enable failed transaction guard</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input type="checkbox" name="tx_guard_notify_admin" class="form-check-input" id="txGuardNotify" <?php echo !empty($settings['tx_guard_notify_admin']) ? 'checked' : ''; ?>>
+                                    <label class="form-check-label fw-bold small" for="txGuardNotify">Email me when a user is locked</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" name="tx_guard_auto_unlock" class="form-check-input" id="txGuardAuto" <?php echo !empty($settings['tx_guard_auto_unlock']) ? 'checked' : ''; ?>>
+                                    <label class="form-check-label fw-bold small" for="txGuardAuto">Unlock automatically when the window expires (recommended)</label>
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">Consecutive Failures</label>
+                                    <input type="number" min="1" name="tx_guard_max_failures" class="form-control rounded-3" value="<?php echo (int)($settings['tx_guard_max_failures'] ?? 5); ?>" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">Window (Hours)</label>
+                                    <input type="number" min="1" name="tx_guard_window_hours" class="form-control rounded-3" value="<?php echo (int)($settings['tx_guard_window_hours'] ?? 24); ?>" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted text-uppercase">Lock Scope</label>
+                                    <select name="tx_guard_scope" class="form-select rounded-3">
+                                        <option value="all" <?php echo ($settings['tx_guard_scope'] ?? 'all') === 'all' ? 'selected' : ''; ?>>All Services</option>
+                                        <option value="per-service" <?php echo ($settings['tx_guard_scope'] ?? 'all') === 'per-service' ? 'selected' : ''; ?>>Only The Failing Service</option>
+                                    </select>
+                                </div>
+                            </div>
                             <button type="submit" name="update-settings" class="btn btn-primary w-100 rounded-pill fw-bold shadow-sm py-2">Update Security Policy</button>
                         </form>
+
+                        <hr class="my-4">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-lock-fill me-2 text-danger"></i>Locked Transaction Access (<?php echo count($tx_locked_users); ?>)</h6>
+                        <?php if (empty($tx_locked_users)): ?>
+                            <p class="small text-muted mb-0">No account is currently locked out of transacting.</p>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="bg-light">
+                                        <tr class="small text-uppercase"><th>User</th><th>Failures</th><th>Scope</th><th>Until</th><th class="text-end">Action</th></tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php foreach ($tx_locked_users as $lu): ?>
+                                        <tr>
+                                            <td class="small">
+                                                <b><?php echo htmlspecialchars($lu['username']); ?></b><br>
+                                                <span class="text-muted"><?php echo htmlspecialchars(trim(($lu['firstname'] ?? '') . ' ' . ($lu['lastname'] ?? ''))); ?></span>
+                                            </td>
+                                            <td class="small"><?php echo (int)$lu['tx_fail_streak']; ?></td>
+                                            <td class="small"><?php echo htmlspecialchars($lu['tx_lock_service'] ?: 'All services'); ?></td>
+                                            <td class="small"><?php echo !empty($lu['tx_lock_until']) ? htmlspecialchars(date('d M Y H:i', strtotime($lu['tx_lock_until']))) : 'Manual'; ?></td>
+                                            <td class="text-end">
+                                                <form method="post" class="d-inline">
+                                                    <input type="hidden" name="acc_to_unblock" value="<?php echo htmlspecialchars($lu['username']); ?>">
+                                                    <button type="submit" name="unblock-account" class="btn btn-sm btn-outline-danger rounded-pill fw-bold" onclick="return confirm('Restore transaction access for this account?');">Unlock</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

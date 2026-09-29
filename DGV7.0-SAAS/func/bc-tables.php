@@ -16,7 +16,7 @@
 // leaves no marker and the next request runs the file again - everything here is written to be
 // repeatable, which is what makes that safe.
 // To force a full run regardless (installer, debugging): $GLOBALS['bc_tables_force_run'] = true;
-if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.28-1');
+if (!defined('BC_TABLES_VERSION')) define('BC_TABLES_VERSION', '2026.09.29-1');
 
 if ($connection_server && empty($GLOBALS['bc_tables_force_run'])) {
     // Two cheap statements instead of hundreds: an options lookup and one data-dictionary probe.
@@ -443,7 +443,20 @@ if ($create_user_table) {
         "kyc_provider" => "VARCHAR(40) DEFAULT NULL",
         "kyc_provider_ref" => "VARCHAR(120) DEFAULT NULL",
         "kyc_provider_data" => "LONGTEXT NULL",
-        "kyc_api_verified_at" => "DATETIME NULL"
+        "kyc_api_verified_at" => "DATETIME NULL",
+        // ─── Transaction-failure abuse guard ─────────────────────────────────────
+        // Counters live ON the user row on purpose: the pre-transaction check then costs no
+        // extra query beyond the user lookup every flow already performs. See
+        // bc_tx_failure_guard_check() / bc_tx_failure_record() in bc-func.php.
+        // tx_fail_service scopes the current window/streak to one service, so switching service
+        // does not accumulate across services; tx_lock_service NULL means the lock is global.
+        "tx_fail_streak"       => "INT DEFAULT 0",
+        "tx_fail_window_count" => "INT DEFAULT 0",
+        "tx_fail_window_start" => "DATETIME NULL",
+        "tx_fail_service"      => "VARCHAR(40) DEFAULT NULL",
+        "tx_lock_until"        => "DATETIME NULL",
+        "tx_lock_service"      => "VARCHAR(40) DEFAULT NULL",
+        "tx_lock_reason"       => "VARCHAR(255) DEFAULT NULL"
     ];
     $res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_users");
     $existing = []; while($r = mysqli_fetch_assoc($res)) $existing[] = $r['Field'];
@@ -1389,6 +1402,25 @@ if (mysqli_num_rows($check_escrow_col) == 0) {
 if ($connection_server) {
     //Create Brute Force Settings Table
     $create_bruteforce_settings_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_bruteforce_settings (vendor_id INT UNSIGNED NOT NULL, is_enabled TINYINT(1) NOT NULL DEFAULT 1, period_mins INT UNSIGNED NOT NULL DEFAULT 10, max_failures_account INT UNSIGNED NOT NULL DEFAULT 5, max_failures_ip INT UNSIGNED NOT NULL DEFAULT 10, block_duration VARCHAR(50) NOT NULL DEFAULT 'one-day', lock_admin TINYINT(1) NOT NULL DEFAULT 0, notify_admin TINYINT(1) NOT NULL DEFAULT 1, PRIMARY KEY (vendor_id))");
+
+    // ─── Transaction-failure abuse guard settings ────────────────────────────────
+    // Guarded ALTERs rather than an edit to the CREATE above: CREATE TABLE IF NOT EXISTS is a
+    // no-op on an existing install, so a new column there would never be added.
+    // Defaults are deliberately generous (5 failures / 24h / auto-unlock) because most VTU
+    // failures are provider-side, not user abuse - see bc_tx_failure_record().
+    $bf_guard_cols = [
+        "tx_guard_enabled"      => "TINYINT(1) NOT NULL DEFAULT 1",
+        "tx_guard_max_failures" => "INT UNSIGNED NOT NULL DEFAULT 5",
+        "tx_guard_window_hours" => "INT UNSIGNED NOT NULL DEFAULT 24",
+        "tx_guard_scope"        => "VARCHAR(20) NOT NULL DEFAULT 'all'",
+        "tx_guard_notify_admin" => "TINYINT(1) NOT NULL DEFAULT 1",
+        "tx_guard_auto_unlock"  => "TINYINT(1) NOT NULL DEFAULT 1"
+    ];
+    $bf_cols_res = mysqli_query($connection_server, "SHOW COLUMNS FROM sas_bruteforce_settings");
+    $bf_existing = []; while($bf_row = mysqli_fetch_assoc($bf_cols_res)) $bf_existing[] = $bf_row['Field'];
+    foreach($bf_guard_cols as $bf_col => $bf_def) {
+        if(!in_array($bf_col, $bf_existing)) mysqli_query($connection_server, "ALTER TABLE sas_bruteforce_settings ADD COLUMN $bf_col $bf_def");
+    }
 
     //Create Login Attempts Table
     $create_login_attempts_table = mysqli_query($connection_server, "CREATE TABLE IF NOT EXISTS sas_login_attempts (id INT NOT NULL AUTO_INCREMENT, vendor_id INT UNSIGNED NOT NULL, username VARCHAR(225), ip_address VARCHAR(50) NOT NULL, success TINYINT(1) NOT NULL, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id))");

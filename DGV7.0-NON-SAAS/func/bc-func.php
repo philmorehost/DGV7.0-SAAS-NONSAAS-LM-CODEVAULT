@@ -611,6 +611,14 @@ function chargeUser($type, $product_unique_id, $type_alternative, $reference, $a
 				// Use bc_atomic_debit_user() which wraps the balance read+write in a
 				// MySQL transaction with SELECT FOR UPDATE. This prevents double-spend
 				// when concurrent requests hit simultaneously.
+				// GFTAL: refuse NEW spending when the user is locked for repeated user-caused transaction
+				// failures. This returns before anything is charged or debited, so there is nothing to
+				// refund, and it never touches the credit branch.
+				$tx_guard_result = bc_tx_failure_guard_check($get_logged_user_det["vendor_id"], $get_logged_user_det["username"], $type_alternative);
+				if ($tx_guard_result !== true) {
+					$GLOBALS['bc_tx_lock_message'] = $tx_guard_result;
+					return "failed";
+				}
 				// Pre-check: fast balance check before acquiring the lock
 				if (($get_logged_user_det["balance"] > 0) && ($amount > 0) && ($get_logged_user_det["balance"] >= $discounted_amount)) {
 
@@ -801,6 +809,17 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 	if (isset($get_logged_user_det["balance"]) && is_numeric($get_logged_user_det["balance"]) && !empty($amount) && is_numeric($amount) && !empty($discounted_amount) && is_numeric($discounted_amount) && ($discounted_amount > 0) && $get_logged_user_det["status"] == 1) {
 		if (in_array($type, $transactionTypeArray) && !empty($product_unique_id) && !empty($type_alternative) && !empty($reference) && !empty($description) && is_numeric($status) && in_array($status, $statusArray)) {
 			if ($type === "debit") {
+				// GFTAL: refuse NEW spending for a locked user. Deliberately SKIPPED for the internal
+				// "Charge" label, which the requery settlement uses to re-charge a transaction the provider
+				// later confirmed - blocking that would let a user keep a service they were never charged
+				// for. The credit branch (refunds) is never blocked at all.
+				if ($type_alternative !== 'Charge') {
+					$tx_guard_result = bc_tx_failure_guard_check($get_logged_user_det["vendor_id"], $get_logged_user_det["username"], $type_alternative);
+					if ($tx_guard_result !== true) {
+						$GLOBALS['bc_tx_lock_message'] = $tx_guard_result;
+						return "failed";
+					}
+				}
 				if (($get_logged_user_det["balance"] > 0) && ($amount > 0) && ($get_logged_user_det["balance"] >= $amount) && ($get_logged_user_det["balance"] >= $discounted_amount)) {
 					$user_balance_before_debit = $get_logged_user_det["balance"];
 					$user_balance_after_debit = ($user_balance_before_debit - $discounted_amount);
@@ -5070,23 +5089,291 @@ function get_user_vtu_details($username) {
 // Anti-BruteForce Functions
 function getBruteForceSettings($vendor_id) {
     global $connection_server;
-    $stmt = mysqli_prepare($connection_server, "SELECT * FROM sas_bruteforce_settings WHERE vendor_id = ?");
-    mysqli_stmt_bind_param($stmt, "i", $vendor_id);
-    mysqli_stmt_execute($stmt);
-    $res = mysqli_stmt_get_result($stmt);
-    if ($row = mysqli_fetch_assoc($res)) {
-        return $row;
-    }
-    // Return defaults if not set
-    return [
+    // Default settings returned if DB query fails
+    $defaults = [
         'is_enabled' => 1,
         'period_mins' => 10,
         'max_failures_account' => 5,
         'max_failures_ip' => 10,
         'block_duration' => 'one-day',
         'lock_admin' => 0,
-        'notify_admin' => 1
+        'notify_admin' => 1,
+        // Transaction-failure abuse guard. Generous by design: most VTU failures are
+        // provider-side, so a low limit would lock legitimate customers out during an
+        // upstream outage. See bc_tx_failure_record().
+        'tx_guard_enabled' => 1,
+        'tx_guard_max_failures' => 5,
+        'tx_guard_window_hours' => 24,
+        'tx_guard_scope' => 'all',
+        'tx_guard_notify_admin' => 1,
+        'tx_guard_auto_unlock' => 1
     ];
+    if (!$connection_server) return $defaults;
+    $stmt = mysqli_prepare($connection_server, "SELECT * FROM sas_bruteforce_settings WHERE vendor_id = ?");
+    if (!$stmt) return $defaults;
+    mysqli_stmt_bind_param($stmt, "i", $vendor_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    if ($res && $row = mysqli_fetch_assoc($res)) {
+        mysqli_stmt_close($stmt);
+        // Merge over the defaults so a column added by a later migration can never surface as an
+        // undefined index for callers that read it (the row predates the ALTER on old installs).
+        return array_merge($defaults, $row);
+    }
+    mysqli_stmt_close($stmt);
+    return $defaults;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────
+// Transaction-failure abuse guard (GFTAL)
+//
+// THE PROBLEM IT SOLVES: nothing here counted repeated transaction failures, so a user could
+// hammer the platform (or probe stolen PINs/IDs) with no cumulative signal.
+//
+// THE RISK IT MUST AVOID: on a VTU platform the overwhelming majority of failed transactions are
+// PROVIDER-side (out of stock, upstream down, unreadable reply). Counting those would lock out
+// legitimate customers - and every tenant at once - during an upstream outage. So:
+//   * only failures explicitly attributable to the USER are counted;
+//   * an unrecognised reason is NOT counted (fail-open, deliberately);
+//   * the counter is a CONSECUTIVE streak, reset by any success, not a blunt daily total;
+//   * bulk/batch sources are never counted (one batch can post dozens of failures at once);
+//   * the lock auto-expires, and never touches login - the user can still sign in and see
+//     their balance, which is what makes a hard lock feel like "my account is gone".
+// ─────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reasons that indicate the failure was the USER's fault (and so are countable).
+ * Keep this list tight and explicit - it is an allowlist, not a denylist, so an unfamiliar
+ * provider error string can never lock anyone out.
+ */
+function bc_tx_failure_user_caused_patterns()
+{
+    return [
+        'invalid transaction pin', 'invalid pin', 'incorrect pin', 'wrong pin',
+        'invalid phone', 'invalid number', 'wrong number', 'invalid recipient',
+        'invalid amount', 'invalid smartcard', 'invalid meter', 'invalid plan',
+        'invalid network', 'invalid id', 'invalid account', 'invalid card',
+        'not registered', 'unregistered', 'not on network', 'number not on',
+        'insufficient balance', 'low balance',
+        'blacklisted', 'barred', 'do not disturb'
+    ];
+}
+
+/** True when the failure is attributable to the user (see the note above). Fail-open. */
+function bc_tx_failure_is_user_caused($reason)
+{
+    $r = strtolower((string)$reason);
+    if ($r === '') return false;
+    foreach (bc_tx_failure_user_caused_patterns() as $p) {
+        if (strpos($r, $p) !== false) return true;
+    }
+    return false;
+}
+
+/**
+ * Pre-transaction guard. Returns TRUE when the user may transact, or a human-readable reason
+ * string when they are currently locked for this service.
+ *
+ * Cost: one small indexed SELECT on (vendor_id, username) - the same key every flow already looks
+ * users up by. The counters are columns on sas_users rather than a side table, so this needs no
+ * join and cannot grow with transaction history.
+ */
+function bc_tx_failure_guard_check($vendor_id, $username, $service = '')
+{
+    global $connection_server;
+    if (!$connection_server) return true;
+
+    $vid = (int)$vendor_id;
+    $u = mysqli_real_escape_string($connection_server, (string)$username);
+    $svc = strtolower(trim((string)$service));
+    if ($vid <= 0 || $u === '') return true;
+
+    $settings = getBruteForceSettings($vid);
+    if (empty($settings['tx_guard_enabled'])) return true;
+
+    $q = mysqli_query($connection_server, "SELECT tx_fail_streak, tx_fail_window_count, tx_fail_window_start, tx_fail_service, tx_lock_until, tx_lock_service, tx_lock_reason FROM sas_users WHERE vendor_id='$vid' AND username='$u' LIMIT 1");
+    $row = $q ? mysqli_fetch_assoc($q) : null;
+    if (!$row) return true; // unknown user: let the normal flow report that, do not invent a lock
+
+    $lock_service = strtolower((string)($row['tx_lock_service'] ?? ''));
+    $is_locked = !empty($row['tx_lock_reason']);
+    // A per-service lock only blocks that service; NULL/'' means the lock is global. A caller that
+    // does not declare a service is treated as covered, so a lock cannot be dodged by omitting it.
+    $applies = ($lock_service === '' || $svc === '' || $lock_service === $svc);
+
+    if ($is_locked && $applies) {
+        $hours = (int)($settings['tx_guard_window_hours'] ?? 24);
+        $expired = (!empty($row['tx_lock_until']) && strtotime($row['tx_lock_until']) < time());
+        if (!empty($settings['tx_guard_auto_unlock']) && $expired) {
+            bc_tx_unlock_user($vid, $u, 0, 'auto-expiry');
+        } else {
+            return (string)$row['tx_lock_reason'];
+        }
+    }
+
+    // Window expiry clears the counters so an old streak cannot combine with a new one.
+    $hours = (int)($settings['tx_guard_window_hours'] ?? 24);
+    if ($hours > 0 && !empty($row['tx_fail_window_start']) && strtotime($row['tx_fail_window_start']) < (time() - ($hours * 3600))) {
+        bc_tx_failure_reset($vid, $u);
+    }
+
+    return true;
+}
+
+/** Clear the counters, keeping the current service scope. */
+function bc_tx_failure_reset($vendor_id, $username)
+{
+    global $connection_server;
+    if (!$connection_server) return false;
+    $vid = (int)$vendor_id;
+    $u = mysqli_real_escape_string($connection_server, (string)$username);
+    if ($vid <= 0 || $u === '') return false;
+    return mysqli_query($connection_server, "UPDATE sas_users SET tx_fail_streak=0, tx_fail_window_count=0, tx_fail_window_start=NULL WHERE vendor_id='$vid' AND username='$u'");
+}
+
+/**
+ * Remove a transaction lock and clear the counters. Used by the guard's auto-expiry and by the
+ * admin unlock (which reuses the existing unblock flow).
+ */
+function bc_tx_unlock_user($vendor_id, $username, $by_admin = 0, $mode = 'manual')
+{
+    global $connection_server;
+    if (!$connection_server) return false;
+    $vid = (int)$vendor_id;
+    $u = mysqli_real_escape_string($connection_server, (string)$username);
+    if ($vid <= 0 || $u === '') return false;
+
+    $res = mysqli_query($connection_server, "UPDATE sas_users SET tx_lock_reason=NULL, tx_lock_until=NULL, tx_lock_service=NULL, tx_fail_streak=0, tx_fail_window_count=0, tx_fail_window_start=NULL WHERE vendor_id='$vid' AND username='$u'");
+
+    // Mark any pending unblock request as handled, on the same table the existing flow already uses.
+    if ($res) {
+        mysqli_query($connection_server, "UPDATE sas_unblock_requests SET status='approved' WHERE vendor_id='$vid' AND username='$u' AND status='pending'");
+        @file_put_contents(__DIR__ . "/../logs/tx_guard.log", "[" . date('Y-m-d H:i:s') . "] unlocked vendor=$vid user=$username by=" . ($by_admin > 0 ? "admin:$by_admin" : $mode) . "\n", FILE_APPEND);
+    }
+    return $res;
+}
+
+/**
+ * Record a settled transaction outcome.
+ *
+ * MUST be called where the outcome is DEFINITIVE (the requery/refund settlement), never at request
+ * time: at request time a provider outage is indistinguishable from user abuse.
+ *
+ * @param string $outcome 'success' or 'failed'
+ * @param string $service short service key (e.g. product type); '' if unknown
+ * @param string $reason  the provider/status text used to classify the failure
+ * @param string $source  'bulk' is never counted
+ * @return string 'reset'|'ignored'|'counted'|'locked'|'noop'
+ */
+function bc_tx_failure_record($vendor_id, $username, $outcome, $service = '', $reason = '', $source = 'service')
+{
+    global $connection_server;
+    if (!$connection_server) return 'noop';
+
+    $vid = (int)$vendor_id;
+    $u = mysqli_real_escape_string($connection_server, (string)$username);
+    $svc = strtolower(trim((string)$service));
+    $svc_esc = mysqli_real_escape_string($connection_server, $svc);
+    $outcome = strtolower((string)$outcome);
+    if ($vid <= 0 || $u === '') return 'noop';
+
+    $settings = getBruteForceSettings($vid);
+    if (empty($settings['tx_guard_enabled'])) return 'noop';
+
+    // One batch can post dozens of failures within seconds; that is not user abuse.
+    if (strtolower((string)$source) === 'bulk') return 'ignored';
+
+    if ($outcome === 'success') {
+        // Any success ends the streak. This is what makes the counter "consecutive" rather than a
+        // blunt daily total, and is the main reason legitimate users are not locked out.
+        $scope_sql = ($svc !== '') ? "tx_fail_service='$svc_esc'" : "tx_fail_service=NULL";
+        mysqli_query($connection_server, "UPDATE sas_users SET tx_fail_streak=0, tx_fail_window_count=0, $scope_sql WHERE vendor_id='$vid' AND username='$u'");
+        return 'reset';
+    }
+
+    if (!bc_tx_failure_is_user_caused($reason)) return 'ignored';
+
+    $q = mysqli_query($connection_server, "SELECT tx_fail_streak, tx_fail_window_count, tx_fail_window_start, tx_fail_service, tx_lock_reason FROM sas_users WHERE vendor_id='$vid' AND username='$u' LIMIT 1");
+    $row = $q ? mysqli_fetch_assoc($q) : null;
+    if (!$row) return 'noop';
+
+    $hours       = (int)($settings['tx_guard_window_hours'] ?? 24);
+    $limit       = max(1, (int)($settings['tx_guard_max_failures'] ?? 5));
+    $was_locked  = !empty($row['tx_lock_reason']);
+    $streak      = (int)$row['tx_fail_streak'];
+    $windowCount = (int)$row['tx_fail_window_count'];
+    $windowStart = (string)($row['tx_fail_window_start'] ?? '');
+    $windowSvc   = strtolower((string)($row['tx_fail_service'] ?? ''));
+
+    // A different service starts a fresh window so failures in one service cannot lock another.
+    $expired = ($hours > 0 && $windowStart !== '' && strtotime($windowStart) < (time() - ($hours * 3600)));
+    if ($svc !== $windowSvc || $expired) {
+        $windowCount = 0;
+        $streak      = 0;
+    }
+    $streak++;
+    $windowCount++;
+    $now_sql = date('Y-m-d H:i:s');
+
+    if ($streak < $limit) {
+        mysqli_query($connection_server, "UPDATE sas_users SET tx_fail_streak='$streak', tx_fail_window_count='$windowCount', tx_fail_window_start='$now_sql', tx_fail_service=" . ($svc !== '' ? "'$svc_esc'" : "NULL") . " WHERE vendor_id='$vid' AND username='$u'");
+        return 'counted';
+    }
+
+    // Threshold reached -> lock. Scope decides whether it is global or per-service.
+    $scope = strtolower((string)($settings['tx_guard_scope'] ?? 'all'));
+    $lock_service_sql = ($scope === 'per-service' && $svc !== '') ? "'$svc_esc'" : 'NULL';
+    $until_sql = 'NULL';
+    if (!empty($settings['tx_guard_auto_unlock']) && $hours > 0) {
+        $until_sql = "'" . date('Y-m-d H:i:s', time() + ($hours * 3600)) . "'";
+    }
+    $reason_txt = mysqli_real_escape_string($connection_server, 'Transaction access restricted after ' . $streak . ' failed attempt(s) in a row' . ($svc !== '' ? ' on ' . $svc : '') . '. Contact support to restore access.');
+
+    mysqli_query($connection_server, "UPDATE sas_users SET tx_fail_streak='$streak', tx_fail_window_count='$windowCount', tx_fail_window_start='$now_sql', tx_fail_service=" . ($svc !== '' ? "'$svc_esc'" : 'NULL') . ", tx_lock_until=$until_sql, tx_lock_service=$lock_service_sql, tx_lock_reason='$reason_txt' WHERE vendor_id='$vid' AND username='$u'");
+
+    // Alert once, on the transition into the locked state - not on every subsequent failure.
+    if (!$was_locked && !empty($settings['tx_guard_notify_admin'])) {
+        bc_tx_failure_alert_admin($vid, $username, $streak, $svc, $scope);
+    }
+    return 'locked';
+}
+
+/** Email the vendor admin that a user has been locked out. Best-effort; never blocks the caller. */
+function bc_tx_failure_alert_admin($vendor_id, $username, $count, $service = '', $scope = 'per-service')
+{
+    global $connection_server;
+    if (!$connection_server) return false;
+    $vid = (int)$vendor_id;
+    try {
+        $v = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT email, firstname FROM sas_vendors WHERE id='$vid' LIMIT 1"));
+        $to = $v['email'] ?? '';
+        if (empty($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
+        $scope_txt = ($scope === 'per-service' && $service !== '') ? ("the '" . htmlspecialchars($service) . "' service only") : 'all services';
+        $subject = 'Security alert: transaction access locked for ' . $username;
+        $body = '<p>User <b>' . htmlspecialchars($username) . '</b> reached <b>' . (int)$count . '</b> consecutive user-caused transaction failures.</p>'
+              . '<p>Transaction access has been restricted for <b>' . $scope_txt . '</b>. Other services and login are unaffected.</p>'
+              . '<p>Review the account, then unlock it from Brute Force Security &rarr; Locked Transaction Access.</p>';
+        if (function_exists('sendVendorEmail')) sendVendorEmail($to, $subject, $body);
+        return true;
+    } catch (Throwable $e) {
+        return false; // an alert failure must never break the transaction that triggered it
+    }
+}
+
+/**
+ * Users currently locked out of transacting, for the admin console. Vendor-scoped.
+ * Auto-expired locks are excluded so the list only shows ones needing attention.
+ */
+function bc_tx_locked_users($vendor_id, $limit = 100)
+{
+    global $connection_server;
+    if (!$connection_server) return [];
+    $vid = (int)$vendor_id;
+    $lim = max(1, (int)$limit);
+    $rows = [];
+    $q = mysqli_query($connection_server, "SELECT id, username, firstname, lastname, tx_fail_streak, tx_fail_window_count, tx_lock_service, tx_lock_until, tx_lock_reason FROM sas_users WHERE vendor_id='$vid' AND tx_lock_reason IS NOT NULL AND (tx_lock_until IS NULL OR tx_lock_until > NOW()) ORDER BY id DESC LIMIT $lim");
+    while ($q && $r = mysqli_fetch_assoc($q)) $rows[] = $r;
+    return $rows;
 }
 
 function isIPBlocked($ip, $vendor_id) {

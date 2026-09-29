@@ -61,6 +61,9 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                 }
 
                                 if ($api_response == "successful") {
+                                    // GFTAL: a definitive success ends the consecutive-failure streak. Recorded
+                                    // here (not at request time) because only here is 'successful' a fact.
+                                    bc_tx_failure_record($get_transaction_data["vendor_id"], $get_transaction_data["username"], 'success', $get_transaction_data["type_alternative"] ?? '', '', (!empty($get_transaction_data["batch_number"]) ? 'bulk' : 'service'));
                                     alterTransaction($requery_reference, "status", $api_response_status);
                                     alterTransaction($requery_reference, "description", $api_response_description);
                                     $json_response_array = array("ref" => $requery_reference, "status" => "success", "desc" => "Transaction Successful", "response_desc" => $api_response_description);
@@ -91,6 +94,12 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                     // run sees 0 affected rows and skips the credit - previously a
                                     // transaction that stayed pending was refunded again on every run.
                                     $claim_result = mysqli_query($connection_server, "UPDATE sas_transactions SET status='3' WHERE reference='$requery_reference' AND status IN ('2','1')");
+
+                                    // GFTAL: this point is reached only for a DEFINITIVE provider failure (the
+                                    // bc_gateway_refund_is_safe() gate above downgrades anything unclassifiable to
+                                    // pending), so it is the one place where "the transaction failed" is a fact.
+                                    // The recorder itself ignores provider-side reasons and batch sources.
+                                    bc_tx_failure_record($get_transaction_data["vendor_id"], $get_transaction_data["username"], 'failed', $get_transaction_data["type_alternative"] ?? '', $api_response_description, (!empty($get_transaction_data["batch_number"]) ? 'bulk' : 'service'));
                                     $claimed = ($claim_result && mysqli_affected_rows($connection_server) > 0);
 
                                     if ($claimed) {
