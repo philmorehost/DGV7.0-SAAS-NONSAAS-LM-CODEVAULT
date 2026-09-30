@@ -71,22 +71,48 @@ if ($connection_server) {
                     $get_logged_admin_details['access_hash'] = $new_hash;
                 }
 
-                // Self-heal default marketplace listing: v6.datagifting.com.ng runs the DGV7.0-SAAS
-                // edition of this same platform, so it's a ready-made reseller API for every VTU
-                // service via the "localserver.php" gateway fallback (func/api-gateway/{type}-localserver.php),
-                // which talks to another DGV7 instance's own web/api/*.php endpoints. Seeded here
-                // (not only on MarketPlace.php) so it self-heals on EVERY admin page load for both
-                // brand-new and pre-existing installations, regardless of which page an admin visits
-                // first or when this code was deployed relative to their last login. Session-gated
-                // like the migrations check above so the 10 SELECT/INSERT checks below only run once
-                // per session, not on every single request.
+                // Optional default reseller listing. The host is INSTALL-SPECIFIC and is therefore read
+                // from configuration - it is never baked into this file, which ships to third parties:
+                // a hardcoded host seeds THEIR sas_apis with a provider row pointing at somebody else's
+                // server (the previous revision did exactly that, with the vendor's own domain).
+                //
+                // Opt in per install with either
+                //   - super-admin option 'default_marketplace_url' (getSuperAdminOption), or
+                //   - a constant BC_DEFAULT_MARKETPLACE_URL defined early in func/bc-connect.php
+                //     (or any file loaded before this one).
+                // With neither set, nothing is seeded: the admin adds their reseller once under
+                // MarketPlace.php -> Add Custom API Gateway, which is the supported path anyway.
+                //
+                // Seeded here (not only on MarketPlace.php) so it self-heals on EVERY admin page load
+                // for both brand-new and pre-existing installations, regardless of which page an admin
+                // visits first or when this code was deployed relative to their last login. Session-gated
+                // like the migrations check above so the checks below only run once per session, not on
+                // every single request.
                 if (!isset($_SESSION['default_marketplace_seeded_v1'])) {
-                    $default_marketplace_url = "v6.datagifting.com.ng";
-                    $default_marketplace_types = array("airtime", "shared-data", "sme-data", "cg-data", "dd-data", "cable", "electric", "exam", "betting", "bulk-sms");
-                    foreach ($default_marketplace_types as $default_api_type) {
-                        $check_default_api = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='" . $get_logged_admin_details['id'] . "' AND api_type='$default_api_type' AND api_base_url='$default_marketplace_url' LIMIT 1");
-                        if ($check_default_api && mysqli_num_rows($check_default_api) == 0) {
-                            mysqli_query($connection_server, "INSERT INTO sas_apis (vendor_id, api_type, api_base_url, api_key, status) VALUES ('" . $get_logged_admin_details['id'] . "', '$default_api_type', '$default_marketplace_url', '', '0')");
+                    $default_marketplace_url = '';
+                    if (defined('BC_DEFAULT_MARKETPLACE_URL')) {
+                        $default_marketplace_url = trim((string)BC_DEFAULT_MARKETPLACE_URL);
+                    }
+                    if (function_exists('getSuperAdminOption')) {
+                        $configured_marketplace_url = trim((string)getSuperAdminOption('default_marketplace_url', ''));
+                        if ($configured_marketplace_url !== '') {
+                            $default_marketplace_url = $configured_marketplace_url;
+                        }
+                    }
+                    // Store it the way the purchase gateways expect to use it: they build
+                    // "https://<api_base_url>/web/api/...", so this must be a bare host - no scheme,
+                    // no trailing slash, lower case.
+                    $default_marketplace_url = strtolower(preg_replace('#^https?://#i', '', $default_marketplace_url));
+                    $default_marketplace_url = rtrim($default_marketplace_url, '/');
+
+                    if ($default_marketplace_url !== '') {
+                        $default_marketplace_url_esc = mysqli_real_escape_string($connection_server, $default_marketplace_url);
+                        $default_marketplace_types = array("airtime", "shared-data", "sme-data", "cg-data", "dd-data", "cable", "electric", "exam", "betting", "bulk-sms");
+                        foreach ($default_marketplace_types as $default_api_type) {
+                            $check_default_api = mysqli_query($connection_server, "SELECT id FROM sas_apis WHERE vendor_id='" . $get_logged_admin_details['id'] . "' AND api_type='$default_api_type' AND api_base_url='$default_marketplace_url_esc' LIMIT 1");
+                            if ($check_default_api && mysqli_num_rows($check_default_api) == 0) {
+                                mysqli_query($connection_server, "INSERT INTO sas_apis (vendor_id, api_type, api_base_url, api_key, status) VALUES ('" . $get_logged_admin_details['id'] . "', '$default_api_type', '$default_marketplace_url_esc', '', '0')");
+                            }
                         }
                     }
                     $_SESSION['default_marketplace_seeded_v1'] = true;

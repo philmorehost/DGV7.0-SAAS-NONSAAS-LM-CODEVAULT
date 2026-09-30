@@ -99,7 +99,9 @@ $GLOBALS['bc_test_sql']  = array();
 $GLOBALS['bc_test_rows'] = array();
 $GLOBALS['connection_server'] = new BcTestLink();
 // Collaborators read the host (for the derived PayHub email) - give them one so the run is quiet.
-$_SERVER['HTTP_HOST'] = 'v6.datagifting.com';
+// Deliberately a neutral domain: a real vendor host here would put one operator's domain in the
+// shipped tree for no benefit, and nothing in the payment path depends on which host it is.
+$_SERVER['HTTP_HOST'] = 'example.com';
 
 // Guarded so the file still PARSES (`php -l`) with mysqli loaded; `-n` is what makes them real.
 if (!function_exists('mysqli_real_escape_string')) {

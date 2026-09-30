@@ -187,8 +187,8 @@ $csv_price_level_array[] = "product_name,smart_level,agent_level,api_level";
                     $is_fetcher_allowed = true;
                 } elseif(bc_remote_vendor_is_candidate($url)) {
                     // ANY DGV7 install we could buy from, not one hardcoded domain: the old check
-                    // listed only v6.datagifting.com.ng, so a seller hosted anywhere else had no
-                    // dropdown entry and the whole feature looked unimplemented.
+                    // listed a single fixed host, so a seller hosted anywhere else had no dropdown
+                    // entry and the whole feature looked unimplemented.
                     $installed_gateways[$url] = strtoupper($url) . ' (DGV7)';
                     $is_fetcher_allowed = true;
                 }

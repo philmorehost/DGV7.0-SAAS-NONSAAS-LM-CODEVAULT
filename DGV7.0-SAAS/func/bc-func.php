@@ -3684,7 +3684,7 @@ function isGatewayEnabled($gateway, $vid = null) {
 
     // STRICT VENDOR ISOLATION (regression fix): a gateway is enabled for a vendor ONLY if that
     // vendor has their own enabled record in sas_payment_gateways. The old super-admin global
-    // fallback leaked the platform's/v6.datagifting.com.ng gateways to every other vendor's
+    // fallback leaked the platform's own gateways to every other vendor's
     // web/Fund.php (and let brand-new vendors see gateways they never activated).
     if ($vid > 0) {
         $q = mysqli_query($connection_server, "SELECT status FROM sas_payment_gateways WHERE vendor_id='$vid' AND (LOWER(TRIM(gateway_name)) = '$gateway_search' OR gateway_name LIKE '%$gateway_search%') AND status=1 LIMIT 1");

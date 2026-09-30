@@ -34,4 +34,11 @@ DGV7.0-SAAS/asset-backup/
 # Collected release build outputs (APK + AAB). Pure binaries — around 278 MB for three apps — and
 # reproducible with `assembleRelease bundleRelease`, so they are never something to commit.
 /release-artifacts/
-
+# ---------------------------------------------------------------------------
+# Runtime caches written by func/bc-func.php (bc_cache_set/bc_cache_get, TTL 300s) and keyed by
+# md5(host) / md5(vendor_id). Machine-generated per install - and committing one is not harmless:
+# a cached vendor row carries that vendor's website_url, logo, favicon, OG image and APK download
+# URL, so every other install that pulls the tree serves somebody else's branding until the TTL
+# expires. The reader rebuilds from the database on a miss, so nothing needs these files to exist.
+DGV7.0-SAAS/func/cache/
+DGV7.0-NON-SAAS/func/cache/
