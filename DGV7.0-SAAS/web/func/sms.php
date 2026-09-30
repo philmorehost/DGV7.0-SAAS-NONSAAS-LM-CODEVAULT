@@ -28,13 +28,32 @@ if (in_array($purchase_method, $purchase_method_array)) {
 
     $phone_no_array = array_filter(explode(",", trim($phone_no)));
     $sms_phone_array = array();
+    $sms_invalid_phone_array = array();
     foreach ($phone_no_array as $sms_phone_no) {
         $sms_phone_no = sanitize_phone_number(trim($sms_phone_no));
-        if (in_array(strlen($sms_phone_no), array("11"))) {
-            if (!in_array($sms_phone_no, $sms_phone_array)) {
-                array_push($sms_phone_array, $sms_phone_no);
-            }
+        if ($sms_phone_no === "") {
+            continue;
         }
+        // A number the network cannot deliver to must never be charged: it is guaranteed to fail at
+        // the provider, every failure is refunded, and repeated refund cycles are the lever that
+        // minted wallet funds. Same rule as airtime.php / data.php. The old test here was length
+        // alone, so 00000000000 counted as a valid recipient.
+        if (!bc_valid_mobile_phone($sms_phone_no)) {
+            if (!in_array($sms_phone_no, $sms_invalid_phone_array)) {
+                array_push($sms_invalid_phone_array, $sms_phone_no);
+            }
+            continue;
+        }
+        if (!in_array($sms_phone_no, $sms_phone_array)) {
+            array_push($sms_phone_array, $sms_phone_no);
+        }
+    }
+
+    if (count($sms_invalid_phone_array) > 0) {
+        $sms_invalid_phone_sample = implode(", ", array_slice($sms_invalid_phone_array, 0, 5));
+        $json_response_array = array("status" => "failed", "desc" => "Invalid phone number(s): " . $sms_invalid_phone_sample . ". Enter valid Nigerian mobile numbers (11 digits starting 070, 080, 081, 090 or 091). No SMS was sent and your wallet was not charged.");
+        $json_response_encode = json_encode($json_response_array, true);
+        return;
     }
 
     $phone_no = implode(",", $sms_phone_array);
