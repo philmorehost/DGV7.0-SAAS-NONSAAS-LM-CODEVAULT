@@ -47,7 +47,13 @@ if (in_array($purchase_method, $purchase_method_array)) {
         } elseif ($get_logged_user_details["status"] != 1) {
             $json_response_array = array("status" => "failed", "desc" => "Your account is currently suspended. Please contact support.");
             $json_response_encode = json_encode($json_response_array, true);
-        } elseif (!empty(userBalance(1)) && is_numeric(userBalance(1)) && (userBalance(1) > 0)) {
+        } elseif (!bc_valid_mobile_phone($phone_no)) {
+        // An impossible number must never be charged. It is guaranteed to fail at the provider, every
+        // failure is refunded, and repeated refund cycles are the lever that minted wallet funds, so
+        // the request is stopped here instead of being sent on to the gateway.
+        $json_response_array = array("status" => "failed", "desc" => "Enter a valid phone number (11 digits starting 070, 080, 081, 090 or 091).");
+        $json_response_encode = json_encode($json_response_array, true);
+    } elseif (!empty(userBalance(1)) && is_numeric(userBalance(1)) && (userBalance(1) > 0)) {
             if (!empty($isp) && !empty($phone_no) && is_numeric($phone_no) && !empty($type) && !empty($quantity)) {
 
                 $data_type_table_name_arrays = array("sme-data" => "sas_sme_data_status", "cg-data" => "sas_cg_data_status", "dd-data" => "sas_dd_data_status", "shared-data" => "sas_shared_data_status");

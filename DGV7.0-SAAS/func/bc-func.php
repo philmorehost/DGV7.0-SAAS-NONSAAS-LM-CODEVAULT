@@ -499,6 +499,30 @@ function sanitize_phone_number($phone) {
     return $phone;
 }
 
+/**
+ * Is this a valid Nigerian MOBILE number? (normalised form, as sanitize_phone_number returns it)
+ *
+ * 11 digits beginning 070/080/081/090/091 - the only prefixes the networks actually assign. This is
+ * deliberately NOT folded into sanitize_phone_number(), which is also used for meter, smartcard and
+ * betting account numbers and must keep accepting those.
+ *
+ * Why it exists: a number the provider rejects costs the customer nothing - the charge is refunded -
+ * and that refund is the lever in the wallet-minting loop. Filling the field with 00000000000,
+ * 12345678901 or anything else that cannot exist made every purchase fail on purpose, and 48 of them
+ * back-to-back turned a funded wallet into free money. An impossible number must never reach the
+ * gateway, and must never be charged in the first place.
+ */
+function bc_valid_mobile_phone($phone) {
+    $phone = trim((string)$phone);
+    if ($phone === '') return false;
+    $phone = sanitize_phone_number($phone);
+    if (!preg_match('/^0[789][01][0-9]{8}$/', $phone)) return false;
+    // The right shape is not enough: 08000000000 has a valid prefix and still cannot be a line,
+    // because no Nigerian number contains a run of nine identical digits.
+    if (preg_match('/(\d)\1{8,}/', $phone)) return false;
+    return true;
+}
+
 function validateAPIDomain($user_details) {
     // If no domain is configured, we allow it (for backward compatibility and ease of use)
     if (empty($user_details['api_domain'])) return true;
@@ -649,7 +673,96 @@ function vendorBalance($decimalIndex)
 		return "0." . sprintf("%0" . $decimalIndex . "d", 0);
 	}
 }
+/**
+ * Apply a DELTA to a wallet balance in ONE statement.
+ *
+ * Every wallet write in this file used to read the balance, add or subtract it in PHP, and then write
+ * the ABSOLUTE result back. That is a lost update: two requests that read the same value both write a
+ * result computed from it, so one of them disappears. On the credit side it is worse than a loss - the
+ * absolute write also RESURRECTS a balance that a concurrent debit had already lowered, so a refused
+ * purchase's refund could hand back the amount that was never actually deducted. A refused purchase is
+ * refunded by design, so a customer repeating a purchase that ALWAYS fails (an invalid phone number,
+ * for instance, which the provider rejects every single time) turned a funded wallet into free money.
+ *
+ * Doing the arithmetic in SQL ("balance = balance + x") makes the read and the write one atomic
+ * operation on the row MySQL locks, so concurrent requests serialise instead of overwriting each
+ * other. The before/after figures for the transaction record are read back afterwards.
+ *
+ * Returns 'success', 'insufficient_balance' or 'failed'. A debit additionally requires the balance to
+ * cover it, enforced in the WHERE clause, so a balance that moved after the caller's own pre-check
+ * cannot be over-drawn.
+ */
+function bc_wallet_apply_delta($vendor_id, $username, $delta, &$balance_before = null, &$balance_after = null) {
+    global $connection_server;
+    $bal_vid = (int)$vendor_id;
+    if (!$connection_server || $bal_vid <= 0 || (string)$username === '') {
+        $balance_before = null;
+        $balance_after = null;
+        return 'failed';
+    }
+    $bal_user = mysqli_real_escape_string($connection_server, (string)$username);
+    return _bc_wallet_apply_delta_sql('sas_users', "vendor_id='$bal_vid' AND username='$bal_user'", $delta, $balance_before, $balance_after);
+}
 
+/** Same, for the VENDOR wallet (sas_vendors.balance, keyed by id). */
+function bc_vendor_wallet_apply_delta($vendor_id, $delta, &$balance_before = null, &$balance_after = null) {
+    global $connection_server;
+    $bal_vid = (int)$vendor_id;
+    if (!$connection_server || $bal_vid <= 0) {
+        $balance_before = null;
+        $balance_after = null;
+        return 'failed';
+    }
+    return _bc_wallet_apply_delta_sql('sas_vendors', "id='$bal_vid'", $delta, $balance_before, $balance_after);
+}
+
+/** Shared SQL core for bc_wallet_apply_delta() / bc_vendor_wallet_apply_delta(). */
+function _bc_wallet_apply_delta_sql($table, $where, $delta, &$balance_before, &$balance_after) {
+    global $connection_server;
+    $balance_before = null;
+    $balance_after = null;
+    $delta = (float)$delta;
+    if ($delta == 0.0) return 'failed';
+
+    if ($delta > 0) {
+        if (!mysqli_query($connection_server, "UPDATE $table SET balance = balance + " . sprintf('%.18F', $delta) . " WHERE $where")) {
+            return 'failed';
+        }
+        if (mysqli_affected_rows($connection_server) !== 1) return 'failed';
+    } else {
+        $bal_need = sprintf('%.18F', -$delta);
+        if (!mysqli_query($connection_server, "UPDATE $table SET balance = balance - $bal_need WHERE $where AND balance >= $bal_need")) {
+            return 'failed';
+        }
+        if (mysqli_affected_rows($connection_server) !== 1) return 'insufficient_balance';
+    }
+
+    $bal_row = mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM $table WHERE $where LIMIT 1"));
+    if (!$bal_row) return 'failed';
+    $balance_after = (float)$bal_row['balance'];
+    $balance_before = $balance_after - $delta;
+    return 'success';
+}
+
+/**
+ * Has this transaction already been refunded?
+ *
+ * A refund is credited under its OWN new reference, so the only stable link back to the original
+ * transaction is the reference embedded in the description ("Refund for Ref:<i>'X'</i>"). Crediting
+ * a second refund for the same original transaction is a double refund, i.e. minted money, and it is
+ * the other half of the failure cycle: buy something that always fails, get refunded, get refunded
+ * again. Applies to refunds only - funding and admin credits are unaffected.
+ */
+function bc_refund_already_credited($vendor_id, $username, $type_alternative, $description) {
+    global $connection_server;
+    if (!$connection_server || strcasecmp(trim((string)$type_alternative), 'Refund') !== 0) return false;
+    if (!preg_match("/Ref:?\\s*<i>'([^']+)'<\\/i>/i", (string)$description, $m)) return false;
+    $orig = mysqli_real_escape_string($connection_server, $m[1]);
+    $u = mysqli_real_escape_string($connection_server, (string)$username);
+    $vid = (int)$vendor_id;
+    $q = mysqli_query($connection_server, "SELECT reference FROM sas_transactions WHERE vendor_id='$vid' AND username='$u' AND type_alternative='Refund' AND description LIKE '%$orig%' LIMIT 1");
+    return ($q && mysqli_num_rows($q) > 0);
+}
 function chargeUser($type, $product_unique_id, $type_alternative, $reference, $api_reference, $amount, $discounted_amount, $description, $mode, $api_website, $status)
 {
 	global $connection_server;
@@ -721,7 +834,9 @@ function chargeUser($type, $product_unique_id, $type_alternative, $reference, $a
 					// Legacy fallback path (if bc_atomic_debit_user not available)
 					if ($atomic_result === 'legacy') {
 						$user_balance_after_debit = $user_balance_before_debit - (float)$discounted_amount;
-						mysqli_query($connection_server, "UPDATE sas_users SET balance='$user_balance_after_debit' WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $get_logged_user_det["username"] . "'");
+						mysqli_query($connection_server, "UPDATE sas_users SET balance = balance - " . sprintf('%.18F', (float)$discounted_amount) . " WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $get_logged_user_det["username"] . "' AND balance >= " . sprintf('%.18F', (float)$discounted_amount));
+							$user_balance_after_debit = (float)(mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_users WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' AND username='" . $get_logged_user_det["username"] . "' LIMIT 1"))["balance"] ?? $user_balance_after_debit);
+							$user_balance_before_debit = $user_balance_after_debit + (float)$discounted_amount;
 					}
 
 					// Insert transaction record
@@ -810,7 +925,15 @@ function chargeUser($type, $product_unique_id, $type_alternative, $reference, $a
 				$user_balance_after_credit = ($user_balance_before_credit + $discounted_amount);
 
 				$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, api_reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('" . $get_logged_user_det["vendor_id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$api_reference', '" . $get_logged_user_det["username"] . "', '$amount', '$discounted_amount', '$user_balance_before_credit', '$user_balance_after_credit', '$description', '$mode', '$api_website', '$status')");
-				$charge_user = mysqli_query($connection_server, "UPDATE sas_users SET balance='$user_balance_after_credit' WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $get_logged_user_det["username"] . "' ");
+				$bc_dup_refund = bc_refund_already_credited($get_logged_user_det["vendor_id"], $get_logged_user_det["username"], $type_alternative, $description);
+						$charge_user = $bc_dup_refund ? false : mysqli_query($connection_server, "UPDATE sas_users SET balance = balance + $discounted_amount WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $get_logged_user_det["username"] . "'");
+						$bc_bal_row = $charge_user ? mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_users WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' AND username='" . $get_logged_user_det["username"] . "' LIMIT 1")) : null;
+						if ($bc_bal_row) {
+							$user_balance_after_credit = (float)$bc_bal_row["balance"];
+							$user_balance_before_credit = $user_balance_after_credit - $discounted_amount;
+							mysqli_query($connection_server, "UPDATE sas_transactions SET balance_before='$user_balance_before_credit', balance_after='$user_balance_after_credit' WHERE reference='$reference' AND type_alternative='$type_alternative'");
+						}
+						if ($bc_dup_refund) { return "failed"; }
 				if (($user_balance_before_credit !== false) && ($charge_user == true)) {
 					// Email Beginning
 					$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_credit, 2), "{balance_after}" => toDecimal($user_balance_after_credit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
@@ -905,7 +1028,15 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 					$user_balance_after_debit = ($user_balance_before_debit - $discounted_amount);
 
 					$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, api_reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('" . $get_logged_user_det["vendor_id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$api_reference', '" . $user_id . "', '$amount', '$discounted_amount', '$user_balance_before_debit', '$user_balance_after_debit', '$description', '$mode', '$api_website', '$status')");
-					$charge_user = mysqli_query($connection_server, "UPDATE sas_users SET balance='$user_balance_after_debit' WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $user_id . "'");
+					$charge_user = mysqli_query($connection_server, "UPDATE sas_users SET balance = balance - $discounted_amount WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $user_id . "' AND balance >= $discounted_amount");
+						$bc_bal_row = $charge_user ? mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_users WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' AND username='" . $user_id . "' LIMIT 1")) : null;
+						if ($bc_bal_row) {
+							$user_balance_after_debit = (float)$bc_bal_row["balance"];
+							$user_balance_before_debit = $user_balance_after_debit + $discounted_amount;
+							mysqli_query($connection_server, "UPDATE sas_transactions SET balance_before='$user_balance_before_debit', balance_after='$user_balance_after_debit' WHERE reference='$reference' AND type_alternative='$type_alternative'");
+						} elseif (mysqli_affected_rows($connection_server) !== 1) {
+							return "failed";
+						}
 					if (($user_balance_before_debit !== false) && ($charge_user == true)) {
 						// Email Beginning
 						$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_debit, 2), "{balance_after}" => toDecimal($user_balance_after_debit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
@@ -946,7 +1077,15 @@ function chargeOtherUser($user_id, $type, $product_unique_id, $type_alternative,
 				$user_balance_after_credit = ($user_balance_before_credit + $discounted_amount);
 
 				$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_transactions (vendor_id, product_unique_id, type_alternative, reference, api_reference, username, amount, discounted_amount, balance_before, balance_after, description, mode, api_website, status) VALUES ('" . $get_logged_user_det["vendor_id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$api_reference', '" . $user_id . "', '$amount', '$discounted_amount', '$user_balance_before_credit', '$user_balance_after_credit', '$description', '$mode', '$api_website', '$status')");
-				$charge_user = mysqli_query($connection_server, "UPDATE sas_users SET balance='$user_balance_after_credit' WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $user_id . "' ");
+				$bc_dup_refund = bc_refund_already_credited($get_logged_user_det["vendor_id"], $user_id, $type_alternative, $description);
+						$charge_user = $bc_dup_refund ? false : mysqli_query($connection_server, "UPDATE sas_users SET balance = balance + $discounted_amount WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' && username='" . $user_id . "'");
+						$bc_bal_row = $charge_user ? mysqli_fetch_assoc(mysqli_query($connection_server, "SELECT balance FROM sas_users WHERE vendor_id='" . $get_logged_user_det["vendor_id"] . "' AND username='" . $user_id . "' LIMIT 1")) : null;
+						if ($bc_bal_row) {
+							$user_balance_after_credit = (float)$bc_bal_row["balance"];
+							$user_balance_before_credit = $user_balance_after_credit - $discounted_amount;
+							mysqli_query($connection_server, "UPDATE sas_transactions SET balance_before='$user_balance_before_credit', balance_after='$user_balance_after_credit' WHERE reference='$reference' AND type_alternative='$type_alternative'");
+						}
+						if ($bc_dup_refund) { return "failed"; }
 				if (($user_balance_before_credit !== false) && ($charge_user == true)) {
 					// Email Beginning
 					$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_credit, 2), "{balance_after}" => toDecimal($user_balance_after_credit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
@@ -4288,7 +4427,13 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
                 $bal_before = (float)($user_r['balance'] ?? 0);
                 $bal_after = $bal_before + $amount_deposited;
 
-                mysqli_query($connection_server, "UPDATE sas_users SET balance='$bal_after' WHERE vendor_id='$vendor_id' AND username='$u_esc'");
+                $bc_fund_user = ($username !== '' && $username !== null) ? $username : $u_esc;
+					$bc_fund_result = bc_wallet_apply_delta($vendor_id, $bc_fund_user, $amount_deposited, $bal_before, $bal_after);
+					if ($bc_fund_result !== 'success') {
+						// Leave the funding row pending rather than recording a credit that did not happen.
+						$log("Funding credit did not apply for '$bc_fund_user' ($bc_fund_result) - row left pending for review.");
+						return false;
+					}
                 $tx_local_ref_esc = mysqli_real_escape_string($connection_server, $tx['reference']);
                 if (!mysqli_query($connection_server, "UPDATE sas_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited', api_reference='$tx_ref_esc_match' WHERE vendor_id='$vendor_id' AND reference='$tx_local_ref_esc'")) {
                     $log("SQL ERROR (user credit update): " . mysqli_error($connection_server));
