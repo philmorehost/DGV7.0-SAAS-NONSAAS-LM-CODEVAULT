@@ -236,8 +236,11 @@
                 } elseif(stripos($url, 'clubkonnect.com') !== false || stripos($url, 'nellobytesystems.com') !== false) {
                     $installed_gateways['clubkonnect'] = 'CLUBKONNECT';
                     $is_fetcher_allowed = true;
-                } elseif(stripos($url, 'v6.datagifting.com.ng') !== false) {
-                    $installed_gateways[$url] = 'V6.DATAGIFTING.COM.NG';
+                } elseif(bc_remote_vendor_is_candidate($url)) {
+                    // ANY DGV7 install we could buy from, not one hardcoded domain: the old check
+                    // listed only v6.datagifting.com.ng, so a seller hosted anywhere else had no
+                    // dropdown entry and the whole feature looked unimplemented.
+                    $installed_gateways[$url] = strtoupper($url) . ' (DGV7)';
                     $is_fetcher_allowed = true;
                 }
             }

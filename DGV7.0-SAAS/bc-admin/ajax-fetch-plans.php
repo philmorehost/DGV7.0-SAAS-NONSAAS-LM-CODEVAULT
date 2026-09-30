@@ -402,6 +402,69 @@ try {
             }
         }
 
+        // ── Another DGV7 install, possibly on another server ────────────────────────────────────
+        // This is the case the fetcher could not handle: the provider has no gateway file of its
+        // own, so bc_gateway_resolve_file() falls back to <type>-localserver.php, and the plan list
+        // read below out of THIS install's own tables can only ever describe a vendor sharing this
+        // database. A seller hosted elsewhere therefore had no reachable code path at all.
+        // Only worth calling when a key is stored for this provider: that key is the SELLER's own
+        // sas_users api_key, and the seller must have approved API access for it.
+        $vid = $get_logged_admin_details['id'] ?? 1;
+        $remote_error = null;
+        $remote_api_key = '';
+        if (bc_remote_vendor_is_candidate($gateway)) {
+            $remote_host = bc_remote_vendor_normalize_host($gateway);
+            $remote_host_esc = mysqli_real_escape_string($connection_server, $remote_host);
+            $remote_url_esc = mysqli_real_escape_string($connection_server, $gateway);
+            $key_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND (api_base_url='$remote_url_esc' OR api_base_url LIKE '%$remote_host_esc%') AND api_key IS NOT NULL AND api_key<>'' LIMIT 1");
+            if ($key_q && ($key_row = mysqli_fetch_assoc($key_q))) {
+                $remote_api_key = trim($key_row['api_key']);
+            }
+        }
+
+        if ($remote_api_key !== '') {
+            $fetch_base = strtolower(rtrim($gateway, '/'));
+            if (!preg_match('#^https?://#i', $fetch_base)) {
+                $fetch_base = 'https://' . $fetch_base;
+            }
+            // The key is sent BOTH as a Bearer header and as a query parameter. Many cPanel/LiteSpeed
+            // hosts do not expose the Authorization header to PHP, and cURL drops custom headers when
+            // a redirect crosses to another host - either one surfaces at the SELLER as "Missing API
+            // Key" even though the key is valid. The query parameter survives both.
+            $fetch_url = $fetch_base . "/api/app-backend/fetch-dgv7-plans.php?network=" . urlencode($network) . "&type=" . urlencode($type) . "&api_key=" . urlencode($remote_api_key);
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $fetch_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $remote_api_key", "Content-Type: application/json"]);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            $remote_response = curl_exec($ch);
+            $remote_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $remote_curl_err  = curl_error($ch);
+            curl_close($ch);
+
+            // Parse the seller's answer tolerantly: a host whose php.ini displays errors can prepend
+            // HTML to otherwise valid JSON, and a strict decode reports that as "invalid format from
+            // the provider" - blaming the seller for the buyer's parser.
+            $remote_data = function_exists('bc_gateway_json_decode')
+                ? bc_gateway_json_decode($remote_response)
+                : json_decode((string)$remote_response, true);
+
+            if ($remote_http_code === 200 && is_array($remote_data) && isset($remote_data['success'])
+                && $remote_data['success'] === true && isset($remote_data['plans']) && is_array($remote_data['plans'])) {
+                $plans = $remote_data['plans'];
+                $used_gateway_file = true;
+            } elseif (is_array($remote_data) && !empty($remote_data['message'])) {
+                $remote_error = "DGV7 provider $gateway refused the request: " . $remote_data['message'];
+            } else {
+                $remote_error = "Could not read the plan list from the DGV7 provider $gateway (HTTP $remote_http_code)"
+                    . ($remote_curl_err ? ": " . $remote_curl_err : "") . ".";
+            }
+        }
+
         if (!$used_gateway_file) {
             // Check if it's a local vendor
             $gateway_esc = mysqli_real_escape_string($connection_server, $gateway);
@@ -455,7 +518,11 @@ try {
                     throw new Error("Product $network not found on $gateway");
                 }
             } else {
-                throw new Error("Unsupported gateway: " . $gateway);
+                // Nothing could describe this provider. Where we did manage to reach another DGV7
+                // install, its own reason ("API approval needed, Contact Admin", a domain that does
+                // not serve the script, no outbound HTTPS) is far more actionable than "unsupported
+                // gateway", which reads as if the feature did not exist.
+                throw new Error($remote_error ?: ("Unsupported gateway: " . $gateway));
             }
         }
     }

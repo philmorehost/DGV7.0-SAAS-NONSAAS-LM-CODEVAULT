@@ -185,9 +185,13 @@
                 $url_esc = mysqli_real_escape_string($connection_server, $url);
                 $is_local = (mysqli_num_rows(mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$url_esc'")) > 0);
 
-                if($is_local){
+                // Same-script sellers belong here as well: one DGV7 install can be the provider for
+                // another, and without this the fetcher card was hidden for exactly that case.
+                $is_dgv7 = bc_remote_vendor_is_candidate($url);
+
+                if($is_local || $is_dgv7){
                     $is_fetcher_allowed = true;
-                    $installed_gateways[$url] = strtoupper($url);
+                    $installed_gateways[$url] = strtoupper($url) . ($is_dgv7 ? ' (DGV7)' : '');
                 }
             }
         ?>

@@ -410,10 +410,9 @@ try {
             // $api_key empty, and the client then sent "Authorization: Bearer " - which the DGV7
             // provider correctly reported as "Missing API Key". Match on the normalised host, and
             // require a non-empty key so this can never be sent blank again.
-            $gateway_host = strtolower(trim($gateway));
-            $gateway_host = preg_replace('#^https?://#i', '', $gateway_host);
-            $gateway_host = preg_replace('#^www\.#i', '', $gateway_host);
-            $gateway_host = rtrim($gateway_host, '/');
+            // One definition of "the stored value as a host", shared with the fetcher gating in
+            // bc-admin/*.php and with func/bc-gateway-plan-parser.php - these three used to drift.
+            $gateway_host = bc_remote_vendor_normalize_host($gateway);
             $gateway_esc  = mysqli_real_escape_string($connection_server, $gateway);
             $gateway_like = mysqli_real_escape_string($connection_server, '%' . $gateway_host . '%');
             $api_q = mysqli_query($connection_server, "SELECT api_key FROM sas_apis WHERE vendor_id='$vid' AND (api_base_url='$gateway_esc' OR api_base_url LIKE '$gateway_like') AND api_key IS NOT NULL AND api_key<>'' LIMIT 1");
@@ -450,15 +449,21 @@ try {
             $curl_err  = curl_error($ch);
             curl_close($ch);
 
-            if ($http_code === 200 && $response) {
-                $data = json_decode($response, true);
-                if ($data && isset($data['success']) && $data['success'] === true && isset($data['plans'])) {
-                    $plans = $data['plans'];
-                } else {
-                    throw new Error("Invalid format returned from DGV7 provider: " . ($data['message'] ?? 'Unknown error'));
-                }
+            // Parse the seller's answer tolerantly: a host whose php.ini displays errors can prepend
+            // HTML to otherwise valid JSON, and a strict decode reports that as "invalid format from
+            // the provider" - blaming the seller for the buyer's parser. (The seller-side endpoint
+            // suppresses diagnostics now, but older deployments of it do not.)
+            $data = function_exists('bc_gateway_json_decode')
+                ? bc_gateway_json_decode($response)
+                : json_decode((string)$response, true);
+
+            if ($http_code === 200 && is_array($data) && isset($data['success']) && $data['success'] === true && isset($data['plans']) && is_array($data['plans'])) {
+                $plans = $data['plans'];
+            } elseif (is_array($data) && !empty($data['message'])) {
+                // The seller's own refusal ("API approval needed, Contact Admin") is the actionable part.
+                throw new Error("DGV7 provider $gateway refused the request: " . $data['message']);
             } else {
-                throw new Error("Failed to connect to DGV7 API at $gateway (HTTP $http_code)" . ($curl_err ? ": ".$curl_err : ".") . " Ensure it is a valid DGV7 URL and that outbound HTTPS is allowed.");
+                throw new Error("Could not read the plan list from the DGV7 provider $gateway (HTTP $http_code)" . ($curl_err ? ": ".$curl_err : ".") . " Check the domain, that it serves this script at /api/app-backend/, and that outbound HTTPS is allowed.");
             }
         }
     }

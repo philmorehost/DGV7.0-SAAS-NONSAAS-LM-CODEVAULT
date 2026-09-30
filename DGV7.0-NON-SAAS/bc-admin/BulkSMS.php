@@ -203,15 +203,18 @@
             $current_api_type = 'bulk-sms';
             $installed_gateways = [];
             $check_fetcher_query = mysqli_query($connection_server, "SELECT id, api_base_url FROM sas_apis WHERE vendor_id='".$get_logged_admin_details["id"]."' AND api_type='$current_api_type'");
-            // Only v6.datagifting.com.ng actually supports live plan/price fetching for Bulk SMS —
-            // every other configured API has no fetch endpoint, so it's deliberately excluded from
-            // this dropdown rather than listed and left to fail when selected. (The previous check
-            // here matched against sas_vendors.website_url, which only ever contains this single-tenant
-            // install's own vendor row and could never match an external reseller like this one.)
+            // Any DGV7 install can be a Bulk SMS provider —
+            // the parent exposes /api/app-backend/fetch-dgv7-plans.php, so this dropdown lists every
+            // same-script candidate instead of one hardcoded domain. (It previously matched a single
+            // domain, and before that sas_vendors.website_url — which only ever contains this
+            // install's own vendor row and could never match an external reseller.)
             while($api_row = mysqli_fetch_assoc($check_fetcher_query)){
                 $url = $api_row['api_base_url'];
-                if(stripos($url, 'v6.datagifting.com.ng') !== false){
-                    $installed_gateways[$url] = 'V6.DATAGIFTING.COM.NG';
+                if(bc_remote_vendor_is_candidate($url)) {
+                    // ANY DGV7 install we could buy from, not one hardcoded domain: the old check
+                    // listed only v6.datagifting.com.ng, so a seller hosted anywhere else had no
+                    // dropdown entry and the whole feature looked unimplemented.
+                    $installed_gateways[$url] = strtoupper($url) . ' (DGV7)';
                     $is_fetcher_allowed = true;
                 }
             }

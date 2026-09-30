@@ -233,8 +233,12 @@ $csv_price_level_array[] = "product_name,smart_level,agent_level,api_level,days"
                 $url_esc = mysqli_real_escape_string($connection_server, $url);
                 $is_local = (mysqli_num_rows(mysqli_query($connection_server, "SELECT id FROM sas_vendors WHERE website_url='$url_esc'")) > 0);
                 $is_external = (stripos($url, 'vtpass.com') !== false || stripos($url, 'clubkonnect.com') !== false || stripos($url, 'nellobytesystems.com') !== false);
+                // Another DGV7 install (possibly on another server) is a fetchable provider too. It has
+                // no $sas_vendors row in THIS database, so $is_local stayed false and the whole
+                // Variation Fetcher card was never rendered for it.
+                $is_dgv7 = bc_remote_vendor_is_candidate($url);
 
-                if ($is_external || $is_local) {
+                if ($is_external || $is_local || $is_dgv7) {
                     $is_fetcher_allowed = true;
                     if (stripos($url, 'vtpass.com') !== false)
                         $installed_gateways['vtpass'] = 'VTPASS';
@@ -242,6 +246,8 @@ $csv_price_level_array[] = "product_name,smart_level,agent_level,api_level,days"
                         $installed_gateways['clubkonnect'] = 'CLUBKONNECT';
                     elseif ($is_local)
                         $installed_gateways[$url] = strtoupper($url);
+                    elseif ($is_dgv7)
+                        $installed_gateways[$url] = strtoupper($url) . ' (DGV7)';
                 }
             }
             ?>
