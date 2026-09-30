@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -9,6 +10,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- The VoveID / FaceTec KYC SDKs declare these as REQUIRED in their own manifests, so Play hid
+         the app from every device without a camera and autofocus. Face capture is one feature of the
+         app, not a prerequisite for installing it, and the CAMERA permission is still requested at
+         runtime.
+         tools:node="replace" is required, not decoration: the manifest merger ORs the `required`
+         attribute, so a plain required="false" declaration here merges with the SDKs' "true" and
+         still comes out required=true. `replace` drops the SDK declarations instead of merging. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" tools:node="replace" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" tools:node="replace" />
 
     <application
         android:name=".DGApp"

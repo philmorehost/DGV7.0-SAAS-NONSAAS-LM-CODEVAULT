@@ -13,6 +13,10 @@ configurations.all {
 android {
     namespace 'com.jikabiz.app'
     compileSdk 36
+    // Pinned because debugSymbolLevel 'FULL' needs an NDK to extract symbols with, and AGP 8.1.1
+    // would otherwise ask for its own default (25.x), which is not installed here. r28 is also the
+    // first NDK that emits 16 KB-aligned native code by default.
+    ndkVersion '28.2.13676358'
 
     defaultConfig {
         applicationId "com.jikabiz.app"
@@ -60,6 +64,12 @@ android {
             // Release builds REQUIRE a real release keystore — fail loudly instead of silently
             // falling back to debug signing (debug-signed AABs are rejected by Play Store).
             signingConfig signingConfigs.release
+            // Play warned "This App Bundle contains native code, and you've not uploaded debug
+            // symbols". This makes AGP collect them into native-debug-symbols.zip, so crashes and
+            // ANRs inside the native libraries can be symbolised instead of showing raw addresses.
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
         debug {
             // Debug builds are always signed with the default debug keystore
