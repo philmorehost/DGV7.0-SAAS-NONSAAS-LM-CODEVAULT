@@ -19,6 +19,11 @@
  *   C. bc_wallet_apply_delta() moves a real balance exactly, and REFUSES to over-draw - run against
  *      a live local MySQL when one is reachable.
  *   D. The double-refund guard exists and is wired into both credit branches.
+ *   E. The VENDOR wallet (chargeVendor / chargeOtherVendor, the two wallet-funding credits and the
+ *      Local Marketplace identity fee) is on the same atomic form, and no absolute write is left.
+ *      Those blocks are BYTE-IDENTICAL between the two charge functions, which is why the fix had to
+ *      be applied by a shape-verifying line-based script rather than a text replace.
+ *   F. bc_vendor_wallet_apply_delta() moves a real vendor balance exactly, and refuses to over-draw.
  *
  * NEGATIVE CONTROL: pinned to the revision before this work, where the absolute write and the
  * missing validator are both present. A green run on the live tree therefore means something.
@@ -101,6 +106,24 @@ foreach ($editions as $edition) {
         if (strpos($body, 'bc_valid_mobile_phone($phone_no)') === false) $rejected[] = $rel;
     }
     $check('airtime + data refuse an invalid number before charging', empty($rejected), implode(', ', $rejected));
+
+    // E. the VENDOR wallet is on the same atomic form
+    $absVendor = substr_count($func, "UPDATE sas_vendors SET balance='");
+    $check('no absolute VENDOR-wallet balance write remains', $absVendor === 0, "$absVendor found");
+    $check('chargeVendor() and chargeOtherVendor() both debit and credit through the delta helper',
+        substr_count($func, 'bc_vendor_wallet_apply_delta((int)$get_logged_user_det["id"]') === 4,
+        substr_count($func, 'bc_vendor_wallet_apply_delta((int)$get_logged_user_det["id"]') . ' call site(s)');
+    $check('the wallet-funding credits use the delta helper too',
+        substr_count($func, 'bc_vendor_wallet_apply_delta((int)$vendor_id, (float)$amount_deposited') === 2,
+        substr_count($func, 'bc_vendor_wallet_apply_delta((int)$vendor_id, (float)$amount_deposited') . ' call site(s)');
+    $check('a vendor debit cannot over-draw (enforced in the WHERE clause)',
+        strpos($func, 'AND balance >= $bal_need') !== false);
+}
+
+if (strpos((string)$read('DGV7.0-SAAS', 'func/bc-func.php'), 'bc_vendor_wallet_apply_delta($vid, -1 * $amount') !== false) {
+    $check('SAAS: the Local Marketplace identity fee is an atomic debit', true);
+} else {
+    $check('SAAS: the Local Marketplace identity fee is an atomic debit', false, 'bc_identity_local_charge_vendor');
 }
 
 // B. the validator, run for real
@@ -171,6 +194,38 @@ if (!$runDb) {
     }
 }
 
+// F. the VENDOR money primitive, against a live database
+echo "\n— bc_vendor_wallet_apply_delta() (real function, live MySQL)\n";
+if (!$runDb) {
+    echo "  [skip] not run (pass --db; this part needs ext-mysqli)\n";
+} else {
+    $vdelta = extract_function($saasFunc, '_bc_wallet_apply_delta_sql') . "\n" . extract_function($saasFunc, 'bc_vendor_wallet_apply_delta');
+    $vharness =
+        "\$connection_server = @new mysqli('127.0.0.1', 'root', '', 'dgv7_probe', 3306);\n" .
+        "if (\$connection_server->connect_errno) { echo 'NODB'; exit; }\n" .
+        "mysqli_query(\$connection_server, \"DELETE FROM sas_vendors WHERE email='__bc_vendor_wallet_probe__'\");\n" .
+        "mysqli_query(\$connection_server, \"INSERT INTO sas_vendors (id,email,password,firstname,lastname,phone_number,balance,website_url,home_address,status) VALUES (990001,'__bc_vendor_wallet_probe__','x','Probe','Vendor','08000000000',0,'n/a','n/a',1)\");\n" .
+        "\$b = null; \$a = null;\n" .
+        "\$r1 = bc_vendor_wallet_apply_delta(990001, 100, \$b, \$a); echo \$r1.'|'.\$b.'|'.\$a.'\\n';\n" .
+        "\$b = null; \$a = null;\n" .
+        "\$r2 = bc_vendor_wallet_apply_delta(990001, -30, \$b, \$a); echo \$r2.'|'.\$b.'|'.\$a.'\\n';\n" .
+        "\$b = null; \$a = null;\n" .
+        "\$r3 = bc_vendor_wallet_apply_delta(990001, -1000, \$b, \$a); echo \$r3.'|'.\$b.'|'.\$a.'\\n';\n" .
+        "\$row = mysqli_fetch_assoc(mysqli_query(\$connection_server, \"SELECT balance FROM sas_vendors WHERE id='990001'\"));\n" .
+        "echo 'final|'.(float)\$row['balance'].'\\n';\n" .
+        "mysqli_query(\$connection_server, \"DELETE FROM sas_vendors WHERE id='990001'\");\n";
+    $vout = run_php($vdelta . "\n" . $vharness);
+    if ($vout === 'NODB') {
+        echo "  [skip] no local MySQL on 127.0.0.1:3306 - the live-money part did NOT run\n";
+    } else {
+        $vlines = array_filter(array_map('trim', explode("\n", $vout)));
+        $check('vendor credit 100 from 0 reports before=0 after=100', in_array('success|0|100', $vlines, true), $vout);
+        $check('vendor debit 30 reports before=100 after=70', in_array('success|100|70', $vlines, true), $vout);
+        $check('vendor debit 1000 on a 70 balance is REFUSED as insufficient', in_array('insufficient_balance||', $vlines, true), $vout);
+        $check('the refused vendor debit left the balance untouched (70)', in_array('final|70', $vlines, true), $vout);
+    }
+}
+
 // NEGATIVE CONTROL
 echo "\n================ NEGATIVE CONTROL: $PRE_FIX_REV ================\n";
 foreach ($editions as $edition) {
@@ -185,6 +240,10 @@ foreach ($editions as $edition) {
         strpos($old, 'bc_wallet_apply_delta') === false);
     $check("$edition: the pre-fix file had no mobile-number validator",
         strpos($old, 'bc_valid_mobile_phone') === false);
+    $check("$edition: the pre-fix file still wrote the VENDOR balance absolutely",
+        strpos($old, "UPDATE sas_vendors SET balance='") !== false);
+    $check("$edition: the pre-fix file had no vendor delta helper",
+        strpos($old, 'bc_vendor_wallet_apply_delta') === false);
 }
 
 echo "\n================ SUMMARY ================\n";

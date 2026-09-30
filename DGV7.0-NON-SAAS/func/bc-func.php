@@ -1075,12 +1075,19 @@ function chargeVendor_original_unused($type, $product_unique_id, $type_alternati
 		if (in_array($type, $transactionTypeArray) && !empty($product_unique_id) && !empty($type_alternative) && !empty($reference) && !empty($description) && is_numeric($status) && in_array($status, $statusArray)) {
 			if ($type === "debit") {
 				if (($get_logged_user_det["balance"] > 0) && ($amount > 0) && ($get_logged_user_det["balance"] >= $amount) && ($get_logged_user_det["balance"] >= $discounted_amount)) {
-					$user_balance_before_debit = $get_logged_user_det["balance"];
-					$user_balance_after_debit = ($user_balance_before_debit - $discounted_amount);
+					// Relative wallet write: the move and its read-back happen in ONE statement on the
+					// row MySQL locks, and the debit additionally requires the balance to cover it, so a
+					// balance that moved after the pre-check above cannot be over-drawn. The absolute
+					// write that used to be here lost a concurrent debit and could resurrect a balance
+					// a concurrent debit had already lowered.
+					$bc_bal_delta = bc_vendor_wallet_apply_delta((int)$get_logged_user_det["id"], -1 * (float)$discounted_amount, $user_balance_before_debit, $user_balance_after_debit);
+					if ($bc_bal_delta !== "success") {
+						return "failed";
+					}
 
 					$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('" . $get_logged_user_det["id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$amount', '$discounted_amount', '$user_balance_before_debit', '$user_balance_after_debit', '$description', '$api_website', '$status')");
-					$charge_user = mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$user_balance_after_debit' WHERE id='" . $get_logged_user_det["id"] . "'");
-					if (($user_balance_before_debit !== false) && ($charge_user == true)) {
+					$charge_user = ($bc_bal_delta === "success");
+					if ($insert_transaction && ($charge_user == true)) {
 						// Email Beginning
 						$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_debit, 2), "{balance_after}" => toDecimal($user_balance_after_debit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
 						$raw_funding_template_subject = getSuperAdminEmailTemplate('vendor-funding', 'subject');
@@ -1110,12 +1117,18 @@ function chargeVendor_original_unused($type, $product_unique_id, $type_alternati
 			}
 
 			if ($type === "credit") {
-				$user_balance_before_credit = $get_logged_user_det["balance"];
-				$user_balance_after_credit = ($user_balance_before_credit + $discounted_amount);
+				// Relative wallet write: the move and its read-back happen in ONE statement on the
+				// row MySQL locks. The absolute write that used to be here RESURRECTED a balance a
+				// concurrent debit had already lowered, so a refused purchase's refund could hand back
+				// money that was never actually taken.
+				$bc_bal_delta = bc_vendor_wallet_apply_delta((int)$get_logged_user_det["id"], (float)$discounted_amount, $user_balance_before_credit, $user_balance_after_credit);
+				if ($bc_bal_delta !== "success") {
+					return "failed";
+				}
 
 				$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('" . $get_logged_user_det["id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$amount', '$discounted_amount', '$user_balance_before_credit', '$user_balance_after_credit', '$description', '$api_website', '$status')");
-				$charge_user = mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$user_balance_after_credit' WHERE id='" . $get_logged_user_det["id"] . "'");
-				if (($user_balance_before_credit !== false) && ($charge_user == true)) {
+				$charge_user = ($bc_bal_delta === "success");
+				if ($insert_transaction && ($charge_user == true)) {
 					// Email Beginning
 					$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_credit, 2), "{balance_after}" => toDecimal($user_balance_after_credit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
 					$raw_funding_template_subject = getSuperAdminEmailTemplate('vendor-funding', 'subject');
@@ -1177,12 +1190,19 @@ function chargeOtherVendor($vendor_id, $type, $product_unique_id, $type_alternat
 		if (in_array($type, $transactionTypeArray) && !empty($product_unique_id) && !empty($type_alternative) && !empty($reference) && !empty($description) && is_numeric($status) && in_array($status, $statusArray)) {
 			if ($type === "debit") {
 				if (($get_logged_user_det["balance"] > 0) && ($amount > 0) && ($get_logged_user_det["balance"] >= $amount) && ($get_logged_user_det["balance"] >= $discounted_amount)) {
-					$user_balance_before_debit = $get_logged_user_det["balance"];
-					$user_balance_after_debit = ($user_balance_before_debit - $discounted_amount);
+					// Relative wallet write: the move and its read-back happen in ONE statement on the
+					// row MySQL locks, and the debit additionally requires the balance to cover it, so a
+					// balance that moved after the pre-check above cannot be over-drawn. The absolute
+					// write that used to be here lost a concurrent debit and could resurrect a balance
+					// a concurrent debit had already lowered.
+					$bc_bal_delta = bc_vendor_wallet_apply_delta((int)$get_logged_user_det["id"], -1 * (float)$discounted_amount, $user_balance_before_debit, $user_balance_after_debit);
+					if ($bc_bal_delta !== "success") {
+						return "failed";
+					}
 
 					$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('" . $get_logged_user_det["id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$amount', '$discounted_amount', '$user_balance_before_debit', '$user_balance_after_debit', '$description', '$api_website', '$status')");
-					$charge_user = mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$user_balance_after_debit' WHERE id='" . $get_logged_user_det["id"] . "'");
-					if (($user_balance_before_debit !== false) && ($charge_user == true)) {
+					$charge_user = ($bc_bal_delta === "success");
+					if ($insert_transaction && ($charge_user == true)) {
 						// Email Beginning
 						$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_debit, 2), "{balance_after}" => toDecimal($user_balance_after_debit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
 						$raw_funding_template_subject = getSuperAdminEmailTemplate('vendor-funding', 'subject');
@@ -1212,12 +1232,18 @@ function chargeOtherVendor($vendor_id, $type, $product_unique_id, $type_alternat
 			}
 
 			if ($type === "credit") {
-				$user_balance_before_credit = $get_logged_user_det["balance"];
-				$user_balance_after_credit = ($user_balance_before_credit + $discounted_amount);
+				// Relative wallet write: the move and its read-back happen in ONE statement on the
+				// row MySQL locks. The absolute write that used to be here RESURRECTED a balance a
+				// concurrent debit had already lowered, so a refused purchase's refund could hand back
+				// money that was never actually taken.
+				$bc_bal_delta = bc_vendor_wallet_apply_delta((int)$get_logged_user_det["id"], (float)$discounted_amount, $user_balance_before_credit, $user_balance_after_credit);
+				if ($bc_bal_delta !== "success") {
+					return "failed";
+				}
 
 				$insert_transaction = mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('" . $get_logged_user_det["id"] . "', '$product_unique_id', '$type_alternative', '$reference', '$amount', '$discounted_amount', '$user_balance_before_credit', '$user_balance_after_credit', '$description', '$api_website', '$status')");
-				$charge_user = mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$user_balance_after_credit' WHERE id='" . $get_logged_user_det["id"] . "'");
-				if (($user_balance_before_credit !== false) && ($charge_user == true)) {
+				$charge_user = ($bc_bal_delta === "success");
+				if ($insert_transaction && ($charge_user == true)) {
 					// Email Beginning
 					$funding_template_encoded_text_array = array("{firstname}" => $get_logged_user_det["firstname"], "{lastname}" => $get_logged_user_det["lastname"], "{balance_before}" => toDecimal($user_balance_before_credit, 2), "{balance_after}" => toDecimal($user_balance_after_credit, 2), "{amount}" => toDecimal($amount, 2) . " @ " . toDecimal($discounted_amount, 2), "{type}" => $type, "{description}" => $description);
 					$raw_funding_template_subject = getSuperAdminEmailTemplate('vendor-funding', 'subject');
@@ -4316,9 +4342,18 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
                         mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_before', discounted_amount='$amount_deposited' WHERE vendor_id='$vendor_id' AND reference='$vtx_ref_esc'");
                         $log("Vendor Payout Module Activated (Existing record).");
                     } else {
-                        mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$bal_after' WHERE id='$vendor_id'");
-                        mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited' WHERE vendor_id='$vendor_id' AND reference='$vtx_ref_esc'");
-                        $log("Vendor Credited (Existing record updated). New Bal: $bal_after");
+                        // Relative credit, then correct the ledger row with the figures the database
+                        // actually ended up with. The absolute write that was here lost a concurrent
+                        // credit and could resurrect a balance a concurrent debit had lowered.
+                        $bal_delta = bc_vendor_wallet_apply_delta((int)$vendor_id, (float)$amount_deposited, $bal_before, $bal_after);
+                        if ($bal_delta === 'success') {
+                            mysqli_query($connection_server, "UPDATE sas_vendor_transactions SET status=1, balance_before='$bal_before', balance_after='$bal_after', discounted_amount='$amount_deposited' WHERE vendor_id='$vendor_id' AND reference='$vtx_ref_esc'");
+                            $log("Vendor Credited (Existing record updated). New Bal: $bal_after");
+                        } else {
+                            // Leave the transaction unstatused so the funding can be retried, instead
+                            // of recording a credit that never reached the wallet.
+                            $log("Vendor credit FAILED for ref $vtx_ref_esc - balance not moved ($bal_delta)");
+                        }
                     }
 
                     syncPayhubVirtualAccounts($vendor_id, $customer_email, true);
@@ -4332,7 +4367,13 @@ function processPayhubSuccess($vendor_id, $transaction_ref, $data, $payhub_keys,
                 $bal_after = $bal_before + $amount_deposited;
 
                 $new_v_ref = "V".time().rand(10,99);
-                mysqli_query($connection_server, "UPDATE sas_vendors SET balance='$bal_after' WHERE id='$vendor_id'");
+                // Relative credit so a concurrent credit/debit cannot be overwritten, with the
+                // before/after figures read back for the record and the log line.
+                $bal_delta = bc_vendor_wallet_apply_delta((int)$vendor_id, (float)$amount_deposited, $bal_before, $bal_after);
+                if ($bal_delta !== 'success') {
+                    $log("Vendor wallet credit FAILED - balance not moved, nothing recorded for $new_v_ref");
+                    return false;
+                }
                 mysqli_query($connection_server, "INSERT INTO sas_vendor_transactions (vendor_id, product_unique_id, type_alternative, reference, amount, discounted_amount, balance_before, balance_after, description, api_website, status) VALUES ('$vendor_id', 'wallet_funding', 'Wallet Funding', '$new_v_ref', '$amount_paid', '$amount_deposited', '$bal_before', '$bal_after', '$desc', '".bc_safe_host_sql($connection_server)."', '1')");
 
                 // If transaction exists in pending status, update it
