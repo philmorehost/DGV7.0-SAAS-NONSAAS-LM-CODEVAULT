@@ -116,6 +116,21 @@ class AirtimeFragment : Fragment(R.layout.fragment_airtime) {
         } catch (_: Exception) {}
     }
 
+    /**
+     * A Nigerian mobile number, normalised the way the API expects it (leading 0, 11 digits).
+     *
+     * The server rejects a number it cannot deliver to, but by then the customer has already been
+     * charged - and a purchase that always fails is refunded, which is the cycle that was used to
+     * mint wallet funds. The button therefore stays locked until the number can actually be serviced.
+     * This mirrors bc_valid_mobile_phone() in func/bc-func.php; the server remains the authority.
+     */
+    private fun phoneIsValid(): Boolean {
+        val raw = binding.etPhone.text.toString().replace(Regex("[^0-9]"), "")
+        val normalised = if (raw.startsWith("234") && (raw.length == 13 || raw.length == 14)) "0" + raw.substring(3) else raw
+        if (Regex("(\\d)\\1{8,}").containsMatchIn(normalised)) return false
+        return Regex("^0[789][01][0-9]{8}$").matches(normalised)
+    }
+
     private suspend fun checkLimit(phone: String) {
         try {
             val prefs = PreferenceManager(requireContext())
@@ -126,7 +141,7 @@ class AirtimeFragment : Fragment(R.layout.fragment_airtime) {
                 val msg = resp.body()?.get("message") as? String ?: ""
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
-                    binding.btnBuy.isEnabled = !limitReached
+                    binding.btnBuy.isEnabled = !limitReached && phoneIsValid()
                     if (limitReached) binding.tvLimitMsg.text = msg
                     binding.tvLimitMsg.visibility = if (limitReached) View.VISIBLE else View.GONE
                 }
@@ -188,14 +203,14 @@ class AirtimeFragment : Fragment(R.layout.fragment_airtime) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
                     LoadingOverlay.dismiss()
-                    binding.btnBuy.isEnabled = true
+                    binding.btnBuy.isEnabled = phoneIsValid()
                     showResult(status, msg)
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
                     LoadingOverlay.dismiss()
-                    binding.btnBuy.isEnabled = true
+                    binding.btnBuy.isEnabled = phoneIsValid()
                     snack("Network error: ${e.message}")
                 }
             }

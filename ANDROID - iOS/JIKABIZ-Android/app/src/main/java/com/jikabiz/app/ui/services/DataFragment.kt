@@ -236,6 +236,19 @@ class DataFragment : Fragment(R.layout.fragment_data) {
         )
     }
 
+    /**
+     * A Nigerian mobile number, normalised the way the API expects it (leading 0, 11 digits).
+     * Mirrors bc_valid_mobile_phone() in func/bc-func.php; the server stays the authority, this just
+     * stops a request the provider cannot service from leaving the device - a purchase that always
+     * fails is refunded, and that refund cycle is what was used to mint wallet funds.
+     */
+    private fun phoneIsValid(): Boolean {
+        val raw = binding.etPhone.text.toString().replace(Regex("[^0-9]"), "")
+        val normalised = if (raw.startsWith("234") && (raw.length == 13 || raw.length == 14)) "0" + raw.substring(3) else raw
+        if (Regex("(\\d)\\1{8,}").containsMatchIn(normalised)) return false
+        return Regex("^0[789][01][0-9]{8}$").matches(normalised)
+    }
+
     private fun doPurchase(phone: String, plan: DataPlanItem, pin: String? = null) {
         LoadingOverlay.show(requireContext(), "Processing your purchase...")
         binding.btnBuy.isEnabled = false
@@ -258,14 +271,14 @@ class DataFragment : Fragment(R.layout.fragment_data) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
                     LoadingOverlay.dismiss()
-                    binding.btnBuy.isEnabled = true
+                    binding.btnBuy.isEnabled = phoneIsValid()
                     showResult(status, msg)
                 }
             } catch (e: Exception) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
                     LoadingOverlay.dismiss()
-                    binding.btnBuy.isEnabled = true
+                    binding.btnBuy.isEnabled = phoneIsValid()
                     snack(e.message ?: "Error")
                 }
             }

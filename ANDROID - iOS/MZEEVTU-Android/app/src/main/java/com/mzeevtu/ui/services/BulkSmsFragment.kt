@@ -58,6 +58,27 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
         binding.spinnerNetwork.threshold = 0
     }
 
+    /**
+     * True only when EVERY recipient is a number the network can actually deliver to: 11 digits,
+     * 070/080/081/090/091, no run of nine identical digits, 234-prefix normalised. Mirrors
+     * bc_valid_mobile_phone() in func/bc-func.php.
+     *
+     * countValidPhones() below only checks the LENGTH, so 00000000000 counted as a valid recipient:
+     * the send button stayed live, the provider rejected the batch, and the refund that follows a
+     * rejection is the cycle that was used to mint wallet funds.
+     */
+    private fun recipientsAreValid(): Boolean {
+        val numbers = binding.etRecipients.text.toString()
+            .split(",", "\n", " ")
+            .map { it.trim().replace(DIGITS_ONLY, "") }
+            .filter { it.isNotEmpty() }
+        if (numbers.isEmpty()) return false
+        return numbers.all { n ->
+            val normalised = if (n.startsWith("234") && (n.length == 13 || n.length == 14)) "0" + n.substring(3) else n
+            !Regex("(\\d)\\1{8,}").containsMatchIn(normalised) && Regex("^0[789][01][0-9]{8}$").matches(normalised)
+        }
+    }
+
     private fun countValidPhones(input: String): Int =
         input.split(",", "\n")
             .map { it.trim().replace(DIGITS_ONLY, "") }
@@ -79,6 +100,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 binding.tvPhoneCount.text = "Numbers: ${countValidPhones(s?.toString() ?: "")}"
+                binding.btnSend.isEnabled = recipientsAreValid()
             }
         })
     }
@@ -235,7 +257,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
                     LoadingOverlay.dismiss()
-                    binding.btnSend.isEnabled = true
+                    binding.btnSend.isEnabled = recipientsAreValid()
                     if (status.contains("success", true)) {
                         MaterialAlertDialogBuilder(requireContext()).setTitle("\u2705 SMS Sent").setMessage(msg)
                             .setPositiveButton("Done") { _, _ -> requireActivity().onBackPressedDispatcher.onBackPressed() }.show()
@@ -245,7 +267,7 @@ class BulkSmsFragment : Fragment(R.layout.fragment_bulk_sms) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
                     LoadingOverlay.dismiss()
-                    binding.btnSend.isEnabled = true
+                    binding.btnSend.isEnabled = recipientsAreValid()
                     snack(e.message ?: "Error")
                 }
             }
