@@ -29,10 +29,23 @@
         $api_response_description = "Transaction Pending | ".($curl_json_result["carddetails"] ?? "");
         $api_response_status = 2;
     } else {
-        $api_response = "failed";
-        $api_response_text = $os ?: "FAILED";
-        $api_response_description = "Transaction Failed | ".($curl_json_result["orderremark"] ?? "Provider error during requery");
-        $api_response_status = 3;
+        // A reply we cannot READ is not a reply that FAILED. nellobytes/clubkonnect answers with a
+        // statuscode (200/201/299 success, 100/300 pending, anything else a failure); a body carrying
+        // no statuscode and no status word is an unreadable answer - a rate limit, an HTML error page,
+        // a truncated response - and the provider may well have delivered. Declaring it "failed" told
+        // the customer their purchase had failed AND authorised a refund, because the sentinel below
+        // is a real provider word, so the refund gate passed on it.
+        if ($sc !== '' && $sc !== null) {
+            $api_response = "failed";
+            $api_response_text = $os ?: "FAILED";
+            $api_response_description = "Transaction Failed | ".($curl_json_result["orderremark"] ?? "provider rejected");
+            $api_response_status = 3;
+        } else {
+            $api_response = "pending";
+            $api_response_text = "";
+            $api_response_description = "Transaction Pending | awaiting confirmation from the provider (unreadable requery reply)";
+            $api_response_status = 2;
+        }
     }
 curl_close($curl_request);
 ?>
