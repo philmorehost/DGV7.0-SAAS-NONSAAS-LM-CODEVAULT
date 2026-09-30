@@ -102,6 +102,18 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                     bc_tx_failure_record($get_transaction_data["vendor_id"], $get_transaction_data["username"], 'failed', $get_transaction_data["type_alternative"] ?? '', $api_response_description, (!empty($get_transaction_data["batch_number"]) ? 'bulk' : 'service'));
                                     $claimed = ($claim_result && mysqli_affected_rows($connection_server) > 0);
 
+                                    // Recovery: a row already sitting at status 3 with NO refund of its own
+                                    // is a failure whose refund never happened. The claim above cannot see
+                                    // it (status 3 normally means "refunded"), so it would stay stuck for
+                                    // ever. Claim it - the guard makes that happen exactly once.
+                                    if (!$claimed && !bc_refund_already_credited($get_transaction_data["vendor_id"], $get_transaction_data["username"], "Refund", "Refund for Ref:'$requery_reference'")) {
+                                        $stuck_q = mysqli_query($connection_server, "SELECT status FROM sas_transactions WHERE reference='$requery_reference' LIMIT 1");
+                                        $stuck_r = $stuck_q ? mysqli_fetch_assoc($stuck_q) : null;
+                                        if ($stuck_r && (string)$stuck_r["status"] === '3') {
+                                            $claimed = true;
+                                        }
+                                    }
+
                                     if ($claimed) {
                                         removeProductPurchaseList($requery_reference);
                                         $reference_2 = substr(str_shuffle("12345678901234567890"), 0, 15);
@@ -111,7 +123,23 @@ if (in_array($purchase_method, $purchase_method_array)) {
                                         $previous_purchase_method = $get_transaction_data["mode"];
                                         $t_username = $get_transaction_data["username"];
 
+                                        // Pin the vendor to the TRANSACTION's own vendor_id: the queue
+                                        // has no request host, and usernames repeat across vendors, so
+                                        // resolveVendorID() inside chargeOtherUser() returned 0 and the
+                                        // refund was refused - while the row had already been marked 3,
+                                        // so nothing ever retried it and the money stayed stuck.
+                                        // The queue has no request host, and a username is not unique across
+                                        // vendors, so chargeOtherUser()'s resolveVendorID() answered 0 here:
+                                        // it returned "failed" BEFORE crediting, the row had already been
+                                        // marked 3, and nothing ever retried it - the refund was silently
+                                        // lost. Pin resolution to the transaction's own vendor using
+                                        // resolveVendorID()'s own override hook, and force a recompute
+                                        // because a static/session cache may already hold the host answer.
+                                        $_SESSION['tmp_vendor_override'] = (int)$get_transaction_data["vendor_id"];
+                                        resolveVendorID(true);
                                         $refund_result = chargeOtherUser($t_username, "credit", $phone_no, "Refund", $reference_2, "", $amount, $discounted_amount, "Refund for Ref:<i>'$requery_reference'</i>", $previous_purchase_method, $_SERVER["HTTP_HOST"] ?? "CRON", "1");
+                                        unset($_SESSION['tmp_vendor_override']);
+                                        resolveVendorID(true); // drop the pin again for the rest of the run
 
                                         if ($refund_result !== "success") {
                                             @file_put_contents(__DIR__ . "/../../logs/requery_refund_failures.log", "[" . date('Y-m-d H:i:s') . "] Refund FAILED for ref $requery_reference user $t_username amount $discounted_amount\n", FILE_APPEND);

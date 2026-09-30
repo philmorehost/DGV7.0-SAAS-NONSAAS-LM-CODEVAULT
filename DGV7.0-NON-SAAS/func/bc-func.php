@@ -682,7 +682,10 @@ function _bc_wallet_apply_delta_sql($table, $where, $delta, &$balance_before, &$
 function bc_refund_already_credited($vendor_id, $username, $type_alternative, $description) {
     global $connection_server;
     if (!$connection_server || strcasecmp(trim((string)$type_alternative), 'Refund') !== 0) return false;
-    if (!preg_match("/Ref:?\\s*<i>'([^']+)'<\\/i>/i", (string)$description, $m)) return false;
+    // The stored description has been through strip_tags(), so the <i> tags the callers pass are
+    // already gone: accept the tagged form AND the plain one. Requiring the tags made this guard
+    // match nothing at all, i.e. no double-refund protection whatsoever.
+    if (!preg_match("/Ref:?\\s*(?:<i>)?'([^']+)'(?:<\\/i>)?/i", (string)$description, $m)) return false;
     $orig = mysqli_real_escape_string($connection_server, $m[1]);
     $u = mysqli_real_escape_string($connection_server, (string)$username);
     $vid = (int)$vendor_id;
