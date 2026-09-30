@@ -1,4 +1,25 @@
 <?php
+    // ─── JSON purity for API / app clients ───────────────────────────────────────
+    // The mobile apps parse every /web/api/* response as JSON. Every other API surface in
+    // this codebase already guards against stray output: web/guest-api/guest-bootstrap.php
+    // and func/bc-php-compat.php (pulled in by bc-config.php for web pages) both set
+    // display_errors off, and api/app-backend/* starts with error_reporting(0). /web/api/*
+    // had no guard at all, so a single notice, warning or deprecation printed anywhere in
+    // this include chain lands in front of the payload, the body stops being valid JSON,
+    // and the app reports it to the user as "check your connection" - a network-sounding
+    // message for a server-side defect that is visible only in the error log.
+    $bc_connect_is_api_client = (
+        stripos($_SERVER['REQUEST_URI'] ?? '', '/web/api/') !== false ||
+        stripos($_SERVER['SCRIPT_NAME'] ?? '', '/web/api/') !== false ||
+        isset($_SERVER['HTTP_X_APP_SOURCE'])
+    );
+    if ($bc_connect_is_api_client) {
+        // Errors are still raised and logged; only the on-screen output is suppressed.
+        @ini_set('display_errors', '0');
+        @ini_set('html_errors', '0');
+        @ini_set('log_errors', '1');
+    }
+
     // ─── PHP 8.1+ Compatibility Fix ──────────────────────────────────────────────
     // PHP 8.1+ enables STRICT exception mode for MySQLi by default.
     // DGV6.90 legacy code expects mysqli_query to return false on failure instead of crashing.
@@ -36,7 +57,26 @@
                     header("Location: /bc-spadmin/AccountSettings.php");
                     exit;
                 }
-                $reason = htmlspecialchars($lock_data['reason'] ?? 'License revoked by administrator.');
+                $reason = $lock_data['reason'] ?? 'License revoked by administrator.';
+                if ($bc_connect_is_api_client) {
+                    // A machine client cannot read an HTML block page: answer with parseable
+                    // JSON and a stable code so the failure is diagnosable rather than being
+                    // shown to the user as a broken connection. The status is only set while
+                    // the headers are still ours - an already-started response used to keep
+                    // its 200 silently while carrying the block page, which is precisely what
+                    // makes such an answer look like an unparseable success to the client.
+                    if (!headers_sent()) {
+                        header("HTTP/1.1 503 Service Temporarily Unavailable");
+                        header("Content-Type: application/json");
+                    }
+                    echo json_encode([
+                        "status" => "failed",
+                        "code" => "LICENSE_SUSPENDED",
+                        "desc" => "This platform is temporarily suspended. " . trim((string)$reason),
+                    ]);
+                    exit;
+                }
+                $reason = htmlspecialchars($reason);
                 header("HTTP/1.1 503 Service Temporarily Unavailable");
                 echo '<!DOCTYPE html><html><head><title>System Suspended</title><meta name="viewport" content="width=device-width, initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet"><style>body{background:#0b0f19;color:#f3f4f6;font-family:\'Outfit\',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;text-align:center;box-sizing:border-box}.card{background:#111827;border:1px solid #dc3545;border-radius:12px;padding:40px;max-width:500px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5)}.icon{font-size:48px;color:#dc3545;margin-bottom:20px}h1{font-size:24px;margin:0 0 10px 0;font-weight:600}p{color:#9ca3af;font-size:15px;line-height:1.6;margin:0 0 20px 0}</style></head><body><div class="card"><div class="icon">⚠️</div><h1>System Suspended</h1><p>' . $reason . '</p><p>Please contact the software provider to resolve this issue.</p></div></body></html>';
                 exit;
@@ -116,6 +156,20 @@
                     }
                 } else {
                     // For vendors/customers, show a blocked screen
+                    if ($bc_connect_is_api_client) {
+                        // Same reasoning as the kill switch above: an app parsing JSON must
+                        // not be handed an HTML page, and a stale 200 must not survive.
+                        if (!headers_sent()) {
+                            header("HTTP/1.1 503 Service Temporarily Unavailable");
+                            header("Content-Type: application/json");
+                        }
+                        echo json_encode([
+                            "status" => "failed",
+                            "code" => "LICENSE_INVALID",
+                            "desc" => "The platform license has expired or is invalid.",
+                        ]);
+                        exit;
+                    }
                     header("HTTP/1.1 503 Service Temporarily Unavailable");
                     echo '<!DOCTYPE html><html><head><title>System License Required</title><meta name="viewport" content="width=device-width, initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet"><style>body{background:#0b0f19;color:#f3f4f6;font-family:\'Outfit\',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;text-align:center;box-sizing:border-box}.card{background:#111827;border:1px solid #dc3545;border-radius:12px;padding:40px;max-width:500px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5)}.icon{font-size:48px;color:#dc3545;margin-bottom:20px}h1{font-size:24px;margin:0 0 10px 0;font-weight:600}p{color:#9ca3af;font-size:15px;line-height:1.6;margin:0 0 20px 0}</style></head><body><div class="card"><div class="icon">⚠️</div><h1>Activation Pending</h1><p>This software license has expired or is invalid. Please contact the platform administrator to reactivate this system.</p></div></body></html>';
                     exit;
